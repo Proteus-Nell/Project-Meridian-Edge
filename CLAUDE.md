@@ -3,7 +3,7 @@
 Implementation companion to `PQTerm_MVP_Document.md` (the MVP spec). That doc is the *what and why*; this file is the *how*. Drop both in the repo root. Suitable as seed content for `CLAUDE.md`.
 
 **Project:** pure post-quantum E2EE 1:1 messenger, terminal UI, web-first.
-**Stack:** Python 3.12 + FastAPI + PostgreSQL (SQLite in dev) backend; TypeScript + Vite + xterm.js frontend; crypto from `@noble/post-quantum`, `@noble/ciphers`, `@noble/hashes` only; `liboqs-python` server-side for benchmarks and test-vector generation only.
+**Stack:** Python 3.12+ (tested on 3.14.3) + FastAPI 0.139.0 + PostgreSQL (SQLite in dev) backend; TypeScript + Vite 8.1.3 + xterm.js 6.0.0 frontend; crypto from `@noble/post-quantum` 0.6.1, `@noble/ciphers` 2.2.0, `@noble/hashes` 2.2.0 only; `liboqs-python` server-side for benchmarks and test-vector generation only. All dependency versions exact-pinned per §0; W1 verified on Node 24.5.0, npm 11.5.1.
 
 ---
 
@@ -219,8 +219,8 @@ Work through this as a checklist near the end of each milestone. References: OWA
 
 ## 8. Build Order (maps to MVP doc §11)
 
-1. **W1:** §1 shell + parser, server skeleton, §2.1 UID/registration transaction, CI with all §5 gates stubbed in.
-2. **W2:** §2 complete (identity, login, key store, prekeys, rotation prompt).
+1. **W1:** ✓ done. §1 shell + parser, server skeleton, §2.1 UID/registration transaction, CI with all §5 gates in place.
+2. **W2:** §2 complete. Identity and local key store: `/login` challenge–response over ML-DSA-65 (server nonce + client signature), session tokens (256-bit, 15m idle, rotated on WS reconnect), Argon2id-wrapped IndexedDB store (DEK + passphrase), SPK (7-day rotation + 7-day retention for late handshakes) + OPK bundle (50 one-time keys, low-watermark refill < 20), both batch-signed and uploaded, recovery codes (printed once, never stored plaintext), `/rotate passphrase` (local DEK re-wrap), `/lock` (immediate encrypt), `/keys status`, `/settings rotation <on|off|day <weekday>>` (weekly prompt, toggleable, entirely local).
 3. **W3:** §3 complete (PQ-KX, first message, queue with delete-on-ack + TTL).
 4. **W4:** §4 complete (ratchet, safety numbers, key-change teardown).
 5. **W5:** §5 complete + §7 sweep executed as a dedicated hardening pass.

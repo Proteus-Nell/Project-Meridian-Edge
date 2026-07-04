@@ -343,12 +343,14 @@ Run via `/bench` (browser) and `make bench` (server); output as JSON + generated
 
 | Week | Deliverables | Exit criteria |
 |---|---|---|
-| **W1 - Foundations** | Repos, CI (lint, tests, `pip-audit`/`npm audit`), FastAPI skeleton, DB schema, UID generation + registration transaction, xterm.js shell + command parser | Register via terminal; UID printed; parser rejects malformed commands; CI green |
+| **W1 - Foundations** ✓ | Repos, CI (lint, tests, `pip-audit`/`npm audit`), FastAPI skeleton, DB schema, UID generation + registration transaction, xterm.js shell + command parser | Register via terminal; UID printed; parser rejects malformed commands; CI green |
 | **W2 - Identity & key store** | ML-DSA keygen, challenge–response login, session tokens, Argon2id-wrapped IndexedDB store, recovery codes, prekey bundle upload (SPK + 50 OPKs, signed) | Login round-trip works; store survives reload locked; bundle visible in DB as ciphertext/keys only |
 | **W3 - Handshake & first message** | PQ-KX end-to-end, AEAD messaging happy path, delivery queue with ack-delete + TTL, offline delivery | Alice → offline Bob → Bob receives on login; server row deleted on ack; signature-verification failure aborts loudly |
 | **W4 - Ratchet & trust** | Symmetric chains, KEM ratchet steps, out-of-order handling, header encryption, safety numbers + key-change tear-down | FS/PCS demonstrated by test (leak state → past msgs safe → session heals); `/verify` flow complete |
 | **W5 - Lifecycle & hardening** | Disappearing timers, local purge, rotation prompt + `/settings`, full header/CSP/rate-limit pass, dependency scan clean, `/wipe` | OWASP-header scan clean; timers verified on both clients; Snyk/`pip-audit` zero high-severity |
 | **W6 - Benchmarks & report** | B1–B5 implemented, charts generated, demo script, README, this document updated to as-built | `/bench` produces the report tables; 15-minute live demo rehearsed; buffer for slip |
+
+**W2 specifics:** Build the local key store + authentication. Client generates ML-DSA-65 keypair at `/register` (done in W1, move to encrypted storage in W2); store all secrets (identity SK, prekey SKs, ratchet state) in IndexedDB encrypted under Argon2id(passphrase) + a random DEK. Implement `/login` (server issues a nonce, client ML-DSA-signs it, server issues session token); `/logout` (invalidates token server-side); `/lock` (immediate encrypt); `/rotate passphrase` (re-wrap DEK locally). Auto-generate SPK (rotated weekly) + 50 OPKs (low-watermark refill at < 20); both batch-signed with IK and uploaded on first login. Print one-time recovery codes at registration. `/settings rotation <on|off|day <weekday>>` configures the weekly passphrase rotation prompt (default: Friday, toggleable, entirely local).
 
 **Scope-cut order if behind schedule:** B4/B5 benchmarks → toasts/QR/themes → `/wipe` → local purge (keep mutual timer) → header encryption. Never cut: ratchet FS/PCS, safety numbers, delete-on-ack queue.
 
