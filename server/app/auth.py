@@ -30,6 +30,22 @@ def _unauthorized() -> HTTPException:
     return HTTPException(status_code=401, detail="auth_failed")
 
 
+def authenticate_token(session: Session, token: str, now: float) -> SessionToken | None:
+    """Core token check shared by REST and WS: lookup by hash, revocation,
+    sliding 15-minute idle expiry. Mutates last_used/revoked but does not
+    commit - the caller owns the transaction."""
+    row = session.execute(
+        select(SessionToken).where(SessionToken.token_hash == hash_token(token))
+    ).scalar_one_or_none()
+    if row is None or row.revoked:
+        return None
+    if now - row.last_used > SESSION_IDLE_SECONDS:
+        row.revoked = True
+        return None
+    row.last_used = now
+    return row
+
+
 def require_auth(
     request: Request,
     session: Annotated[Session, Depends(get_session)],
@@ -37,21 +53,13 @@ def require_auth(
     header = request.headers.get("authorization", "")
     if not header.startswith("Bearer "):
         raise _unauthorized()
-    token_hash = hash_token(header[len("Bearer ") :])
-
-    row = session.execute(
-        select(SessionToken).where(SessionToken.token_hash == token_hash)
-    ).scalar_one_or_none()
-    if row is None or row.revoked:
-        raise _unauthorized()
 
     now: float = request.app.state.clock()
-    if now - row.last_used > SESSION_IDLE_SECONDS:
-        row.revoked = True
-        session.commit()
+    row = authenticate_token(session, header[len("Bearer ") :], now)
+    if row is None:
+        session.commit()  # persist a revocation set by idle expiry
         raise _unauthorized()
 
-    row.last_used = now
     user = session.get(User, row.user_id)
     if user is None:
         raise _unauthorized()

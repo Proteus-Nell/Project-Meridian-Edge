@@ -107,3 +107,50 @@ export interface KeysStatusResponse {
 export function keysStatus(token: string): Promise<KeysStatusResponse> {
   return requestJson<KeysStatusResponse>("GET", "/v1/keys/status", undefined, token);
 }
+
+export interface WireBundleOpk {
+  readonly pub: string;
+  readonly index: number;
+  readonly leaf_hashes: readonly string[];
+  readonly root_sig: string;
+}
+
+export interface WireBundle {
+  readonly ik_pub: string;
+  readonly spk_pub: string;
+  readonly spk_sig: string;
+  readonly opk: WireBundleOpk | null;
+}
+
+/** consumeOpk=false is the identity-binding path: it must never drain the
+ * target's one-time prekeys (ADR 0002). */
+export function fetchBundle(token: string, uid: string, consumeOpk = true): Promise<WireBundle> {
+  const suffix = consumeOpk ? "" : "?opk=0";
+  return requestJson<WireBundle>("GET", `/v1/bundles/${uid}${suffix}`, undefined, token);
+}
+
+export function sendMessage(
+  token: string,
+  recipientUid: string,
+  envelope: Uint8Array,
+): Promise<void> {
+  return requestJson<void>(
+    "POST",
+    "/v1/messages",
+    { recipient_uid: recipientUid, envelope: toBase64(envelope) },
+    token,
+  );
+}
+
+export interface InboxMessage {
+  readonly id: number;
+  readonly envelope: string;
+}
+
+export function fetchMessages(token: string): Promise<{ messages: InboxMessage[] }> {
+  return requestJson<{ messages: InboxMessage[] }>("GET", "/v1/messages", undefined, token);
+}
+
+export function ackMessages(token: string, ids: readonly number[]): Promise<void> {
+  return requestJson<void>("POST", "/v1/messages/ack", { ids }, token);
+}

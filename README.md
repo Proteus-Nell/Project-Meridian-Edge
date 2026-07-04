@@ -79,16 +79,27 @@ The session token lives only in JS memory and expires after 15 minutes idle —
 a page reload always brings you back locked and logged out, and your data is
 still there (encrypted) until you `/wipe` it.
 
-### Contacts (messaging lands in W3)
+### Contacts & first messages (W3)
 
 | Command | What it does |
 |---|---|
-| `/add <uid> [alias]` | Save a contact. The alias is local-only — it is never transmitted, so it can't be used to impersonate anyone |
+| `/add <uid> [alias]` | Save a contact (requires `/login` — contacts live in the encrypted store). The alias is local-only — never transmitted, so it can't impersonate anyone. Also accepts a held contact request |
 | `/chat <alias\|uid>` | Set the active conversation (prompt changes to `[alias] >`) |
 
-Typing a plain line targets the active conversation, but sending is not wired
-yet — the PQ-KX handshake, message encryption, and the delivery queue are the
-W3 milestone. Today the client tells you so honestly instead of pretending.
+Typing a plain line sends it: the client fetches the recipient's prekey
+bundle, **verifies both prekey signatures against their identity key**
+(aborting loudly if the server tampered), runs the ML-KEM-768 PQ-KX
+handshake, and ships the message as one AEAD-sealed envelope. It works while
+the recipient is offline — the server queues the opaque ciphertext for up to
+14 days and deletes it the moment the recipient acknowledges receipt.
+Delivery is live over WebSocket while you're logged in (your session token
+rotates on every connect).
+
+What the recipient sees: a message from a known contact prints inline; a
+message from a stranger is held behind a `[!] new contact request` line and
+only opens after `/add`. If no one-time prekey was available the session is
+flagged **reduced-fs** until the W4 ratchet heals it. One message each way
+per conversation for now — continued messaging is the W4 ratchet milestone.
 
 ### Terminal tips
 
@@ -111,10 +122,9 @@ W3 milestone. Today the client tells you so honestly instead of pretending.
 
 ### Not here yet (build order in CLAUDE.md §8)
 
-- **W3** — actual messaging: PQ-KX handshake, offline delivery via a
-  delete-on-ack queue
-- **W4** — the KEM double-ratchet (forward secrecy / post-compromise
-  security), `/verify` + `/verified` safety numbers, `/ack`
+- **W4** — the KEM double-ratchet for continued conversations (forward
+  secrecy / post-compromise security), `/verify` + `/verified` safety
+  numbers, `/ack`
 - **W5** — `/timer` disappearing messages, `/purge`, the hardening sweep
 - **W6** — `/bench` PQC-vs-classical benchmark suite
 
@@ -123,15 +133,16 @@ W3 milestone. Today the client tells you so honestly instead of pretending.
 ```
 client/          TypeScript + Vite + xterm.js frontend
   src/terminal/  UI, command parser, renderer
-  src/crypto/    constants, key store, prekeys, login message
-  src/net/       REST client (WS in W3)
+  src/crypto/    constants, key store, prekeys, PQ-KX, envelope codec
+  src/net/       REST + WebSocket clients
 server/
-  app/           FastAPI: auth, prekeys, rate limiting
+  app/           FastAPI: auth, prekeys, bundles, message queue, WS
   tests/
-shared/vectors/  JSON test vectors (liboqs → TS tests)
+shared/vectors/  cross-impl test vectors (pyca/OpenSSL ↔ noble)
 bench/           benchmark harness (B1–B5)
 docs/adr/        architecture decision records
-scripts/         CI audit gates
+docs/compliance/ OWASP ASVS assessment
+scripts/         CI audit gates + vector generator
 ```
 
 ## Development checks
@@ -154,6 +165,11 @@ All of the above plus `npm audit` / `pip-audit` run blocking in CI.
   IndexedDB key store with auto-lock and `/rotate passphrase`, recovery codes
   (Argon2id hashes server-side), signed prekey + batch-signed one-time prekeys
   with low-watermark refill, `/wipe`.
-- Next: **W3** PQ-KX handshake, first message, delete-on-ack delivery queue.
+- **W3** ✓ first messages: PQ-KX handshake (ML-KEM-768 to SPK+OPK, ML-DSA-65
+  transcript signature, XChaCha20-Poly1305 with the transcript as AD), binary
+  envelope v1, offline delivery via a delete-on-ack 14-day-TTL queue, live
+  WebSocket push with token rotation, contact requests + TOFU identity
+  pinning, cross-implementation vectors in CI.
+- Next: **W4** the KEM double-ratchet, safety numbers, key-change teardown.
 
 See CLAUDE.md §8 for the full build order.

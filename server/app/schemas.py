@@ -3,9 +3,10 @@ from __future__ import annotations
 import base64
 import binascii
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .constants import (
+    ACK_MAX_IDS,
     ML_DSA_65_PUBKEY_BYTES,
     ML_DSA_65_SIG_BYTES,
     ML_KEM_768_PUBKEY_BYTES,
@@ -146,3 +147,61 @@ class OpkUploadRequest(BaseModel):
 class KeysStatusResponse(BaseModel):
     spk_uploaded_at: float | None
     opk_count: int
+
+
+class BundleOpk(BaseModel):
+    pub: str  # base64 ML-KEM-768 encapsulation key
+    index: int  # position within its batch
+    leaf_hashes: list[str]  # base64 SHA-512 leaves; lets one OPK verify alone
+    root_sig: str  # base64 ML-DSA-65 over the batch root
+
+
+class BundleResponse(BaseModel):
+    ik_pub: str
+    spk_pub: str
+    spk_sig: str
+    opk: BundleOpk | None
+
+
+class SendMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipient_uid: str
+    # Base64 KX envelope; opaque to the server. Length bounded here to cap
+    # parse work, exact byte-size cap (64 KiB -> 413) enforced in the route.
+    envelope: str = Field(max_length=90000)
+
+    @field_validator("recipient_uid")
+    @classmethod
+    def _check_uid(cls, value: str) -> str:
+        canonical = canonicalize_uid(value)
+        if canonical is None:
+            raise ValueError("invalid uid")
+        return canonical
+
+    @field_validator("envelope")
+    @classmethod
+    def _check_envelope(cls, value: str) -> str:
+        try:
+            base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError):
+            raise ValueError("invalid encoding") from None
+        return value
+
+    def decoded_envelope(self) -> bytes:
+        return base64.b64decode(self.envelope, validate=True)
+
+
+class QueuedMessageOut(BaseModel):
+    id: int
+    envelope: str  # base64
+
+
+class MessagesResponse(BaseModel):
+    messages: list[QueuedMessageOut]
+
+
+class AckRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[int] = Field(min_length=1, max_length=ACK_MAX_IDS)

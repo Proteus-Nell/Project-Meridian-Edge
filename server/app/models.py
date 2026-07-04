@@ -90,3 +90,16 @@ class OneTimePrekey(Base):
     batch_index: Mapped[int] = mapped_column()
     pub: Mapped[bytes] = mapped_column(LargeBinary)
     consumed: Mapped[bool] = mapped_column(default=False)
+
+
+class QueuedMessage(Base):
+    """Per-recipient ciphertext queue (CLAUDE.md section 5): opaque envelope
+    blobs, deleted on ack in the same transaction, 14-day TTL. The server
+    never parses the envelope - it routes on the recipient column only."""
+
+    __tablename__ = "message_queue"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    envelope: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[float] = mapped_column()

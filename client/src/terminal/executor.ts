@@ -1,6 +1,7 @@
 // Command executor: consumes the parser's typed union in one switch
-// (CLAUDE.md §1.2). W2 implements the full identity/key-store command set;
-// messaging commands respond with their scheduled segment so the surface is
+// (CLAUDE.md §1.2). W1-W3 command surface: identity/key store (W2) plus the
+// PQ-KX first message, delivery queue and WS push (W3). Later-segment
+// commands respond with their scheduled milestone so the surface stays
 // honest about what exists.
 
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
@@ -9,8 +10,11 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import * as api from "../net/api";
 import { ApiError } from "../net/api";
+import { WsClient } from "../net/ws";
 import { buildLoginMessage } from "../crypto/login";
 import { generateOpkBatch, generateSpk } from "../crypto/prekeys";
+import { initiateKx, respondKx, verifyBundle } from "../crypto/kx";
+import type { Bundle, KxSession, PrekeyLookup, PrekeySecret } from "../crypto/kx";
 import { KeyStore, StoreLockedError } from "../crypto/store";
 import {
   AUTO_LOCK_MS,
@@ -45,6 +49,11 @@ interface StoredSpk {
   readonly createdAt: number;
 }
 
+interface StoredOpk {
+  readonly pub: string;
+  readonly sec: string;
+}
+
 interface RotationSettings {
   readonly enabled: boolean;
   readonly day: Weekday;
@@ -54,6 +63,23 @@ interface RotationSettings {
 interface Contact {
   readonly uid: string;
   readonly alias: string;
+  readonly ik: string | null; // base64, pinned on first verified contact
+}
+
+interface StoredSession {
+  readonly rk: string;
+  readonly transcript: string;
+  readonly peerIk: string;
+  readonly role: "initiator" | "responder";
+  readonly reducedFs: boolean;
+  readonly establishedAt: number;
+}
+
+interface PendingRequest {
+  readonly text: string;
+  readonly session: StoredSession;
+  readonly senderIk: string;
+  readonly receivedAt: number;
 }
 
 const DEFAULT_ROTATION: RotationSettings = { enabled: true, day: "friday", lastPrompt: 0 };
@@ -86,11 +112,13 @@ export class Executor {
   private readonly store: KeyStore;
   private identity: Identity | null = null;
   private token: string | null = null;
-  private contacts = new Map<string, Contact>();
+  private contacts = new Map<string, Contact>(); // key: alias
   private active: Contact | null = null;
   private busy = false;
   private wipeRequestedAt = 0;
   private autoLockTimer: ReturnType<typeof setTimeout> | null = null;
+  private ws: WsClient | null = null;
+  private rxTail: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly renderer: Renderer,
@@ -129,11 +157,8 @@ export class Executor {
       this.renderer.event("warning", "no active conversation - use /chat <alias|uid> first");
       return;
     }
-    void text;
-    this.renderer.event(
-      "warning",
-      `not sent to ${this.active.alias}: messaging arrives in W3 (handshake + delivery queue)`,
-    );
+    const target = this.active;
+    this.run(() => this.sendFirstMessage(target, text));
   }
 
   private handleCommand(cmd: Command): void {
@@ -171,6 +196,9 @@ export class Executor {
       case "wipe":
         this.run(() => this.doWipe());
         return;
+      case "add":
+        this.run(() => this.doAdd(cmd.uid, cmd.alias));
+        return;
       case "whoami": {
         if (this.identity === null) {
           this.renderer.event("warning", "locked or not registered - /login or /register");
@@ -181,19 +209,13 @@ export class Executor {
         this.renderer.event("info", `identity-key fingerprint (SHA-512/128): ${fingerprint}`);
         return;
       }
-      case "add": {
-        const alias = cmd.alias ?? cmd.uid;
-        this.contacts.set(alias, { uid: cmd.uid, alias });
-        this.renderer.event(
-          "success",
-          `added contact ${alias} (${formatUid(cmd.uid)}) - alias is local-only`,
-        );
-        return;
-      }
       case "chat": {
         const contact = this.resolveContact(cmd.target);
         if (contact === null) {
-          this.renderer.event("failure", `unknown contact: ${cmd.target} - use /add <uid> [alias]`);
+          this.renderer.event(
+            "failure",
+            `unknown contact: ${cmd.target} - /add <uid> [alias] first (contacts load on /login)`,
+          );
           return;
         }
         this.active = contact;
@@ -270,6 +292,8 @@ export class Executor {
   }
 
   private lockLocal(): void {
+    this.ws?.close();
+    this.ws = null;
     if (this.identity !== null) {
       this.identity.sec.fill(0);
       this.identity = null;
@@ -281,7 +305,326 @@ export class Executor {
     }
   }
 
-  // ----- flows --------------------------------------------------------------
+  // ----- contacts -----------------------------------------------------------
+
+  private async loadContacts(): Promise<void> {
+    const stored = (await this.store.getJson<Contact[]>("contacts")) ?? [];
+    this.contacts = new Map(stored.map((c) => [c.alias, c]));
+  }
+
+  private async saveContacts(): Promise<void> {
+    await this.store.putJson("contacts", [...this.contacts.values()]);
+  }
+
+  private findContactByUid(uid: string): Contact | null {
+    for (const contact of this.contacts.values()) {
+      if (contact.uid === uid) {
+        return contact;
+      }
+    }
+    return null;
+  }
+
+  private resolveContact(target: string): Contact | null {
+    return this.contacts.get(target) ?? this.findContactByUid(normalizeUid(target) ?? "");
+  }
+
+  private async doAdd(uid: string, alias: string | undefined): Promise<void> {
+    if (!this.store.isUnlocked()) {
+      this.renderer.event("failure", "contacts live in the encrypted store - /login first");
+      return;
+    }
+    const name = alias ?? uid;
+    const existing = this.findContactByUid(uid);
+    const contact: Contact = { uid, alias: name, ik: existing?.ik ?? null };
+    if (existing !== null) {
+      this.contacts.delete(existing.alias);
+    }
+    this.contacts.set(name, contact);
+
+    const pending = await this.store.getJson<PendingRequest>(`pending/${uid}`);
+    if (pending !== null) {
+      // Accepting a held first-contact message (§7.4): promote its session
+      // and show the message that was queued behind the request line.
+      await this.store.putJson(`session/${uid}`, pending.session);
+      await this.store.putJson(`msg/${uid}/${pending.receivedAt}`, {
+        dir: "in",
+        text: pending.text,
+        ts: pending.receivedAt,
+      });
+      await this.store.deleteKey(`pending/${uid}`);
+      this.contacts.set(name, { ...contact, ik: pending.senderIk });
+      await this.saveContacts();
+      this.renderer.event("success", `added contact ${name} (${formatUid(uid)})`);
+      this.renderer.plain(`  [${name}] ${pending.text}`);
+      if (pending.session.reducedFs) {
+        this.renderer.event(
+          "warning",
+          "session has reduced forward secrecy (no one-time prekey was used)",
+        );
+      }
+      return;
+    }
+    await this.saveContacts();
+    this.renderer.event(
+      "success",
+      `added contact ${name} (${formatUid(uid)}) - alias is local-only`,
+    );
+  }
+
+  // ----- send (PQ-KX first message, §3) -------------------------------------
+
+  private async sendFirstMessage(target: Contact, text: string): Promise<void> {
+    if (this.identity === null || this.token === null) {
+      this.renderer.event("failure", "not logged in - /login first");
+      return;
+    }
+    const existing = await this.store.getJson<StoredSession>(`session/${target.uid}`);
+    if (existing !== null) {
+      this.renderer.event(
+        "warning",
+        `a PQ-KX session with ${target.alias} is already established - continued messaging arrives with the W4 ratchet`,
+      );
+      return;
+    }
+
+    let wire: api.WireBundle;
+    try {
+      wire = await api.fetchBundle(this.token, target.uid);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        this.renderer.event(
+          "failure",
+          "recipient keys unavailable - unknown UID or no prekeys published",
+        );
+        return;
+      }
+      throw err;
+    }
+    const bundle = wireToBundle(wire);
+
+    // §3.1: verify both prekey signatures against IK_B; abort loudly on
+    // failure, never proceed, never retry silently.
+    if (!verifyBundle(bundle)) {
+      this.renderer.event(
+        "security",
+        `prekey bundle signature verification FAILED for ${target.alias} - the server may be tampering. send aborted.`,
+      );
+      return;
+    }
+    const bundleIk = toBase64(bundle.ikPub);
+    if (target.ik !== null && target.ik !== bundleIk) {
+      this.renderer.event(
+        "security",
+        `identity key for ${target.alias} has CHANGED - sending blocked (re-verify out-of-band)`,
+      );
+      return;
+    }
+
+    const payload = new TextEncoder().encode(
+      JSON.stringify({ u: this.identity.uid, m: text }),
+    );
+    const { envelope, session } = initiateKx(this.identity.pub, this.identity.sec, bundle, payload);
+    await api.sendMessage(this.token, target.uid, envelope);
+
+    const timestamp = this.now();
+    await this.store.putJson(`session/${target.uid}`, serializeSession(session, timestamp));
+    await this.store.putJson(`msg/${target.uid}/${timestamp}`, {
+      dir: "out",
+      text,
+      ts: timestamp,
+    });
+    if (target.ik === null) {
+      this.contacts.set(target.alias, { ...target, ik: bundleIk });
+      await this.saveContacts();
+    }
+    this.renderer.event("success", `sent to ${target.alias} - PQ-KX handshake established`);
+    if (session.reducedFs) {
+      this.renderer.event(
+        "warning",
+        "reduced forward secrecy: recipient had no one-time prekeys left (§7.4) - heals with the W4 ratchet",
+      );
+    }
+  }
+
+  // ----- receive ------------------------------------------------------------
+
+  private async buildPrekeyLookup(): Promise<PrekeyLookup> {
+    const spkMap = new Map<string, PrekeySecret>();
+    for (const key of await this.store.listKeys("spk/")) {
+      const record = await this.store.getJson<StoredSpk>(key);
+      if (record !== null) {
+        const pub = fromBase64(record.pub);
+        spkMap.set(bytesToHex(sha512(pub)), { pub, sec: fromBase64(record.sec), storeKey: key });
+      }
+    }
+    const opkMap = new Map<string, PrekeySecret>();
+    for (const key of await this.store.listKeys("opk/")) {
+      const record = await this.store.getJson<StoredOpk>(key);
+      if (record !== null) {
+        const pub = fromBase64(record.pub);
+        opkMap.set(bytesToHex(sha512(pub)), { pub, sec: fromBase64(record.sec), storeKey: key });
+      }
+    }
+    return {
+      spkByHash: (hash) => spkMap.get(hash) ?? null,
+      opkByHash: (hash) => opkMap.get(hash) ?? null,
+    };
+  }
+
+  /** Returns "ack" when the message was fully handled (or safely discarded)
+   * and may be deleted server-side; "skip" leaves it queued for later. */
+  private async processEnvelope(envelopeBytes: Uint8Array): Promise<"ack" | "skip"> {
+    if (this.identity === null || this.token === null || !this.store.isUnlocked()) {
+      return "skip";
+    }
+    const lookup = await this.buildPrekeyLookup();
+    const result = respondKx(this.identity.pub, lookup, envelopeBytes);
+    if (!result.ok) {
+      if (result.reason === "bad-signature") {
+        this.renderer.event(
+          "security",
+          "received a message with an INVALID identity signature - discarded",
+        );
+      } else {
+        this.renderer.event("failure", `discarded undecryptable message (${result.reason})`);
+      }
+      return "ack";
+    }
+
+    // §3.7: the consumed OPK secret is deleted immediately.
+    if (result.consumedOpkStoreKey !== null) {
+      await this.store.deleteKey(result.consumedOpkStoreKey);
+    }
+
+    let senderUid: string | null = null;
+    let text: string | null = null;
+    try {
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(result.plaintext));
+      if (typeof parsed === "object" && parsed !== null) {
+        const record = parsed as { u?: unknown; m?: unknown };
+        senderUid = typeof record.u === "string" ? normalizeUid(record.u) : null;
+        text = typeof record.m === "string" ? record.m : null;
+      }
+    } catch {
+      // fall through to the discard below
+    }
+    if (senderUid === null || text === null) {
+      this.renderer.event("failure", "discarded message with malformed payload");
+      return "ack";
+    }
+
+    const senderIkB64 = toBase64(result.senderIk);
+    const timestamp = this.now();
+    const contact = this.findContactByUid(senderUid);
+
+    if (contact !== null) {
+      if (contact.ik !== null && contact.ik !== senderIkB64) {
+        this.renderer.event(
+          "security",
+          `identity key mismatch on a message claiming to be ${contact.alias} - DISCARDED`,
+        );
+        return "ack";
+      }
+      if (contact.ik === null) {
+        this.contacts.set(contact.alias, { ...contact, ik: senderIkB64 });
+        await this.saveContacts();
+      }
+      await this.store.putJson(`session/${senderUid}`, serializeSession(result.session, timestamp));
+      await this.store.putJson(`msg/${senderUid}/${timestamp}`, {
+        dir: "in",
+        text,
+        ts: timestamp,
+      });
+      this.renderer.plain(`  [${contact.alias}] ${text}`);
+      if (result.session.reducedFs) {
+        this.renderer.event("warning", "session has reduced forward secrecy (no one-time prekey)");
+      }
+      return "ack";
+    }
+
+    // Unknown sender: bind the claimed UID to the envelope's identity key
+    // via a non-consuming bundle fetch before holding it as a request.
+    try {
+      const senderWire = await api.fetchBundle(this.token, senderUid, false);
+      if (senderWire.ik_pub !== senderIkB64) {
+        this.renderer.event(
+          "security",
+          "sender identity does not match its claimed UID - message DISCARDED",
+        );
+        return "ack";
+      }
+    } catch {
+      this.renderer.event("failure", "could not verify sender identity - message discarded");
+      return "ack";
+    }
+    const pending: PendingRequest = {
+      text,
+      session: serializeSession(result.session, timestamp),
+      senderIk: senderIkB64,
+      receivedAt: timestamp,
+    };
+    await this.store.putJson(`pending/${senderUid}`, pending);
+    this.renderer.event(
+      "warning",
+      `new contact request from ${formatUid(senderUid)} - /add ${senderUid} [alias] to accept`,
+    );
+    return "ack";
+  }
+
+  private async drainInbox(): Promise<void> {
+    if (this.token === null) {
+      return;
+    }
+    const inbox = await api.fetchMessages(this.token);
+    const acks: number[] = [];
+    for (const message of inbox.messages) {
+      let envelope: Uint8Array;
+      try {
+        envelope = fromBase64(message.envelope);
+      } catch {
+        acks.push(message.id); // not even base64: drop
+        continue;
+      }
+      if ((await this.processEnvelope(envelope)) === "ack") {
+        acks.push(message.id);
+      }
+    }
+    if (acks.length > 0 && this.token !== null) {
+      await api.ackMessages(this.token, acks);
+    }
+  }
+
+  private connectWs(): void {
+    if (typeof WebSocket === "undefined" || typeof location === "undefined") {
+      return; // non-browser environment (tests)
+    }
+    this.ws = new WsClient();
+    this.ws.connect(this.token ?? "", {
+      onToken: (token) => {
+        // Rotation on WS connect (§2.3): adopt the fresh token everywhere.
+        this.token = token;
+      },
+      onEnvelope: (id, envelope) => {
+        this.rxTail = this.rxTail
+          .then(async () => {
+            if ((await this.processEnvelope(envelope)) === "ack") {
+              this.ws?.ack([id]);
+            }
+          })
+          .catch(() => {
+            this.renderer.event("failure", "failed to process an incoming message");
+          });
+      },
+      onClose: (intentional) => {
+        if (!intentional) {
+          this.renderer.event("warning", "live delivery disconnected - /login to reconnect");
+        }
+      },
+    });
+  }
+
+  // ----- identity & key store flows (W2) ------------------------------------
 
   private async promptNewPassphrase(): Promise<string | null> {
     const first = await this.shell.readSecret("choose a passphrase: ");
@@ -349,6 +692,7 @@ export class Executor {
 
     await this.loginWithIdentity();
     await this.uploadInitialBundle();
+    this.connectWs();
     this.touchAutoLock();
   }
 
@@ -450,8 +794,11 @@ export class Executor {
       pub: fromBase64(stored.pub),
       sec: fromBase64(stored.sec),
     };
+    await this.loadContacts();
     await this.loginWithIdentity();
     await this.postLoginMaintenance();
+    await this.drainInbox();
+    this.connectWs();
     await this.maybeRotationPrompt();
     this.touchAutoLock();
   }
@@ -640,23 +987,6 @@ export class Executor {
     this.renderer.event("success", "local store destroyed (browser deletion is not forensic erasure)");
   }
 
-  private resolveContact(target: string): Contact | null {
-    const byAlias = this.contacts.get(target);
-    if (byAlias !== undefined) {
-      return byAlias;
-    }
-    const uid = normalizeUid(target);
-    if (uid === null) {
-      return null;
-    }
-    for (const contact of this.contacts.values()) {
-      if (contact.uid === uid) {
-        return contact;
-      }
-    }
-    return null;
-  }
-
   private printHelp(topic: keyof typeof COMMAND_USAGE | undefined): void {
     if (topic !== undefined) {
       this.renderer.plain(`  ${COMMAND_USAGE[topic]}`);
@@ -668,4 +998,32 @@ export class Executor {
     }
     this.renderer.plain("  (escape a leading / in a message with a space)");
   }
+}
+
+function serializeSession(session: KxSession, establishedAt: number): StoredSession {
+  return {
+    rk: toBase64(session.rk),
+    transcript: toBase64(session.transcript),
+    peerIk: toBase64(session.peerIk),
+    role: session.role,
+    reducedFs: session.reducedFs,
+    establishedAt,
+  };
+}
+
+function wireToBundle(wire: api.WireBundle): Bundle {
+  return {
+    ikPub: fromBase64(wire.ik_pub),
+    spkPub: fromBase64(wire.spk_pub),
+    spkSig: fromBase64(wire.spk_sig),
+    opk:
+      wire.opk === null
+        ? null
+        : {
+            pub: fromBase64(wire.opk.pub),
+            index: wire.opk.index,
+            leaves: wire.opk.leaf_hashes.map(fromBase64),
+            rootSig: fromBase64(wire.opk.root_sig),
+          },
+  };
 }

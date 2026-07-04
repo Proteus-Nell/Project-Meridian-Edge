@@ -22,8 +22,9 @@ export const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const ML_DSA_65_PUBKEY_BYTES = 1952;
 export const ML_DSA_65_SIG_BYTES = 3309;
 
-// FIPS 203 ML-KEM-768 encapsulation key size.
+// FIPS 203 ML-KEM-768 sizes.
 export const ML_KEM_768_PUBKEY_BYTES = 1184;
+export const ML_KEM_768_CT_BYTES = 1088;
 
 // Server payload cap (CLAUDE.md §3).
 export const MAX_PAYLOAD_BYTES = 65536;

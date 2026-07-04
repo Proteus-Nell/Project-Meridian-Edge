@@ -36,6 +36,10 @@ def test_no_user_lookup_or_existence_routes(app: FastAPI) -> None:
         "/v1/keys/spk",
         "/v1/keys/opks",
         "/v1/keys/status",
+        "/v1/bundles/{uid}",
+        "/v1/messages",
+        "/v1/messages/ack",
+        "/v1/ws",
     }
     assert not any("user" in p for p in api_paths)
 
