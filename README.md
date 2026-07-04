@@ -69,7 +69,7 @@ your configured day (default Friday) — reminds you to rotate the passphrase.
 | `/whoami` | Your UID and identity-key fingerprint (needs an unlocked store) |
 | `/lock` | Locks the store immediately and wipes key material from memory; happens automatically after 10 min idle |
 | `/logout` | Revokes the session server-side, then locks |
-| `/rotate passphrase` | Re-wraps the store key under a new passphrase — local only, instant, crash-safe |
+| `/rotate passphrase` | Re-wraps the store key under a new passphrase — local only, instant, crash-safe. Warns and asks for confirmation if the new passphrase is identical to the current one |
 | `/settings rotation on\|off\|day <weekday>` | Configure the weekly rotation reminder |
 | `/keys status` | Signed-prekey age and one-time-prekey count on the server |
 | `/keys refill` | Manually top one-time prekeys back up to 50 |

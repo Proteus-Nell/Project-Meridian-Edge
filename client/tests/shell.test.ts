@@ -111,4 +111,18 @@ describe("Shell", () => {
       expect(term.written).toContain("visible");
     });
   });
+
+  describe("readLine", () => {
+    it("echoes input visibly but still bypasses history and the handler", async () => {
+      const { term, lines, shell } = setup();
+      const promise = shell.readLine("rotate anyway? (y/N): ");
+      term.feed("y");
+      expect(term.written).toContain("rotate anyway? (y/N): y");
+      term.feed("\r");
+      await expect(promise).resolves.toBe("y");
+      expect(lines).toEqual([]);
+      term.feed("\x1b[A\r"); // history must not contain the answer
+      expect(lines).toEqual([""]);
+    });
+  });
 });

@@ -20,10 +20,11 @@ import {
   SPK_ROTATION_DAYS,
 } from "../crypto/constants";
 import { fromBase64, toBase64 } from "../util/base64";
+import { secretStringsEqual } from "../util/secret";
 import type { Command, ParseResult, Weekday } from "./parser";
 import { COMMAND_USAGE, formatUid, normalizeUid } from "./parser";
 import type { Renderer } from "./renderer";
-import type { Shell } from "./shell";
+import type { ShellIO } from "./shell";
 
 interface StoredIdentity {
   readonly uid: string; // canonical 26-char form
@@ -93,7 +94,7 @@ export class Executor {
 
   constructor(
     private readonly renderer: Renderer,
-    private readonly shell: Shell,
+    private readonly shell: ShellIO,
     store?: KeyStore,
     private readonly now: () => number = () => Date.now(),
   ) {
@@ -214,17 +215,24 @@ export class Executor {
 
   // ----- async command plumbing -------------------------------------------
 
+  private tail: Promise<void> = Promise.resolve();
+
   private run(task: () => Promise<void>): void {
     if (this.busy) {
       this.renderer.event("warning", "another operation is in progress");
       return;
     }
     this.busy = true;
-    void task()
+    this.tail = task()
       .catch((err: unknown) => this.reportError(err))
       .finally(() => {
         this.busy = false;
       });
+  }
+
+  /** Resolves when the in-flight async command (if any) has finished. */
+  idle(): Promise<void> {
+    return this.tail;
   }
 
   private reportError(err: unknown): void {
@@ -521,6 +529,20 @@ export class Executor {
     const next = await this.promptNewPassphrase();
     if (next === null) {
       return;
+    }
+    if (secretStringsEqual(current, next)) {
+      // Checked locally before anything touches the store: neither value
+      // leaves this scope, and the answer reveals nothing the typist does
+      // not already know.
+      this.renderer.event(
+        "warning",
+        "the new passphrase is identical to the current one - rotating it changes nothing an attacker would have to guess",
+      );
+      const answer = await this.shell.readLine("rotate anyway? (y/N): ");
+      if (answer === null || !/^y(es)?$/i.test(answer.trim())) {
+        this.renderer.event("info", "rotation cancelled - run /rotate passphrase again with a different passphrase");
+        return;
+      }
     }
     if (!(await this.store.rotatePassphrase(current, next))) {
       this.renderer.event("failure", "rotation failed");

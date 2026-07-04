@@ -14,19 +14,27 @@ export interface TerminalLike {
 const MAX_LINE_LENGTH = 4096;
 const MAX_HISTORY = 100;
 
-interface SecretRequest {
+interface PendingInput {
   resolve: (value: string | null) => void;
   savedPrompt: string;
+  mask: boolean;
 }
 
-export class Shell implements LineSink {
+/** What command flows need from the shell (test seam for the executor). */
+export interface ShellIO {
+  readSecret(promptText: string): Promise<string | null>;
+  readLine(promptText: string): Promise<string | null>;
+  setPrompt(prompt: string): void;
+}
+
+export class Shell implements LineSink, ShellIO {
   private buffer = "";
   private cursor = 0;
   private history: string[] = [];
   private historyIndex = -1; // -1 = editing a fresh line
   private draft = "";
   private prompt = "> ";
-  private secret: SecretRequest | null = null;
+  private pending: PendingInput | null = null;
 
   constructor(
     private readonly term: TerminalLike,
@@ -36,8 +44,18 @@ export class Shell implements LineSink {
   /** Masked input for passphrases: echoes '*', bypasses history and the
    * line handler. Resolves null if the user cancels with Ctrl+C. */
   readSecret(promptText: string): Promise<string | null> {
+    return this.readInput(promptText, true);
+  }
+
+  /** Unmasked prompt for confirmations (y/N). Bypasses history and the line
+   * handler like readSecret, so answers never pollute either. */
+  readLine(promptText: string): Promise<string | null> {
+    return this.readInput(promptText, false);
+  }
+
+  private readInput(promptText: string, mask: boolean): Promise<string | null> {
     return new Promise((resolve) => {
-      this.secret = { resolve, savedPrompt: this.prompt };
+      this.pending = { resolve, savedPrompt: this.prompt, mask };
       this.buffer = "";
       this.cursor = 0;
       this.historyIndex = -1;
@@ -149,14 +167,14 @@ export class Shell implements LineSink {
         return;
       }
       case "\x03": {
-        // Ctrl+C: abandon the current line (cancels a secret prompt)
+        // Ctrl+C: abandon the current line (cancels a pending prompt)
         this.term.write("^C\r\n");
         this.buffer = "";
         this.cursor = 0;
         this.historyIndex = -1;
-        if (this.secret !== null) {
-          const pending = this.secret;
-          this.secret = null;
+        if (this.pending !== null) {
+          const pending = this.pending;
+          this.pending = null;
           this.prompt = pending.savedPrompt;
           pending.resolve(null);
         }
@@ -184,10 +202,10 @@ export class Shell implements LineSink {
     this.buffer = "";
     this.cursor = 0;
     this.historyIndex = -1;
-    if (this.secret !== null) {
-      // Secret lines never touch history or the line handler.
-      const pending = this.secret;
-      this.secret = null;
+    if (this.pending !== null) {
+      // Prompted lines never touch history or the line handler.
+      const pending = this.pending;
+      this.pending = null;
       this.prompt = pending.savedPrompt;
       pending.resolve(line);
       this.redraw();
@@ -204,7 +222,7 @@ export class Shell implements LineSink {
   }
 
   private historyPrev(): void {
-    if (this.history.length === 0 || this.secret !== null) {
+    if (this.history.length === 0 || this.pending !== null) {
       return;
     }
     if (this.historyIndex === -1) {
@@ -219,7 +237,7 @@ export class Shell implements LineSink {
   }
 
   private historyNext(): void {
-    if (this.historyIndex === -1 || this.secret !== null) {
+    if (this.historyIndex === -1 || this.pending !== null) {
       return;
     }
     if (this.historyIndex < this.history.length - 1) {
@@ -234,7 +252,7 @@ export class Shell implements LineSink {
   }
 
   private redraw(): void {
-    const shown = this.secret !== null ? "*".repeat(this.buffer.length) : this.buffer;
+    const shown = this.pending?.mask === true ? "*".repeat(this.buffer.length) : this.buffer;
     this.term.write(`\r\x1b[2K${this.prompt}${shown}`);
     const back = this.buffer.length - this.cursor;
     if (back > 0) {
