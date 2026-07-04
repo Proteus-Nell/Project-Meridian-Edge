@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Codes we deliberately expose. Anything else collapses to request_failed.
-_KNOWN_CODES = frozenset({"invalid_request", "rate_limited", "internal_error"})
+_KNOWN_CODES = frozenset({"invalid_request", "rate_limited", "internal_error", "auth_failed"})
 
 
 def _response(status_code: int, code: str) -> JSONResponse:

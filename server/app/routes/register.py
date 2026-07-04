@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 
 from .. import uid as uid_module
 from ..deps import get_session
-from ..models import User
+from ..models import RecoveryCode, User
 from ..rate_limit import TokenBucketLimiter
 from ..schemas import RegisterRequest, RegisterResponse
+from ..security import generate_recovery_codes, hash_recovery_code
 
 router = APIRouter(prefix="/v1")
 
@@ -37,12 +38,19 @@ def register(
     ik_pub = payload.decoded_ik_pub()
     for _ in range(_MAX_UID_RETRIES):
         candidate = uid_module.generate_uid()
-        session.add(User(uid=candidate, ik_pub=ik_pub))
+        user = User(uid=candidate, ik_pub=ik_pub)
+        session.add(user)
         try:
-            session.commit()
+            session.flush()
         except IntegrityError:
             # UNIQUE constraint hit: silently regenerate (CLAUDE.md section 2.1).
             session.rollback()
             continue
-        return RegisterResponse(uid=uid_module.format_uid(candidate))
+        # Recovery codes: shown once in this response, stored only as
+        # Argon2id hashes (CLAUDE.md section 2.2 / 7.7).
+        codes = generate_recovery_codes()
+        for code in codes:
+            session.add(RecoveryCode(user_id=user.id, code_hash=hash_recovery_code(code)))
+        session.commit()
+        return RegisterResponse(uid=uid_module.format_uid(candidate), recovery_codes=codes)
     raise HTTPException(status_code=500, detail="internal_error")

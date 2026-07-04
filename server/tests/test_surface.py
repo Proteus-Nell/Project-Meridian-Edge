@@ -28,7 +28,16 @@ def _all_route_paths(routes: Any) -> set[str]:
 
 def test_no_user_lookup_or_existence_routes(app: FastAPI) -> None:
     api_paths = {p for p in _all_route_paths(app.routes) if p.startswith("/v1")}
-    assert api_paths == {"/v1/register"}
+    assert api_paths == {
+        "/v1/register",
+        "/v1/login/challenge",
+        "/v1/login/verify",
+        "/v1/logout",
+        "/v1/keys/spk",
+        "/v1/keys/opks",
+        "/v1/keys/status",
+    }
+    assert not any("user" in p for p in api_paths)
 
 
 def test_docs_disabled_outside_dev(client: TestClient) -> None:

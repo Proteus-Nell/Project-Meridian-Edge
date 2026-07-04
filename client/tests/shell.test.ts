@@ -86,4 +86,29 @@ describe("Shell", () => {
     term.feed("a\x00\x01b\r");
     expect(lines).toEqual(["ab"]);
   });
+
+  describe("readSecret", () => {
+    it("masks input, bypasses history and the line handler", async () => {
+      const { term, lines, shell } = setup();
+      const promise = shell.readSecret("passphrase: ");
+      term.feed("hunter22");
+      expect(term.written).toContain("********");
+      expect(term.written).not.toContain("hunter22");
+      term.feed("\r");
+      await expect(promise).resolves.toBe("hunter22");
+      expect(lines).toEqual([]); // never reached the line handler
+      term.feed("\x1b[A\r"); // history recall: secret must not be there
+      expect(lines).toEqual([""]);
+    });
+
+    it("resolves null on Ctrl+C and restores the prompt", async () => {
+      const { term, shell } = setup();
+      const promise = shell.readSecret("passphrase: ");
+      term.feed("abc");
+      term.feed("\x03");
+      await expect(promise).resolves.toBeNull();
+      term.feed("visible\r");
+      expect(term.written).toContain("visible");
+    });
+  });
 });

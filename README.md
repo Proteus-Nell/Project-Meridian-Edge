@@ -55,6 +55,14 @@ python scripts/audit.py                # classical-crypto / injection greps
 
 ## Status
 
-W1 foundations: terminal shell + allowlist command parser, FastAPI skeleton,
-server-authoritative UID generation + registration transaction, CI gates.
-See CLAUDE.md §8 for the build order.
+- **W1** ✓ terminal shell + allowlist parser, FastAPI skeleton,
+  server-authoritative UID registration, CI gates.
+- **W2** ✓ passwordless identity: ML-DSA-65 challenge–response `/login`
+  (single-use origin-bound nonces, verified via pyca `cryptography`),
+  memory-only session tokens (SHA-512 at rest, 15 min idle), Argon2id-wrapped
+  IndexedDB key store with auto-lock and `/rotate passphrase`, recovery codes
+  (Argon2id hashes server-side), signed prekey + batch-signed one-time prekeys
+  with low-watermark refill, `/wipe`.
+- Next: **W3** PQ-KX handshake, first message, delete-on-ack delivery queue.
+
+See CLAUDE.md §8 for the full build order.

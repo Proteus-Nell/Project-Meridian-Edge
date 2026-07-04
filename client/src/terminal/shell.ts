@@ -14,6 +14,11 @@ export interface TerminalLike {
 const MAX_LINE_LENGTH = 4096;
 const MAX_HISTORY = 100;
 
+interface SecretRequest {
+  resolve: (value: string | null) => void;
+  savedPrompt: string;
+}
+
 export class Shell implements LineSink {
   private buffer = "";
   private cursor = 0;
@@ -21,11 +26,25 @@ export class Shell implements LineSink {
   private historyIndex = -1; // -1 = editing a fresh line
   private draft = "";
   private prompt = "> ";
+  private secret: SecretRequest | null = null;
 
   constructor(
     private readonly term: TerminalLike,
     private readonly onLine: (line: string) => void,
   ) {}
+
+  /** Masked input for passphrases: echoes '*', bypasses history and the
+   * line handler. Resolves null if the user cancels with Ctrl+C. */
+  readSecret(promptText: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      this.secret = { resolve, savedPrompt: this.prompt };
+      this.buffer = "";
+      this.cursor = 0;
+      this.historyIndex = -1;
+      this.prompt = promptText;
+      this.redraw();
+    });
+  }
 
   attach(): void {
     this.term.onData((data) => this.handleData(data));
@@ -130,11 +149,17 @@ export class Shell implements LineSink {
         return;
       }
       case "\x03": {
-        // Ctrl+C: abandon the current line
+        // Ctrl+C: abandon the current line (cancels a secret prompt)
         this.term.write("^C\r\n");
         this.buffer = "";
         this.cursor = 0;
         this.historyIndex = -1;
+        if (this.secret !== null) {
+          const pending = this.secret;
+          this.secret = null;
+          this.prompt = pending.savedPrompt;
+          pending.resolve(null);
+        }
         this.redraw();
         return;
       }
@@ -159,6 +184,15 @@ export class Shell implements LineSink {
     this.buffer = "";
     this.cursor = 0;
     this.historyIndex = -1;
+    if (this.secret !== null) {
+      // Secret lines never touch history or the line handler.
+      const pending = this.secret;
+      this.secret = null;
+      this.prompt = pending.savedPrompt;
+      pending.resolve(line);
+      this.redraw();
+      return;
+    }
     if (line.trim().length > 0 && line !== this.history[this.history.length - 1]) {
       this.history.push(line);
       if (this.history.length > MAX_HISTORY) {
@@ -170,7 +204,7 @@ export class Shell implements LineSink {
   }
 
   private historyPrev(): void {
-    if (this.history.length === 0) {
+    if (this.history.length === 0 || this.secret !== null) {
       return;
     }
     if (this.historyIndex === -1) {
@@ -185,7 +219,7 @@ export class Shell implements LineSink {
   }
 
   private historyNext(): void {
-    if (this.historyIndex === -1) {
+    if (this.historyIndex === -1 || this.secret !== null) {
       return;
     }
     if (this.historyIndex < this.history.length - 1) {
@@ -200,7 +234,8 @@ export class Shell implements LineSink {
   }
 
   private redraw(): void {
-    this.term.write(`\r\x1b[2K${this.prompt}${this.buffer}`);
+    const shown = this.secret !== null ? "*".repeat(this.buffer.length) : this.buffer;
+    this.term.write(`\r\x1b[2K${this.prompt}${shown}`);
     const back = this.buffer.length - this.cursor;
     if (back > 0) {
       this.term.write(`\x1b[${back}D`);

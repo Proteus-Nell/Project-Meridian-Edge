@@ -344,7 +344,7 @@ Run via `/bench` (browser) and `make bench` (server); output as JSON + generated
 | Week | Deliverables | Exit criteria |
 |---|---|---|
 | **W1 - Foundations** ✓ | Repos, CI (lint, tests, `pip-audit`/`npm audit`), FastAPI skeleton, DB schema, UID generation + registration transaction, xterm.js shell + command parser | Register via terminal; UID printed; parser rejects malformed commands; CI green |
-| **W2 - Identity & key store** | ML-DSA keygen, challenge–response login, session tokens, Argon2id-wrapped IndexedDB store, recovery codes, prekey bundle upload (SPK + 50 OPKs, signed) | Login round-trip works; store survives reload locked; bundle visible in DB as ciphertext/keys only |
+| **W2 - Identity & key store** ✓ | ML-DSA keygen, challenge–response login, session tokens, Argon2id-wrapped IndexedDB store, recovery codes, prekey bundle upload (SPK + 50 OPKs, signed) | Login round-trip works; store survives reload locked; bundle visible in DB as ciphertext/keys only |
 | **W3 - Handshake & first message** | PQ-KX end-to-end, AEAD messaging happy path, delivery queue with ack-delete + TTL, offline delivery | Alice → offline Bob → Bob receives on login; server row deleted on ack; signature-verification failure aborts loudly |
 | **W4 - Ratchet & trust** | Symmetric chains, KEM ratchet steps, out-of-order handling, header encryption, safety numbers + key-change tear-down | FS/PCS demonstrated by test (leak state → past msgs safe → session heals); `/verify` flow complete |
 | **W5 - Lifecycle & hardening** | Disappearing timers, local purge, rotation prompt + `/settings`, full header/CSP/rate-limit pass, dependency scan clean, `/wipe` | OWASP-header scan clean; timers verified on both clients; Snyk/`pip-audit` zero high-severity |

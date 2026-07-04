@@ -30,3 +30,16 @@ def encode_crockford(raw: bytes) -> str:
 def format_uid(uid: str) -> str:
     """Group for display: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XX."""
     return "-".join(uid[i : i + 4] for i in range(0, len(uid), 4))
+
+
+def canonicalize_uid(raw: str) -> str | None:
+    """Mirror of the client's normalizeUid: strip dashes, uppercase, Crockford
+    ambiguity mapping (O->0, I/L->1). None unless 26 canonical chars remain."""
+    cleaned = (
+        raw.upper().replace("-", "").replace("O", "0").replace("I", "1").replace("L", "1")
+    )
+    if len(cleaned) != UID_CHARS:
+        return None
+    if any(ch not in CROCKFORD_ALPHABET for ch in cleaned):
+        return None
+    return cleaned
