@@ -1,0 +1,57 @@
+# CI gates (CLAUDE.md §5): dependency audits, the classical-crypto grep,
+# the parser fuzz test, and the full test suite - all blocking.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  audits:
+    name: security greps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: classical-crypto / injection audit
+        run: python scripts/audit.py
+
+  client:
+    name: client (typecheck, tests, npm audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=high
+
+  server:
+    name: server (mypy --strict, tests, pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            server/requirements.txt
+            server/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: mypy --strict app
+      - run: pytest -q
+      - run: pip install pip-audit && pip-audit -r requirements.txt -r requirements-dev.txt

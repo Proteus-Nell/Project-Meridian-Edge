@@ -1,0 +1,58 @@
+// Typed event renderer (CLAUDE.md §1.3): every output line is a typed event
+// written as plain text through xterm.js `write` with ANSI colors. There is
+// no HTML path. User-influenced text is stripped of control characters so a
+// hostile message cannot inject terminal escape sequences.
+
+export type EventLevel = "success" | "warning" | "failure" | "info" | "security";
+
+const RESET = "\x1b[0m";
+const DIM = "\x1b[2m";
+
+const PREFIX: Record<EventLevel, string> = {
+  success: "\x1b[32m[✓]" + RESET,
+  warning: "\x1b[33m[!]" + RESET,
+  failure: "\x1b[31m[✗]" + RESET,
+  info: "\x1b[36m[*]" + RESET,
+  security: "\x1b[1;97;41m[SECURITY]" + RESET,
+};
+
+/** Strip C0 controls, DEL, and C1 controls (incl. CSI U+009B) so that no
+ * untrusted text can smuggle escape sequences into the terminal. */
+export function sanitizeText(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp < 0x20 || cp === 0x7f || (cp >= 0x80 && cp <= 0x9f)) {
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/** Destination for fully rendered lines (the shell, which owns the prompt). */
+export interface LineSink {
+  printLine(line: string): void;
+}
+
+export class Renderer {
+  constructor(
+    private readonly sink: LineSink,
+    private readonly now: () => Date = () => new Date(),
+  ) {}
+
+  event(level: EventLevel, text: string): void {
+    this.sink.printLine(`${DIM}${this.timestamp()}${RESET} ${PREFIX[level]} ${sanitizeText(text)}`);
+  }
+
+  /** Plain output (help text, banners). Still sanitized, still text-only. */
+  plain(text: string): void {
+    this.sink.printLine(sanitizeText(text));
+  }
+
+  private timestamp(): string {
+    const d = this.now();
+    const pad = (n: number): string => n.toString().padStart(2, "0");
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+}

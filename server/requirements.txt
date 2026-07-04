@@ -1,0 +1,6 @@
+# Runtime dependencies - exact pins (CLAUDE.md §0: versions pinned exact,
+# additions justified in the commit message).
+fastapi==0.139.0
+uvicorn[standard]==0.50.0
+SQLAlchemy==2.0.51
+pydantic==2.13.4
