@@ -44,6 +44,7 @@ export type Command =
   | { readonly name: "rotate-passphrase" }
   | { readonly name: "settings-rotation"; readonly setting: RotationSetting }
   | { readonly name: "settings-notify"; readonly enabled: boolean }
+  | { readonly name: "settings-mask"; readonly mask: "asterisk" | "hidden" }
   | { readonly name: "keys-status" }
   | { readonly name: "keys-refill" }
   | { readonly name: "bench"; readonly suite: string | undefined }
@@ -74,7 +75,8 @@ export const COMMAND_USAGE = {
   timer: "/timer <alias> <duration|off>  (duration: 30m, 1h, 1d, 1w, ...)",
   purge: "/purge set <duration|off>  |  /purge now [alias]",
   rotate: "/rotate passphrase",
-  settings: "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>",
+  settings:
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>",
   keys: "/keys status  |  /keys refill",
   bench: "/bench [suite]",
   wipe: "/wipe",
@@ -318,7 +320,14 @@ function parseCommand(word: CommandWord, args: readonly string[]): ParseResult {
         }
         return invalid("expected on or off", usage);
       }
-      return invalid("expected 'rotation' or 'notify'", usage);
+      if (sub === "mask") {
+        const value = args[1];
+        if ((value === "asterisk" || value === "hidden") && args.length === 2) {
+          return command({ name: "settings-mask", mask: value });
+        }
+        return invalid("expected asterisk or hidden", usage);
+      }
+      return invalid("expected 'rotation', 'notify', or 'mask'", usage);
     }
     case "keys": {
       const sub = args[0];

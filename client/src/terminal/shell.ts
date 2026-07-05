@@ -20,11 +20,17 @@ interface PendingInput {
   mask: boolean;
 }
 
+/** How masked (passphrase) input is echoed: 'asterisk' shows one '*' per
+ * character (leaks length to a shoulder-surfer); 'hidden' shows nothing at
+ * all, sudo-style. Toggleable via /settings mask. */
+export type SecretMask = "asterisk" | "hidden";
+
 /** What command flows need from the shell (test seam for the executor). */
 export interface ShellIO {
   readSecret(promptText: string): Promise<string | null>;
   readLine(promptText: string): Promise<string | null>;
   setPrompt(prompt: string): void;
+  setSecretMask(mask: SecretMask): void;
 }
 
 export class Shell implements LineSink, ShellIO {
@@ -35,6 +41,7 @@ export class Shell implements LineSink, ShellIO {
   private draft = "";
   private prompt = "> ";
   private pending: PendingInput | null = null;
+  private secretMask: SecretMask = "asterisk";
 
   constructor(
     private readonly term: TerminalLike,
@@ -72,6 +79,13 @@ export class Shell implements LineSink, ShellIO {
   setPrompt(prompt: string): void {
     this.prompt = prompt;
     this.redraw();
+  }
+
+  setSecretMask(mask: SecretMask): void {
+    this.secretMask = mask;
+    if (this.pending?.mask === true) {
+      this.redraw(); // reflect the change on an in-progress prompt
+    }
   }
 
   printLine(line: string): void {
@@ -252,9 +266,13 @@ export class Shell implements LineSink, ShellIO {
   }
 
   private redraw(): void {
-    const shown = this.pending?.mask === true ? "*".repeat(this.buffer.length) : this.buffer;
+    const masked = this.pending?.mask === true;
+    const hidden = masked && this.secretMask === "hidden";
+    const shown = hidden ? "" : masked ? "*".repeat(this.buffer.length) : this.buffer;
     this.term.write(`\r\x1b[2K${this.prompt}${shown}`);
-    const back = this.buffer.length - this.cursor;
+    // In hidden mode nothing is echoed, so the cursor stays at the prompt;
+    // moving back by the (invisible) tail would walk it into the prompt.
+    const back = hidden ? 0 : this.buffer.length - this.cursor;
     if (back > 0) {
       this.term.write(`\x1b[${back}D`);
     }

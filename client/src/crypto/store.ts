@@ -30,6 +30,7 @@ export const DEFAULT_ARGON2_PARAMS: Argon2Params = {
 
 const STORE_NAME = "vault";
 const META_KEY = "__meta__";
+const PREFS_KEY = "__prefs__";
 const DEK_BYTES = 32;
 const SALT_BYTES = 16;
 const NONCE_BYTES = 24;
@@ -46,6 +47,16 @@ interface MetaRecord {
   readonly params: Argon2Params;
   readonly wrappedDek: WrappedRecord;
 }
+
+/** Non-secret UI preferences. Stored UNENCRYPTED and deliberately so: they
+ * must be readable before the store is unlocked (the passphrase-mask setting
+ * governs the very first login prompt), and they contain nothing an attacker
+ * with the raw database could exploit. */
+export interface DisplayPrefs {
+  readonly secretMask: "asterisk" | "hidden";
+}
+
+const DEFAULT_PREFS: DisplayPrefs = { secretMask: "asterisk" };
 
 export class StoreLockedError extends Error {
   constructor() {
@@ -114,6 +125,20 @@ export class KeyStore {
 
   async exists(): Promise<boolean> {
     return (await this.readRaw(META_KEY)) !== undefined;
+  }
+
+  /** Non-secret display preferences; readable with or without a passphrase. */
+  async getDisplayPrefs(): Promise<DisplayPrefs> {
+    const raw = (await this.readRaw(PREFS_KEY)) as Partial<DisplayPrefs> | undefined;
+    if (raw === undefined) {
+      return DEFAULT_PREFS;
+    }
+    const mask = raw.secretMask === "hidden" ? "hidden" : "asterisk";
+    return { secretMask: mask };
+  }
+
+  async setDisplayPrefs(prefs: DisplayPrefs): Promise<void> {
+    await this.writeRaw(PREFS_KEY, prefs);
   }
 
   isUnlocked(): boolean {
@@ -219,7 +244,7 @@ export class KeyStore {
       const keys = await request(tx.objectStore(STORE_NAME).getAllKeys());
       return keys
         .filter((k): k is string => typeof k === "string")
-        .filter((k) => k !== META_KEY && k.startsWith(prefix));
+        .filter((k) => k !== META_KEY && k !== PREFS_KEY && k.startsWith(prefix));
     } finally {
       db.close();
     }

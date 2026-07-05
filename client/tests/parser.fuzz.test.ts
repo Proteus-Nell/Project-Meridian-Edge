@@ -25,6 +25,7 @@ const ALLOWED_NAMES: ReadonlySet<CommandName> = new Set<CommandName>([
   "rotate-passphrase",
   "settings-rotation",
   "settings-notify",
+  "settings-mask",
   "keys-status",
   "keys-refill",
   "bench",

@@ -129,6 +129,18 @@ export class Executor {
     this.store = store ?? new KeyStore();
   }
 
+  /** Apply persisted display preferences before the first prompt. Safe to
+   * call with no store yet (returns defaults). Best-effort: a read failure
+   * just leaves the default asterisk masking in place. */
+  async init(): Promise<void> {
+    try {
+      const prefs = await this.store.getDisplayPrefs();
+      this.shell.setSecretMask(prefs.secretMask);
+    } catch {
+      // ignore: default masking remains
+    }
+  }
+
   handle(result: ParseResult): void {
     this.touchAutoLock();
     switch (result.kind) {
@@ -192,6 +204,9 @@ export class Executor {
         return;
       case "settings-rotation":
         this.run(() => this.doSettingsRotation(cmd.setting));
+        return;
+      case "settings-mask":
+        this.run(() => this.doSettingsMask(cmd.mask));
         return;
       case "wipe":
         this.run(() => this.doWipe());
@@ -991,6 +1006,19 @@ export class Executor {
       next.enabled
         ? `weekly rotation prompt on (${next.day})`
         : "weekly rotation prompt off",
+    );
+  }
+
+  private async doSettingsMask(mask: "asterisk" | "hidden"): Promise<void> {
+    // Non-secret preference stored unencrypted, so it applies before unlock
+    // on the next session's first passphrase prompt too (§ store DisplayPrefs).
+    this.shell.setSecretMask(mask);
+    await this.store.setDisplayPrefs({ secretMask: mask });
+    this.renderer.event(
+      "success",
+      mask === "hidden"
+        ? "passphrase entry hidden - no characters echoed (sudo-style)"
+        : "passphrase entry masked with asterisks",
     );
   }
 

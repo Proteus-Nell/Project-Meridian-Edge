@@ -183,6 +183,7 @@ pqterm/
 | `/rotate passphrase` | - | 2 | Re-wraps DEK locally |
 | `/settings rotation` | `<on\|off\|day <weekday>>` | 2 | Weekly rotation prompt config |
 | `/settings notify` | `<on\|off>` | 1 | Toast notifications (Could-have) |
+| `/settings mask` | `<asterisk\|hidden>` | 2 | Passphrase echo style (persisted, unencrypted, pre-unlock) |
 | `/keys status` | - | 2 | SPK age, OPK count |
 | `/keys refill` | - | 2 | Manual OPK replenishment |
 | `/bench` | `[suite]` | bench | Runs benchmark suites B1-B5 |

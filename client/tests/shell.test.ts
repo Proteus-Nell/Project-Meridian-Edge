@@ -110,6 +110,44 @@ describe("Shell", () => {
       term.feed("visible\r");
       expect(term.written).toContain("visible");
     });
+
+    it("hidden mask mode echoes nothing but still captures input", async () => {
+      const { term, lines, shell } = setup();
+      shell.setSecretMask("hidden");
+      const promise = shell.readSecret("passphrase: ");
+      term.feed("hunter22");
+      expect(term.written).not.toContain("*");
+      expect(term.written).not.toContain("hunter22");
+      term.feed("\r");
+      await expect(promise).resolves.toBe("hunter22");
+      expect(lines).toEqual([]);
+    });
+
+    it("switching mask style back to asterisk restores echoing", async () => {
+      const { term, shell } = setup();
+      shell.setSecretMask("hidden");
+      shell.setSecretMask("asterisk");
+      const promise = shell.readSecret("passphrase: ");
+      term.feed("abcd");
+      expect(term.written).toContain("****");
+      term.feed("\r");
+      await expect(promise).resolves.toBe("abcd");
+    });
+
+    it("editing works in hidden mode (backspace) without leaking", async () => {
+      const { term, shell } = setup();
+      shell.setSecretMask("hidden");
+      const promise = shell.readSecret("unlock: ");
+      term.feed("passXX");
+      term.feed("\x7f\x7f"); // erase the two X's
+      term.feed("word");
+      term.feed("\r");
+      // No echoed input characters at all - not the interim nor the result.
+      for (const leak of ["passXX", "password", "word"]) {
+        expect(term.written).not.toContain(leak);
+      }
+      await expect(promise).resolves.toBe("password");
+    });
   });
 
   describe("readLine", () => {

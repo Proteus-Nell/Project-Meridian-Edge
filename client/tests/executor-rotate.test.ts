@@ -15,6 +15,7 @@ class FakeShell implements ShellIO {
   secrets: (string | null)[] = [];
   lines: (string | null)[] = [];
   lineQueries: string[] = [];
+  masks: string[] = [];
 
   readSecret(): Promise<string | null> {
     return Promise.resolve(this.secrets.shift() ?? null);
@@ -26,6 +27,10 @@ class FakeShell implements ShellIO {
   }
 
   setPrompt(): void {}
+
+  setSecretMask(mask: string): void {
+    this.masks.push(mask);
+  }
 }
 
 class CaptureSink implements LineSink {
@@ -130,5 +135,38 @@ describe("/rotate passphrase same-passphrase guard", () => {
     expect(output.lines.join("\n")).not.toContain("passphrase rotated");
     store.lock();
     expect(await store.unlock("original passphrase")).toBe(true);
+  });
+});
+
+describe("/settings mask", () => {
+  it("applies the mask to the shell and persists it", async () => {
+    const { executor, shell, store } = await setup();
+    executor.handle(parseLine("/settings mask hidden"));
+    await executor.idle();
+    expect(shell.masks.at(-1)).toBe("hidden");
+    expect((await store.getDisplayPrefs()).secretMask).toBe("hidden");
+  });
+
+  it("init() applies the persisted mask before any prompt", async () => {
+    const { executor, store } = await setup();
+    executor.handle(parseLine("/settings mask hidden"));
+    await executor.idle();
+
+    // A fresh executor over the same store reads and applies it on init.
+    const shell2 = new FakeShell();
+    const output2 = new CaptureSink();
+    const executor2 = new Executor(new Renderer(output2), shell2, store);
+    await executor2.init();
+    expect(shell2.masks).toContain("hidden");
+  });
+
+  it("switching back to asterisk persists too", async () => {
+    const { executor, shell, store } = await setup();
+    executor.handle(parseLine("/settings mask hidden"));
+    await executor.idle();
+    executor.handle(parseLine("/settings mask asterisk"));
+    await executor.idle();
+    expect(shell.masks.at(-1)).toBe("asterisk");
+    expect((await store.getDisplayPrefs()).secretMask).toBe("asterisk");
   });
 });

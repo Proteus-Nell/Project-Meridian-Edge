@@ -71,6 +71,7 @@ your configured day (default Friday) — reminds you to rotate the passphrase.
 | `/logout` | Revokes the session server-side, then locks |
 | `/rotate passphrase` | Re-wraps the store key under a new passphrase — local only, instant, crash-safe. Warns and asks for confirmation if the new passphrase is identical to the current one |
 | `/settings rotation on\|off\|day <weekday>` | Configure the weekly rotation reminder |
+| `/settings mask asterisk\|hidden` | Passphrase echo: `asterisk` shows `*` per character (default); `hidden` shows nothing at all (sudo-style — no length leak to a shoulder-surfer). Persists across reloads and applies from the first login prompt |
 | `/keys status` | Signed-prekey age and one-time-prekey count on the server |
 | `/keys refill` | Manually top one-time prekeys back up to 50 |
 | `/wipe` | Destroys the local store (identity, keys, everything). Asks you to repeat it within 30 s to confirm |
@@ -104,6 +105,8 @@ per conversation for now — continued messaging is the W4 ratchet milestone.
 ### Terminal tips
 
 - **↑ / ↓** — command history (passphrases are never recorded in it)
+- **Passphrase echo** — asterisks by default; `/settings mask hidden` shows
+  nothing while you type (no length leak). Both bypass history entirely
 - **← / → / Home / End / Backspace / Delete** — line editing
 - **Ctrl+L** — clear screen (keeps what you were typing) · **Ctrl+U** — clear
   the line · **Ctrl+C** — abandon the line, or cancel a passphrase prompt

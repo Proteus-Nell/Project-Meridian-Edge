@@ -115,6 +115,28 @@ describe("KeyStore", () => {
     expect(await after.exists()).toBe(false);
   });
 
+  it("stores display prefs unencrypted, readable before unlock", async () => {
+    const factory = new IDBFactory();
+    const first = new KeyStore("pqterm-test", factory);
+    // Default before anything is written.
+    expect((await first.getDisplayPrefs()).secretMask).toBe("asterisk");
+    await first.setDisplayPrefs({ secretMask: "hidden" });
+
+    // A fresh instance (reload) reads it back WITHOUT unlocking - the point
+    // is the first login prompt honors it.
+    const second = new KeyStore("pqterm-test", factory);
+    expect(second.isUnlocked()).toBe(false);
+    expect((await second.getDisplayPrefs()).secretMask).toBe("hidden");
+  });
+
+  it("keeps display prefs out of vault key listings", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery", FAST);
+    await store.setDisplayPrefs({ secretMask: "hidden" });
+    await store.putJson("spk/1", { a: 1 });
+    expect(await store.listKeys("")).toEqual(["spk/1"]);
+  });
+
   it("lists and deletes prefixed keys", async () => {
     const { store } = freshStore();
     await store.create("correct horse battery", FAST);

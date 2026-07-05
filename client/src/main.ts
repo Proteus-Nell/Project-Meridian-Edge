@@ -34,6 +34,9 @@ const shell = new Shell(term, (line) => {
 });
 const renderer = new Renderer(shell);
 executor = new Executor(renderer, shell);
+// Apply persisted display preferences (e.g. passphrase-mask style) before
+// the user reaches the first prompt.
+void executor.init();
 
 term.writeln("PQTerm - pure post-quantum E2EE messenger (W1 prototype)");
 term.writeln("all asymmetric crypto: ML-KEM-768 / ML-DSA-65. type /help to begin.");

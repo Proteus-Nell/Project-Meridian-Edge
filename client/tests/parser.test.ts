@@ -111,6 +111,20 @@ describe("subcommands", () => {
     expect(parseLine("/settings rotation day someday").kind).toBe("invalid");
   });
 
+  it("parses /settings mask variants and rejects bad values", () => {
+    expect(parseLine("/settings mask hidden")).toEqual({
+      kind: "command",
+      command: { name: "settings-mask", mask: "hidden" },
+    });
+    expect(parseLine("/settings mask asterisk")).toEqual({
+      kind: "command",
+      command: { name: "settings-mask", mask: "asterisk" },
+    });
+    expect(parseLine("/settings mask off").kind).toBe("invalid");
+    expect(parseLine("/settings mask").kind).toBe("invalid");
+    expect(parseLine("/settings wat").kind).toBe("invalid");
+  });
+
   it("parses /keys and /rotate strictly", () => {
     expect(parseLine("/keys status")).toEqual({ kind: "command", command: { name: "keys-status" } });
     expect(parseLine("/keys hax").kind).toBe("invalid");
