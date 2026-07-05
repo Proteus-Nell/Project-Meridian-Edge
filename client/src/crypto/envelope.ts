@@ -77,7 +77,11 @@ export function encodeKxEnvelope(envelope: KxEnvelope): Uint8Array {
   }
   put(envelope.sig);
   put(envelope.nonce);
-  new DataView(out.buffer).setUint32(offset, envelope.ciphertext.length, false);
+  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint32(
+    offset,
+    envelope.ciphertext.length,
+    false,
+  );
   offset += 4;
   put(envelope.ciphertext);
   return out;

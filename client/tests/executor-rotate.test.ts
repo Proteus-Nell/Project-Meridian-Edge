@@ -111,4 +111,24 @@ describe("/rotate passphrase same-passphrase guard", () => {
     store.lock();
     expect(await store.unlock("original passphrase")).toBe(true);
   });
+
+  it("rejects a too-short new passphrase without touching the store", async () => {
+    const { executor, shell, output, store } = await setup();
+    shell.secrets = ["original passphrase", "short"];
+    await rotate(executor);
+    expect(output.lines.join("\n")).toContain("at least 8 characters");
+    expect(output.lines.join("\n")).not.toContain("passphrase rotated");
+    store.lock();
+    expect(await store.unlock("original passphrase")).toBe(true);
+  });
+
+  it("rejects a mismatched confirmation without touching the store", async () => {
+    const { executor, shell, output, store } = await setup();
+    shell.secrets = ["original passphrase", "brand new passphrase", "different confirmation"];
+    await rotate(executor);
+    expect(output.lines.join("\n")).toContain("do not match");
+    expect(output.lines.join("\n")).not.toContain("passphrase rotated");
+    store.lock();
+    expect(await store.unlock("original passphrase")).toBe(true);
+  });
 });

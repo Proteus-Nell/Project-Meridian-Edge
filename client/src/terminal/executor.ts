@@ -245,10 +245,18 @@ export class Executor {
       return;
     }
     this.busy = true;
+    // Suspend auto-lock while a flow is in flight: it may be waiting at a
+    // passphrase or recovery-code prompt, and firing mid-registration could
+    // orphan a server-side identity that was never persisted locally.
+    if (this.autoLockTimer !== null) {
+      clearTimeout(this.autoLockTimer);
+      this.autoLockTimer = null;
+    }
     this.tail = task()
       .catch((err: unknown) => this.reportError(err))
       .finally(() => {
         this.busy = false;
+        this.touchAutoLock();
       });
   }
 
@@ -291,7 +299,12 @@ export class Executor {
     }
   }
 
+  /** Bumped on every lock/logout/wipe; in-flight receive continuations
+   * check it and bail instead of writing to torn-down state. */
+  private epoch = 0;
+
   private lockLocal(): void {
+    this.epoch += 1;
     this.ws?.close();
     this.ws = null;
     if (this.identity !== null) {
@@ -478,7 +491,11 @@ export class Executor {
     if (this.identity === null || this.token === null || !this.store.isUnlocked()) {
       return "skip";
     }
+    const epoch = this.epoch;
     const lookup = await this.buildPrekeyLookup();
+    if (this.epoch !== epoch || this.identity === null) {
+      return "skip"; // locked out / wiped while reading prekeys
+    }
     const result = respondKx(this.identity.pub, lookup, envelopeBytes);
     if (!result.ok) {
       if (result.reason === "bad-signature") {
@@ -516,6 +533,9 @@ export class Executor {
 
     const senderIkB64 = toBase64(result.senderIk);
     const timestamp = this.now();
+    if (this.epoch !== epoch) {
+      return "skip"; // torn down while decrypting; leave queued server-side
+    }
     const contact = this.findContactByUid(senderUid);
 
     if (contact !== null) {
@@ -547,6 +567,9 @@ export class Executor {
     // via a non-consuming bundle fetch before holding it as a request.
     try {
       const senderWire = await api.fetchBundle(this.token, senderUid, false);
+      if (this.epoch !== epoch) {
+        return "skip";
+      }
       if (senderWire.ik_pub !== senderIkB64) {
         this.renderer.event(
           "security",
@@ -555,6 +578,9 @@ export class Executor {
         return "ack";
       }
     } catch {
+      if (this.epoch !== epoch) {
+        return "skip";
+      }
       this.renderer.event("failure", "could not verify sender identity - message discarded");
       return "ack";
     }
@@ -599,6 +625,7 @@ export class Executor {
     if (typeof WebSocket === "undefined" || typeof location === "undefined") {
       return; // non-browser environment (tests)
     }
+    this.ws?.close(); // never leak a previous socket across re-logins
     this.ws = new WsClient();
     this.ws.connect(this.token ?? "", {
       onToken: (token) => {
@@ -639,7 +666,7 @@ export class Executor {
     if (second === null) {
       return null;
     }
-    if (first !== second) {
+    if (!secretStringsEqual(first, second)) {
       this.renderer.event("failure", "passphrases do not match");
       return null;
     }

@@ -257,7 +257,10 @@ export class KeyStore {
     if (this.dek === null) {
       dek.fill(0);
     } else {
+      // Zeroize the superseded in-memory copy before dropping it for GC.
+      const previous = this.dek;
       this.dek = dek;
+      previous.fill(0);
     }
     return true;
   }
