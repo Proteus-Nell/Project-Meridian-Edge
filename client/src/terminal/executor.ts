@@ -15,6 +15,7 @@ import { buildLoginMessage } from "../crypto/login";
 import { generateOpkBatch, generateSpk } from "../crypto/prekeys";
 import { initiateKx, respondKx, verifyBundle } from "../crypto/kx";
 import type { Bundle, KxSession, PrekeyLookup, PrekeySecret } from "../crypto/kx";
+import { computeSafetyNumber, formatSafetyNumber } from "../crypto/safetynumber";
 import { KeyStore, StoreLockedError } from "../crypto/store";
 import {
   AUTO_LOCK_MS,
@@ -63,7 +64,31 @@ interface RotationSettings {
 interface Contact {
   readonly uid: string;
   readonly alias: string;
-  readonly ik: string | null; // base64, pinned on first verified contact
+  readonly ik: string | null; // base64, pinned TOFU-style on first contact
+  /** Set by /verified after out-of-band safety-number comparison. Reset to
+   * false whenever a key change is detected (§4.6). */
+  readonly verified: boolean;
+  /** True from the moment a key change is detected until /ack. Sending is
+   * refused while this is set (§4.6, CLAUDE.md §1.4). */
+  readonly keyChangeBlocked: boolean;
+}
+
+interface PartialContact {
+  uid: string;
+  alias: string;
+  ik?: string | null | undefined;
+  verified?: boolean | undefined;
+  keyChangeBlocked?: boolean | undefined;
+}
+
+function normalizeContact(c: PartialContact): Contact {
+  return {
+    uid: c.uid,
+    alias: c.alias,
+    ik: c.ik ?? null,
+    verified: c.verified ?? false,
+    keyChangeBlocked: c.keyChangeBlocked ?? false,
+  };
 }
 
 interface StoredSession {
@@ -99,8 +124,6 @@ const WIPE_CONFIRM_WINDOW_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SEGMENT_OF: Partial<Record<Command["name"], string>> = {
-  verify: "W4 (ratchet & trust)",
-  verified: "W4 (ratchet & trust)",
   timer: "W5 (lifecycle & hardening)",
   "purge-set": "W5 (lifecycle & hardening)",
   "purge-now": "W5 (lifecycle & hardening)",
@@ -169,7 +192,10 @@ export class Executor {
       this.renderer.event("warning", "no active conversation - use /chat <alias|uid> first");
       return;
     }
-    const target = this.active;
+    // Re-resolve from the map rather than trusting the snapshot captured at
+    // /chat time: a key-change teardown (or /verified) mutates the stored
+    // Contact, and sending must see that update, not a stale readonly copy.
+    const target = this.findContactByUid(this.active.uid) ?? this.active;
     this.run(() => this.sendFirstMessage(target, text));
   }
 
@@ -214,6 +240,12 @@ export class Executor {
       case "add":
         this.run(() => this.doAdd(cmd.uid, cmd.alias));
         return;
+      case "verify":
+        this.run(() => this.doVerify(cmd.alias));
+        return;
+      case "verified":
+        this.run(() => this.doVerified(cmd.alias));
+        return;
       case "whoami": {
         if (this.identity === null) {
           this.renderer.event("warning", "locked or not registered - /login or /register");
@@ -234,14 +266,20 @@ export class Executor {
           return;
         }
         this.active = contact;
-        this.renderer.event("info", `chatting with: ${contact.alias} (UNVERIFIED)`);
+        const trust = contact.verified ? "verified" : "UNVERIFIED";
+        this.renderer.event("info", `chatting with: ${contact.alias} (${trust})`);
+        if (contact.keyChangeBlocked) {
+          this.renderer.event(
+            "security",
+            `identity key for ${contact.alias} changed and is UNACKNOWLEDGED - sending is blocked. /ack ${contact.alias}, then /verify + /verified to resume.`,
+          );
+        }
         this.shell.setPrompt(`[${contact.alias}] > `);
         return;
       }
-      case "ack": {
-        this.renderer.event("info", `nothing to acknowledge for ${cmd.alias}`);
+      case "ack":
+        this.run(() => this.doAck(cmd.alias));
         return;
-      }
       default: {
         const segment = SEGMENT_OF[cmd.name] ?? "a later segment";
         this.renderer.event("info", `/${cmd.name} is not implemented yet - scheduled for ${segment}`);
@@ -337,7 +375,7 @@ export class Executor {
 
   private async loadContacts(): Promise<void> {
     const stored = (await this.store.getJson<Contact[]>("contacts")) ?? [];
-    this.contacts = new Map(stored.map((c) => [c.alias, c]));
+    this.contacts = new Map(stored.map((c) => [c.alias, normalizeContact(c)]));
   }
 
   private async saveContacts(): Promise<void> {
@@ -364,7 +402,13 @@ export class Executor {
     }
     const name = alias ?? uid;
     const existing = this.findContactByUid(uid);
-    const contact: Contact = { uid, alias: name, ik: existing?.ik ?? null };
+    const contact = normalizeContact({
+      uid,
+      alias: name,
+      ik: existing?.ik ?? null,
+      verified: existing?.verified,
+      keyChangeBlocked: existing?.keyChangeBlocked,
+    });
     if (existing !== null) {
       this.contacts.delete(existing.alias);
     }
@@ -400,11 +444,136 @@ export class Executor {
     );
   }
 
+  // ----- trust: safety numbers & key-change teardown (§4.5, §4.6) ----------
+
+  private async doVerify(alias: string): Promise<void> {
+    if (this.identity === null || this.token === null) {
+      this.renderer.event("failure", "not logged in - /login first");
+      return;
+    }
+    const contact = this.resolveContact(alias);
+    if (contact === null) {
+      this.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+      return;
+    }
+
+    // Always fetch fresh (non-consuming) so /verify itself can catch a key
+    // change that hasn't shown up in a message yet.
+    let wire: api.WireBundle;
+    try {
+      wire = await api.fetchBundle(this.token, contact.uid, false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        this.renderer.event("failure", "recipient keys unavailable - unknown UID");
+        return;
+      }
+      throw err;
+    }
+    const bundle = wireToBundle(wire);
+    if (!verifyBundle(bundle)) {
+      this.renderer.event(
+        "security",
+        `prekey bundle signature verification FAILED for ${contact.alias} - the server may be tampering.`,
+      );
+      return;
+    }
+    const bundleIk = toBase64(bundle.ikPub);
+    if (contact.ik !== null && contact.ik !== bundleIk) {
+      await this.handleKeyChange(contact, bundleIk);
+      return;
+    }
+    if (contact.ik === null) {
+      this.contacts.set(contact.alias, { ...contact, ik: bundleIk });
+      await this.saveContacts();
+    }
+
+    const sn = computeSafetyNumber(this.identity.pub, this.identity.uid, bundle.ikPub, contact.uid);
+    this.renderer.event("info", `safety number with ${contact.alias} (compare out-of-band):`);
+    for (const row of formatSafetyNumber(sn)) {
+      this.renderer.plain(`  ${row}`);
+    }
+    this.renderer.event(
+      "info",
+      `if it matches, run /verified ${contact.alias} to mark this contact trusted`,
+    );
+  }
+
+  private async doVerified(alias: string): Promise<void> {
+    const contact = this.resolveContact(alias);
+    if (contact === null) {
+      this.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+      return;
+    }
+    if (contact.ik === null) {
+      this.renderer.event("failure", `no known identity key for ${contact.alias} yet - /verify first`);
+      return;
+    }
+    if (contact.keyChangeBlocked) {
+      this.renderer.event(
+        "failure",
+        `${contact.alias} has an unacknowledged key change - /ack ${contact.alias} first, then /verify again`,
+      );
+      return;
+    }
+    this.contacts.set(contact.alias, { ...contact, verified: true });
+    await this.saveContacts();
+    this.renderer.event(
+      "success",
+      `${contact.alias} marked verified - safety number confirmed out-of-band`,
+    );
+  }
+
+  private async doAck(alias: string): Promise<void> {
+    const contact = this.resolveContact(alias);
+    if (contact === null) {
+      this.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+      return;
+    }
+    if (!contact.keyChangeBlocked) {
+      this.renderer.event("info", `nothing to acknowledge for ${contact.alias}`);
+      return;
+    }
+    this.contacts.set(contact.alias, { ...contact, keyChangeBlocked: false });
+    await this.saveContacts();
+    this.renderer.event(
+      "success",
+      `acknowledged - ${contact.alias} remains UNVERIFIED; /verify then /verified to confirm the new key before sending`,
+    );
+  }
+
+  /** Identity-key change detected for `contact` (§4.6): adopt the new key so
+   * the safety number and future traffic reflect reality, tear down any
+   * established session, mark unverified and blocked, and raise a
+   * high-visibility warning. The caller must still abort the action in
+   * progress - this only updates state, it does not resume anything. */
+  private async handleKeyChange(contact: Contact, newIkB64: string): Promise<void> {
+    const updated: Contact = {
+      ...contact,
+      ik: newIkB64,
+      verified: false,
+      keyChangeBlocked: true,
+    };
+    this.contacts.set(contact.alias, updated);
+    await this.saveContacts();
+    await this.store.deleteKey(`session/${contact.uid}`);
+    this.renderer.event(
+      "security",
+      `IDENTITY KEY CHANGED for ${contact.alias} - this conversation is now blocked and marked UNVERIFIED. /ack ${contact.alias} to acknowledge, then /verify + /verified to confirm the new key before sending.`,
+    );
+  }
+
   // ----- send (PQ-KX first message, §3) -------------------------------------
 
   private async sendFirstMessage(target: Contact, text: string): Promise<void> {
     if (this.identity === null || this.token === null) {
       this.renderer.event("failure", "not logged in - /login first");
+      return;
+    }
+    if (target.keyChangeBlocked) {
+      this.renderer.event(
+        "security",
+        `sending to ${target.alias} is blocked: an unacknowledged identity-key change was detected. /ack ${target.alias}, then /verify + /verified to resume.`,
+      );
       return;
     }
     const existing = await this.store.getJson<StoredSession>(`session/${target.uid}`);
@@ -442,10 +611,7 @@ export class Executor {
     }
     const bundleIk = toBase64(bundle.ikPub);
     if (target.ik !== null && target.ik !== bundleIk) {
-      this.renderer.event(
-        "security",
-        `identity key for ${target.alias} has CHANGED - sending blocked (re-verify out-of-band)`,
-      );
+      await this.handleKeyChange(target, bundleIk);
       return;
     }
 
@@ -555,9 +721,10 @@ export class Executor {
 
     if (contact !== null) {
       if (contact.ik !== null && contact.ik !== senderIkB64) {
+        await this.handleKeyChange(contact, senderIkB64);
         this.renderer.event(
           "security",
-          `identity key mismatch on a message claiming to be ${contact.alias} - DISCARDED`,
+          `message claiming to be ${contact.alias} used the new (unconfirmed) key - DISCARDED`,
         );
         return "ack";
       }

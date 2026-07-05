@@ -85,7 +85,10 @@ still there (encrypted) until you `/wipe` it.
 | Command | What it does |
 |---|---|
 | `/add <uid> [alias]` | Save a contact (requires `/login` — contacts live in the encrypted store). The alias is local-only — never transmitted, so it can't impersonate anyone. Also accepts a held contact request |
-| `/chat <alias\|uid>` | Set the active conversation (prompt changes to `[alias] >`) |
+| `/chat <alias\|uid>` | Set the active conversation (prompt changes to `[alias] >`); the status line shows `(verified)` or `(UNVERIFIED)` |
+| `/verify <alias>` | Fetch the contact's current identity key and print a 60-digit safety number — compare it out-of-band (in person, by phone) with what they see on their end |
+| `/verified <alias>` | Mark the contact trusted once the safety numbers match |
+| `/ack <alias>` | Acknowledge a blocking identity-key-change warning so the conversation is usable again (still `UNVERIFIED` until you `/verify` + `/verified` the new key) |
 
 Typing a plain line sends it: the client fetches the recipient's prekey
 bundle, **verifies both prekey signatures against their identity key**
@@ -101,6 +104,14 @@ message from a stranger is held behind a `[!] new contact request` line and
 only opens after `/add`. If no one-time prekey was available the session is
 flagged **reduced-fs** until the W4 ratchet heals it. One message each way
 per conversation for now — continued messaging is the W4 ratchet milestone.
+
+**Trust and key changes:** the first time you exchange with (or `/verify`)
+a contact, their identity key is pinned. If it ever changes — a re-issued
+identity, or a malicious server substituting a different bundle — the
+conversation is immediately blocked with a `[SECURITY]` warning and the
+contact reverts to `UNVERIFIED`, even if you had verified them before.
+`/ack <alias>` clears the block so you can act on it; sending stays honestly
+marked `UNVERIFIED` until you `/verify` the new key and `/verified` it again.
 
 ### Terminal tips
 
