@@ -122,6 +122,8 @@ function bobReceiveKx(bob: Bob, kxEnvelope: Uint8Array): string {
   return parsed.m;
 }
 
+// Ratchet payloads are the executor's app format: JSON {m?, tmr}. Bob mirrors
+// it so he speaks the same wire contract a real peer (running the executor) would.
 function bobReceive(bob: Bob, msgEnvelope: Uint8Array): string {
   const body = decodeMsgEnvelope(msgEnvelope);
   if (body === null || bob.ratchet === null) {
@@ -131,14 +133,16 @@ function bobReceive(bob: Bob, msgEnvelope: Uint8Array): string {
   if (!r.ok) {
     throw new Error(`ratchetDecrypt failed: ${r.reason}`);
   }
-  return dec.decode(r.plaintext);
+  const parsed = JSON.parse(dec.decode(r.plaintext)) as { m?: string };
+  return parsed.m ?? "";
 }
 
 function bobSend(bob: Bob, text: string): Uint8Array {
   if (bob.ratchet === null) {
     throw new Error("no ratchet");
   }
-  return encodeMsgEnvelope(ratchetEncrypt(bob.ratchet, enc.encode(text)));
+  const payload = enc.encode(JSON.stringify({ tmr: 0, m: text }));
+  return encodeMsgEnvelope(ratchetEncrypt(bob.ratchet, payload));
 }
 
 const sent: Uint8Array[] = [];

@@ -30,7 +30,7 @@ import {
 } from "../crypto/constants";
 import { fromBase64, toBase64 } from "../util/base64";
 import { secretStringsEqual } from "../util/secret";
-import type { Command, ParseResult, Weekday } from "./parser";
+import type { Command, Duration, DurationUnit, ParseResult, Weekday } from "./parser";
 import { COMMAND_USAGE, formatUid, normalizeUid } from "./parser";
 import type { Renderer } from "./renderer";
 import type { ShellIO } from "./shell";
@@ -75,6 +75,9 @@ interface Contact {
   /** True from the moment a key change is detected until /ack. Sending is
    * refused while this is set (§4.6, CLAUDE.md §1.4). */
   readonly keyChangeBlocked: boolean;
+  /** Mutual disappearing-message timer in seconds; null = off (§5.2). Shared
+   * with the peer over the encrypted ratchet payload, last-writer-wins. */
+  readonly timerSeconds: number | null;
 }
 
 interface PartialContact {
@@ -83,6 +86,7 @@ interface PartialContact {
   ik?: string | null | undefined;
   verified?: boolean | undefined;
   keyChangeBlocked?: boolean | undefined;
+  timerSeconds?: number | null | undefined;
 }
 
 function normalizeContact(c: PartialContact): Contact {
@@ -92,7 +96,80 @@ function normalizeContact(c: PartialContact): Contact {
     ik: c.ik ?? null,
     verified: c.verified ?? false,
     keyChangeBlocked: c.keyChangeBlocked ?? false,
+    timerSeconds: c.timerSeconds ?? null,
   };
+}
+
+const DURATION_UNIT_SECONDS: Record<DurationUnit, number> = {
+  m: 60,
+  h: 60 * 60,
+  d: 24 * 60 * 60,
+  w: 7 * 24 * 60 * 60,
+};
+
+/** Parsed duration → seconds; null for "off" (§5.2/§5.3). */
+function durationToSeconds(duration: Duration): number | null {
+  return duration.kind === "off" ? null : duration.amount * DURATION_UNIT_SECONDS[duration.unit];
+}
+
+/** Compact human label for a whole-unit second count (e.g. 3600 → "1h"). */
+function formatDuration(seconds: number): string {
+  for (const unit of ["w", "d", "h", "m"] as const) {
+    const size = DURATION_UNIT_SECONDS[unit];
+    if (seconds % size === 0) {
+      return `${seconds / size}${unit}`;
+    }
+  }
+  return `${seconds}s`;
+}
+
+/** A locally stored message record. Written on send and on receive; never read
+ * back for display (messages render live), so this is purely at-rest history
+ * subject to the disappearing timer and local purge (§5.1-5.3). */
+interface StoredMessage {
+  readonly dir: "in" | "out";
+  readonly text: string;
+  readonly ts: number;
+  /** Absolute epoch-ms deletion deadline from the mutual timer, if any (§5.2). */
+  readonly tmrExpiresAt?: number;
+}
+
+/** Local retention cap (§5.3): personal, never transmitted, may be stricter
+ * than the mutual timer. null = off. */
+interface PurgeSettings {
+  readonly seconds: number | null;
+}
+
+/** The encrypted ratchet payload (§4 body). Carries the message text and the
+ * sender's current mutual-timer view so a `/timer` change propagates and both
+ * sides converge last-writer-wins. A pure timer-control message has no text. */
+interface AppPayload {
+  readonly text: string | null;
+  readonly timerSeconds: number | null;
+}
+
+function encodeAppPayload(payload: AppPayload): Uint8Array {
+  const record: { m?: string; tmr: number } = { tmr: payload.timerSeconds ?? 0 };
+  if (payload.text !== null) {
+    record.m = payload.text;
+  }
+  return new TextEncoder().encode(JSON.stringify(record));
+}
+
+function decodeAppPayload(bytes: Uint8Array): AppPayload | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return null;
+  }
+  const record = parsed as { m?: unknown; tmr?: unknown };
+  const text = typeof record.m === "string" ? record.m : null;
+  const tmr = typeof record.tmr === "number" && record.tmr > 0 ? record.tmr : null;
+  return { text, timerSeconds: tmr };
 }
 
 /** Serialized KEM double-ratchet state (§4.4). All key material base64; the
@@ -148,9 +225,6 @@ const WIPE_CONFIRM_WINDOW_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SEGMENT_OF: Partial<Record<Command["name"], string>> = {
-  timer: "W5 (lifecycle & hardening)",
-  "purge-set": "W5 (lifecycle & hardening)",
-  "purge-now": "W5 (lifecycle & hardening)",
   bench: "W6 (benchmarks)",
   "settings-notify": "W6 (could-have)",
 };
@@ -304,6 +378,15 @@ export class Executor {
       case "ack":
         this.run(() => this.doAck(cmd.alias));
         return;
+      case "timer":
+        this.run(() => this.doTimer(cmd.alias, cmd.duration));
+        return;
+      case "purge-set":
+        this.run(() => this.doPurgeSet(cmd.duration));
+        return;
+      case "purge-now":
+        this.run(() => this.doPurgeNow(cmd.alias));
+        return;
       default: {
         const segment = SEGMENT_OF[cmd.name] ?? "a later segment";
         this.renderer.event("info", `/${cmd.name} is not implemented yet - scheduled for ${segment}`);
@@ -443,11 +526,7 @@ export class Executor {
       // Accepting a held first-contact message (§7.4): promote its session
       // and show the message that was queued behind the request line.
       await this.store.putJson(`session/${uid}`, pending.session);
-      await this.store.putJson(`msg/${uid}/${pending.receivedAt}`, {
-        dir: "in",
-        text: pending.text,
-        ts: pending.receivedAt,
-      });
+      await this.recordMessage(uid, "in", pending.text, pending.receivedAt);
       await this.store.deleteKey(`pending/${uid}`);
       this.contacts.set(name, { ...contact, ik: pending.senderIk });
       await this.saveContacts();
@@ -646,11 +725,7 @@ export class Executor {
 
     const timestamp = this.now();
     await this.store.putJson(`session/${target.uid}`, serializeSession(session, timestamp));
-    await this.store.putJson(`msg/${target.uid}/${timestamp}`, {
-      dir: "out",
-      text,
-      ts: timestamp,
-    });
+    await this.recordMessage(target.uid, "out", text, timestamp);
     if (target.ik === null) {
       this.contacts.set(target.alias, { ...target, ik: bundleIk });
       await this.saveContacts();
@@ -671,14 +746,17 @@ export class Executor {
   private async sendRatchetMessage(
     target: Contact,
     stored: StoredSession,
-    text: string,
+    text: string | null,
   ): Promise<void> {
     if (this.token === null) {
       this.renderer.event("failure", "not logged in - /login first");
       return;
     }
     const ratchet = deserializeRatchet(stored.ratchet);
-    const body = ratchetEncrypt(ratchet, new TextEncoder().encode(text));
+    // The payload carries the message text (if any) and our current mutual-timer
+    // view, so a /timer change propagates to the peer over the encrypted body (§5.2).
+    const payload = encodeAppPayload({ text, timerSeconds: target.timerSeconds });
+    const body = ratchetEncrypt(ratchet, payload);
     const envelope = encodeMsgEnvelope(body);
     if (envelope.length > MAX_PAYLOAD_BYTES) {
       this.renderer.event("failure", "message too large after encryption - not sent");
@@ -692,8 +770,157 @@ export class Executor {
       ratchet: serializeRatchet(ratchet),
     });
     await api.sendMessage(this.token, target.uid, envelope);
-    await this.store.putJson(`msg/${target.uid}/${timestamp}`, { dir: "out", text, ts: timestamp });
-    this.renderer.event("success", `sent to ${target.alias}`);
+    if (text !== null) {
+      await this.recordMessage(target.uid, "out", text, timestamp);
+      this.renderer.event("success", `sent to ${target.alias}`);
+    }
+    await this.purgeExpired();
+  }
+
+  /** Store a message at rest (§5.1), stamping its disappearing-message deadline
+   * from the contact's mutual timer if one is set (§5.2). */
+  private async recordMessage(
+    uid: string,
+    dir: "in" | "out",
+    text: string,
+    ts: number,
+  ): Promise<void> {
+    const timerSeconds = this.findContactByUid(uid)?.timerSeconds ?? null;
+    const record: StoredMessage =
+      timerSeconds === null
+        ? { dir, text, ts }
+        : { dir, text, ts, tmrExpiresAt: ts + timerSeconds * 1000 };
+    await this.store.putJson(`msg/${uid}/${ts}`, record);
+  }
+
+  // ----- message lifecycle: disappearing timer & local purge (§5.1-5.3) -----
+
+  /** Adopt a mutual-timer value the peer carried in its payload (last-writer-
+   * wins) and announce the change inline, mirroring the sender's own line (§5.2). */
+  private async applyIncomingTimer(
+    uid: string,
+    label: string,
+    timerSeconds: number | null,
+  ): Promise<void> {
+    const contact = this.findContactByUid(uid);
+    if (contact === null || contact.timerSeconds === timerSeconds) {
+      return;
+    }
+    this.contacts.set(contact.alias, { ...contact, timerSeconds });
+    await this.saveContacts();
+    this.renderer.event(
+      "info",
+      timerSeconds === null
+        ? `${label} turned off disappearing messages`
+        : `${label} set disappearing messages to ${formatDuration(timerSeconds)}`,
+    );
+  }
+
+  /** Delete at-rest messages past their mutual-timer deadline or the local
+   * retention cap, whichever bites first (§5.2-5.3). Best-effort, on activity. */
+  private async purgeExpired(): Promise<void> {
+    if (!this.store.isUnlocked()) {
+      return;
+    }
+    const cap = (await this.store.getJson<PurgeSettings>("settings/purge"))?.seconds ?? null;
+    const now = this.now();
+    for (const msgKey of await this.store.listKeys("msg/")) {
+      const record = await this.store.getJson<StoredMessage>(msgKey);
+      if (record === null) {
+        continue;
+      }
+      const timerExpired = record.tmrExpiresAt !== undefined && now >= record.tmrExpiresAt;
+      const capExpired = cap !== null && now >= record.ts + cap * 1000;
+      if (timerExpired || capExpired) {
+        await this.store.deleteKey(msgKey);
+      }
+    }
+  }
+
+  private async deleteMessages(prefix: string): Promise<number> {
+    const keys = await this.store.listKeys(prefix);
+    for (const key of keys) {
+      await this.store.deleteKey(key);
+    }
+    return keys.length;
+  }
+
+  /** `/timer <alias> <duration|off>`: set the mutual disappearing timer, announce
+   * it locally, and push it to the peer over the ratchet so both sides agree. */
+  private async doTimer(alias: string, duration: Duration): Promise<void> {
+    if (this.identity === null || this.token === null) {
+      this.renderer.event("failure", "not logged in - /login first");
+      return;
+    }
+    const contact = this.resolveContact(alias);
+    if (contact === null) {
+      this.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+      return;
+    }
+    const seconds = durationToSeconds(duration);
+    const updated: Contact = { ...contact, timerSeconds: seconds };
+    this.contacts.set(contact.alias, updated);
+    await this.saveContacts();
+    this.renderer.event(
+      "info",
+      seconds === null
+        ? `disappearing messages turned off for ${contact.alias} (applies to both sides)`
+        : `disappearing messages set to ${formatDuration(seconds)} for ${contact.alias} - applies to both sides, countdown starts on read`,
+    );
+    if (updated.keyChangeBlocked) {
+      this.renderer.event(
+        "warning",
+        `sending to ${contact.alias} is blocked by an unacknowledged key change - the peer will get this timer once you /ack and resume`,
+      );
+      return;
+    }
+    const stored = await this.store.getJson<StoredSession>(`session/${contact.uid}`);
+    if (stored === null) {
+      this.renderer.event(
+        "info",
+        "the peer will receive this setting once your conversation is established",
+      );
+      return;
+    }
+    await this.sendRatchetMessage(updated, stored, null);
+  }
+
+  /** `/purge set <duration|off>`: local retention cap, never transmitted (§5.3). */
+  private async doPurgeSet(duration: Duration): Promise<void> {
+    if (!this.store.isUnlocked()) {
+      this.renderer.event("warning", "locked or not registered - /login or /register");
+      return;
+    }
+    const seconds = durationToSeconds(duration);
+    await this.store.putJson("settings/purge", { seconds } satisfies PurgeSettings);
+    await this.purgeExpired();
+    this.renderer.event(
+      "success",
+      seconds === null
+        ? "local retention cap cleared - at-rest messages kept until the mutual timer or /purge now"
+        : `local retention cap set to ${formatDuration(seconds)} - local only, never sent, applied to every conversation`,
+    );
+  }
+
+  /** `/purge now [alias]`: immediate local deletion of stored messages (§5.3).
+   * Best-effort - browser deletion is not forensic erasure (documented). */
+  private async doPurgeNow(alias: string | undefined): Promise<void> {
+    if (!this.store.isUnlocked()) {
+      this.renderer.event("warning", "locked or not registered - /login or /register");
+      return;
+    }
+    if (alias === undefined) {
+      const count = await this.deleteMessages("msg/");
+      this.renderer.event("success", `purged ${count} stored message(s) across all conversations`);
+      return;
+    }
+    const contact = this.resolveContact(alias);
+    if (contact === null) {
+      this.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+      return;
+    }
+    const count = await this.deleteMessages(`msg/${contact.uid}/`);
+    this.renderer.event("success", `purged ${count} stored message(s) with ${contact.alias}`);
   }
 
   // ----- receive ------------------------------------------------------------
@@ -793,11 +1020,7 @@ export class Executor {
         await this.saveContacts();
       }
       await this.store.putJson(`session/${senderUid}`, serializeSession(result.session, timestamp));
-      await this.store.putJson(`msg/${senderUid}/${timestamp}`, {
-        dir: "in",
-        text,
-        ts: timestamp,
-      });
+      await this.recordMessage(senderUid, "in", text, timestamp);
       this.renderer.plain(`  [${contact.alias}] ${text}`);
       if (result.session.reducedFs) {
         this.renderer.event("warning", "session has reduced forward secrecy (no one-time prekey)");
@@ -870,10 +1093,20 @@ export class Executor {
         return "skip"; // torn down while decrypting; leave queued server-side
       }
       await this.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
-      const text = new TextDecoder().decode(result.plaintext);
-      await this.store.putJson(`msg/${uid}/${timestamp}`, { dir: "in", text, ts: timestamp });
+      const payload = decodeAppPayload(result.plaintext);
+      if (payload === null) {
+        this.renderer.event("failure", "discarded message with malformed payload");
+        return "ack";
+      }
       const contact = this.findContactByUid(uid);
-      this.renderer.plain(`  [${contact?.alias ?? formatUid(uid)}] ${text}`);
+      const label = contact?.alias ?? formatUid(uid);
+      // Adopt a mutual-timer change carried by the peer and announce it (§5.2).
+      await this.applyIncomingTimer(uid, label, payload.timerSeconds);
+      if (payload.text !== null) {
+        await this.recordMessage(uid, "in", payload.text, timestamp);
+        this.renderer.plain(`  [${label}] ${payload.text}`);
+      }
+      await this.purgeExpired();
       return "ack";
     }
     this.renderer.event("failure", "discarded undecryptable message (no matching session)");
@@ -1107,6 +1340,7 @@ export class Executor {
     await this.loginWithIdentity();
     await this.postLoginMaintenance();
     await this.drainInbox();
+    await this.purgeExpired(); // evict anything past its timer/cap while offline (§5)
     this.connectWs();
     await this.maybeRotationPrompt();
     this.touchAutoLock();
