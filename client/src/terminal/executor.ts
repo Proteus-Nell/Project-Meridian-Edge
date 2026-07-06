@@ -15,10 +15,14 @@ import { buildLoginMessage } from "../crypto/login";
 import { generateOpkBatch, generateSpk } from "../crypto/prekeys";
 import { initiateKx, respondKx, verifyBundle } from "../crypto/kx";
 import type { Bundle, KxSession, PrekeyLookup, PrekeySecret } from "../crypto/kx";
+import { initRatchet, ratchetDecrypt, ratchetEncrypt } from "../crypto/ratchet";
+import type { RatchetState } from "../crypto/ratchet";
+import { decodeMsgEnvelope, encodeMsgEnvelope, envelopeType, ENVELOPE_TYPE_MSG } from "../crypto/envelope";
 import { computeSafetyNumber, formatSafetyNumber } from "../crypto/safetynumber";
 import { KeyStore, StoreLockedError } from "../crypto/store";
 import {
   AUTO_LOCK_MS,
+  MAX_PAYLOAD_BYTES,
   OPK_BATCH_MAX,
   OPK_LOW_WATERMARK,
   SPK_RETENTION_DAYS,
@@ -91,11 +95,31 @@ function normalizeContact(c: PartialContact): Contact {
   };
 }
 
-interface StoredSession {
-  readonly rk: string;
-  readonly transcript: string;
-  readonly peerIk: string;
+/** Serialized KEM double-ratchet state (§4.4). All key material base64; the
+ * skipped-key cache is a list of [chainId:n, base64 mk] pairs. */
+interface StoredRatchet {
   readonly role: "initiator" | "responder";
+  readonly rk: string;
+  readonly cks: string;
+  readonly ckr: string | null;
+  readonly ns: number;
+  readonly nr: number;
+  readonly pn: number;
+  readonly lastAction: "send" | "recv";
+  readonly hks: string;
+  readonly hkr: string;
+  readonly nhkr: string | null;
+  readonly sendKemSk: string | null;
+  readonly sendKemPk: string | null;
+  readonly peerKemPk: string | null;
+  readonly sinceOffer: number;
+  readonly recvChainId: number;
+  readonly skipped: readonly (readonly [string, string])[];
+}
+
+interface StoredSession {
+  readonly ratchet: StoredRatchet;
+  readonly peerIk: string;
   readonly reducedFs: boolean;
   readonly establishedAt: number;
 }
@@ -578,10 +602,9 @@ export class Executor {
     }
     const existing = await this.store.getJson<StoredSession>(`session/${target.uid}`);
     if (existing !== null) {
-      this.renderer.event(
-        "warning",
-        `a PQ-KX session with ${target.alias} is already established - continued messaging arrives with the W4 ratchet`,
-      );
+      // Session established: every message after the PQ-KX first one rides the
+      // KEM double-ratchet (§4).
+      await this.sendRatchetMessage(target, existing, text);
       return;
     }
 
@@ -641,6 +664,38 @@ export class Executor {
     }
   }
 
+  /** Send a subsequent message through the KEM double-ratchet (§4). The ratchet
+   * state is advanced, persisted write-ahead (so a failed send never risks key
+   * reuse), and only then transmitted. The MSG envelope is opaque: it carries no
+   * sender identity, so the recipient locates the session by trial decryption. */
+  private async sendRatchetMessage(
+    target: Contact,
+    stored: StoredSession,
+    text: string,
+  ): Promise<void> {
+    if (this.token === null) {
+      this.renderer.event("failure", "not logged in - /login first");
+      return;
+    }
+    const ratchet = deserializeRatchet(stored.ratchet);
+    const body = ratchetEncrypt(ratchet, new TextEncoder().encode(text));
+    const envelope = encodeMsgEnvelope(body);
+    if (envelope.length > MAX_PAYLOAD_BYTES) {
+      this.renderer.event("failure", "message too large after encryption - not sent");
+      return;
+    }
+    // Write-ahead the advanced ratchet before the send (§4.4): the message key is
+    // already consumed, so persisting first prevents any reuse if the send fails.
+    const timestamp = this.now();
+    await this.store.putJson(`session/${target.uid}`, {
+      ...stored,
+      ratchet: serializeRatchet(ratchet),
+    });
+    await api.sendMessage(this.token, target.uid, envelope);
+    await this.store.putJson(`msg/${target.uid}/${timestamp}`, { dir: "out", text, ts: timestamp });
+    this.renderer.event("success", `sent to ${target.alias}`);
+  }
+
   // ----- receive ------------------------------------------------------------
 
   private async buildPrekeyLookup(): Promise<PrekeyLookup> {
@@ -671,6 +726,11 @@ export class Executor {
   private async processEnvelope(envelopeBytes: Uint8Array): Promise<"ack" | "skip"> {
     if (this.identity === null || this.token === null || !this.store.isUnlocked()) {
       return "skip";
+    }
+    // A ratchet message (§4) routes to the trial-decrypt path; only a KX first
+    // message consumes a prekey.
+    if (envelopeType(envelopeBytes) === ENVELOPE_TYPE_MSG) {
+      return this.processRatchetMessage(envelopeBytes);
     }
     const epoch = this.epoch;
     const lookup = await this.buildPrekeyLookup();
@@ -777,6 +837,46 @@ export class Executor {
       "warning",
       `new contact request from ${formatUid(senderUid)} - /add ${senderUid} [alias] to accept`,
     );
+    return "ack";
+  }
+
+  /** Decrypt a ratchet MSG (§4). Since the envelope carries no sender identity,
+   * try each established session; the header AEAD authenticates the match and a
+   * non-matching session fails without mutating its state. Delivery is idempotent:
+   * a replay of an already-consumed message decrypts to nothing and is dropped. */
+  private async processRatchetMessage(envelopeBytes: Uint8Array): Promise<"ack" | "skip"> {
+    const body = decodeMsgEnvelope(envelopeBytes);
+    if (body === null) {
+      this.renderer.event("failure", "discarded malformed message");
+      return "ack";
+    }
+    const epoch = this.epoch;
+    for (const key of await this.store.listKeys("session/")) {
+      if (this.epoch !== epoch || this.identity === null) {
+        return "skip"; // locked out / wiped mid-scan
+      }
+      const stored = await this.store.getJson<StoredSession>(key);
+      if (stored === null) {
+        continue;
+      }
+      const ratchet = deserializeRatchet(stored.ratchet);
+      const result = ratchetDecrypt(ratchet, body);
+      if (!result.ok) {
+        continue; // not this session (or an out-of-order/duplicate) - leave it untouched
+      }
+      const uid = key.slice("session/".length);
+      const timestamp = this.now();
+      if (this.epoch !== epoch) {
+        return "skip"; // torn down while decrypting; leave queued server-side
+      }
+      await this.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
+      const text = new TextDecoder().decode(result.plaintext);
+      await this.store.putJson(`msg/${uid}/${timestamp}`, { dir: "in", text, ts: timestamp });
+      const contact = this.findContactByUid(uid);
+      this.renderer.plain(`  [${contact?.alias ?? formatUid(uid)}] ${text}`);
+      return "ack";
+    }
+    this.renderer.event("failure", "discarded undecryptable message (no matching session)");
     return "ack";
   }
 
@@ -1222,12 +1322,59 @@ export class Executor {
   }
 }
 
-function serializeSession(session: KxSession, establishedAt: number): StoredSession {
+function serializeRatchet(state: RatchetState): StoredRatchet {
   return {
-    rk: toBase64(session.rk),
-    transcript: toBase64(session.transcript),
+    role: state.role,
+    rk: toBase64(state.rk),
+    cks: toBase64(state.cks),
+    ckr: state.ckr === null ? null : toBase64(state.ckr),
+    ns: state.ns,
+    nr: state.nr,
+    pn: state.pn,
+    lastAction: state.lastAction,
+    hks: toBase64(state.hks),
+    hkr: toBase64(state.hkr),
+    nhkr: state.nhkr === null ? null : toBase64(state.nhkr),
+    sendKemSk: state.sendKemSk === null ? null : toBase64(state.sendKemSk),
+    sendKemPk: state.sendKemPk === null ? null : toBase64(state.sendKemPk),
+    peerKemPk: state.peerKemPk === null ? null : toBase64(state.peerKemPk),
+    sinceOffer: state.sinceOffer,
+    recvChainId: state.recvChainId,
+    skipped: [...state.skipped].map(([k, v]) => [k, toBase64(v)] as const),
+  };
+}
+
+function deserializeRatchet(stored: StoredRatchet): RatchetState {
+  return {
+    role: stored.role,
+    rk: fromBase64(stored.rk),
+    cks: fromBase64(stored.cks),
+    ckr: stored.ckr === null ? null : fromBase64(stored.ckr),
+    ns: stored.ns,
+    nr: stored.nr,
+    pn: stored.pn,
+    lastAction: stored.lastAction,
+    hks: fromBase64(stored.hks),
+    hkr: fromBase64(stored.hkr),
+    nhkr: stored.nhkr === null ? null : fromBase64(stored.nhkr),
+    sendKemSk: stored.sendKemSk === null ? null : fromBase64(stored.sendKemSk),
+    sendKemPk: stored.sendKemPk === null ? null : fromBase64(stored.sendKemPk),
+    peerKemPk: stored.peerKemPk === null ? null : fromBase64(stored.peerKemPk),
+    sinceOffer: stored.sinceOffer,
+    recvChainId: stored.recvChainId,
+    skipped: new Map(stored.skipped.map(([k, v]) => [k, fromBase64(v)])),
+  };
+}
+
+/** Establish a stored session from a completed handshake: initialise the ratchet
+ * from RK0 and wipe the handshake's transient root/transcript copy (§4). */
+function serializeSession(session: KxSession, establishedAt: number): StoredSession {
+  const ratchet = serializeRatchet(initRatchet(session.rk, session.role));
+  session.rk.fill(0);
+  session.transcript.fill(0);
+  return {
+    ratchet,
     peerIk: toBase64(session.peerIk),
-    role: session.role,
     reducedFs: session.reducedFs,
     establishedAt,
   };

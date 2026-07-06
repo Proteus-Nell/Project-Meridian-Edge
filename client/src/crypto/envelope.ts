@@ -15,10 +15,22 @@ import {
   ML_DSA_65_PUBKEY_BYTES,
   ML_DSA_65_SIG_BYTES,
   ML_KEM_768_CT_BYTES,
+  ML_KEM_768_PUBKEY_BYTES,
   PROTOCOL_VERSION,
 } from "./constants";
 
 export const ENVELOPE_TYPE_KX = 1;
+export const ENVELOPE_TYPE_MSG = 2;
+
+/** Peek the envelope type of a framed payload without decoding it, so the
+ * receiver can route a KX handshake vs. a ratchet MSG. Returns null if the
+ * version byte is wrong or the buffer is too short. */
+export function envelopeType(bytes: Uint8Array): number | null {
+  if (bytes.length < 2 || bytes[0] !== PROTOCOL_VERSION) {
+    return null;
+  }
+  return bytes[1] ?? null;
+}
 
 const HASH_BYTES = 64;
 const AEAD_NONCE_BYTES = 24;
@@ -125,4 +137,103 @@ export function decodeKxEnvelope(bytes: Uint8Array): KxEnvelope | null {
   }
   const ciphertext = take(ciphertextLength);
   return { spkHash, opkHash, ikA, ct1, ct2, sig, nonce, ciphertext };
+}
+
+// ----- MSG envelope v1 (ratchet, CLAUDE.md §4) -----------------------------
+//
+// The ratchet frames a message body itself (encrypted header + encrypted
+// payload); this layer only prepends version+type so the server still routes an
+// opaque blob and the receiver can tell KX from MSG (§4.3).
+//
+//   u8 version | u8 type=MSG | body(...)
+//
+// The plaintext ratchet header (encrypted before it ever hits the wire) is:
+//
+//   u32be n | u32be pn | u8 flags(bit0=kemPk, bit1=kemCt)
+//     | [kemPk(1184)] | [kemCt(1088)]
+
+const MSG_HEADER_FIXED = 4 + 4 + 1;
+const KEM_PK_FLAG = 1;
+const KEM_CT_FLAG = 2;
+
+export interface MsgHeader {
+  readonly n: number; // message number within the sending chain
+  readonly pn: number; // length of the sender's previous sending chain
+  readonly kemPk: Uint8Array | null; // fresh KEM offer, if any
+  readonly kemCt: Uint8Array | null; // KEM accept ciphertext, if any
+}
+
+export function encodeMsgHeader(header: MsgHeader): Uint8Array {
+  const hasPk = header.kemPk !== null;
+  const hasCt = header.kemCt !== null;
+  const out = new Uint8Array(
+    MSG_HEADER_FIXED +
+      (hasPk ? ML_KEM_768_PUBKEY_BYTES : 0) +
+      (hasCt ? ML_KEM_768_CT_BYTES : 0),
+  );
+  const view = new DataView(out.buffer);
+  view.setUint32(0, header.n, false);
+  view.setUint32(4, header.pn, false);
+  out[8] = (hasPk ? KEM_PK_FLAG : 0) | (hasCt ? KEM_CT_FLAG : 0);
+  let offset = MSG_HEADER_FIXED;
+  if (header.kemPk !== null) {
+    out.set(header.kemPk, offset);
+    offset += ML_KEM_768_PUBKEY_BYTES;
+  }
+  if (header.kemCt !== null) {
+    out.set(header.kemCt, offset);
+  }
+  return out;
+}
+
+export function decodeMsgHeader(bytes: Uint8Array): MsgHeader | null {
+  if (bytes.length < MSG_HEADER_FIXED) {
+    return null;
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const n = view.getUint32(0, false);
+  const pn = view.getUint32(4, false);
+  const flags = bytes[8] ?? 0;
+  if ((flags & ~(KEM_PK_FLAG | KEM_CT_FLAG)) !== 0) {
+    return null;
+  }
+  const hasPk = (flags & KEM_PK_FLAG) !== 0;
+  const hasCt = (flags & KEM_CT_FLAG) !== 0;
+  let offset = MSG_HEADER_FIXED;
+  const expected =
+    MSG_HEADER_FIXED + (hasPk ? ML_KEM_768_PUBKEY_BYTES : 0) + (hasCt ? ML_KEM_768_CT_BYTES : 0);
+  if (bytes.length !== expected) {
+    return null;
+  }
+  let kemPk: Uint8Array | null = null;
+  if (hasPk) {
+    kemPk = bytes.slice(offset, offset + ML_KEM_768_PUBKEY_BYTES);
+    offset += ML_KEM_768_PUBKEY_BYTES;
+  }
+  let kemCt: Uint8Array | null = null;
+  if (hasCt) {
+    kemCt = bytes.slice(offset, offset + ML_KEM_768_CT_BYTES);
+  }
+  return { n, pn, kemPk, kemCt };
+}
+
+/** Frame a ratchet body as a MSG envelope (version+type prefix). */
+export function encodeMsgEnvelope(body: Uint8Array): Uint8Array {
+  const out = new Uint8Array(2 + body.length);
+  out[0] = PROTOCOL_VERSION;
+  out[1] = ENVELOPE_TYPE_MSG;
+  out.set(body, 2);
+  return out;
+}
+
+/** Strip the MSG envelope prefix, returning the ratchet body. Total: returns
+ * null on a wrong version/type or an over-cap payload. */
+export function decodeMsgEnvelope(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 2 || bytes.length > MAX_PAYLOAD_BYTES) {
+    return null;
+  }
+  if (bytes[0] !== PROTOCOL_VERSION || bytes[1] !== ENVELOPE_TYPE_MSG) {
+    return null;
+  }
+  return bytes.slice(2);
 }
