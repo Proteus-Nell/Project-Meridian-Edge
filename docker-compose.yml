@@ -1,0 +1,65 @@
+# Reference production topology (CLAUDE.md §5 container checklist): Postgres,
+# the FastAPI server, and an nginx edge that serves the static client bundle
+# same-origin and terminates TLS. Not battle-tested against a live cluster in
+# this session (no Docker daemon available here) - review before relying on
+# it verbatim; see deploy/nginx.conf's note on OpenSSL/hybrid-KEM support.
+#
+# Secrets (DB password, etc.) come from a local .env file - never bake them
+# into an image or commit them. Copy .env.example to .env and fill it in.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pqterm
+      POSTGRES_USER: pqterm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pqterm -d pqterm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PQTERM_ENV: production
+      PQTERM_DATABASE_URL: postgresql+psycopg://pqterm:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/pqterm
+      PQTERM_WS_ORIGINS: ${PQTERM_WS_ORIGINS:?set PQTERM_WS_ORIGINS in .env, e.g. https://pqterm.example}
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/proxy.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - ${TLS_CERT_DIR:?set TLS_CERT_DIR in .env, e.g. ./tls}:/etc/nginx/tls:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+
+volumes:
+  db-data:

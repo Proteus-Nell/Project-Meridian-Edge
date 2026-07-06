@@ -32,7 +32,7 @@ Everything happens inside the terminal that loads: commands start with `/`,
 anything else is (eventually) message text. `/help` lists every command;
 `/help <command>` shows its usage.
 
-## Using PQTerm today (W1 + W2)
+## Using PQTerm today (W1-W5)
 
 ### Create your identity — `/register`
 
@@ -102,8 +102,12 @@ rotates on every connect).
 What the recipient sees: a message from a known contact prints inline; a
 message from a stranger is held behind a `[!] new contact request` line and
 only opens after `/add`. If no one-time prekey was available the session is
-flagged **reduced-fs** until the W4 ratchet heals it. One message each way
-per conversation for now — continued messaging is the W4 ratchet milestone.
+flagged **reduced-fs** until the ratchet's first key-encapsulation step heals
+it. The first message per conversation is the PQ-KX handshake above; every
+message after that rides the **KEM double-ratchet** (W4) — a fresh symmetric
+key per message, with periodic ML-KEM re-keying for post-compromise
+security, and the header itself encrypted so an observer of ciphertexts
+learns nothing about ratchet state.
 
 **Trust and key changes:** the first time you exchange with (or `/verify`)
 a contact, their identity key is pinned. If it ever changes — a re-issued
@@ -112,6 +116,18 @@ conversation is immediately blocked with a `[SECURITY]` warning and the
 contact reverts to `UNVERIFIED`, even if you had verified them before.
 `/ack <alias>` clears the block so you can act on it; sending stays honestly
 marked `UNVERIFIED` until you `/verify` the new key and `/verified` it again.
+
+### Message lifecycle (W5)
+
+| Command | What it does |
+|---|---|
+| `/timer <alias> <duration\|off>` | Mutual disappearing-message timer for one conversation — carried encrypted to the peer, applies to both sides, `off` disables it |
+| `/purge set <duration\|off>` | Personal local retention cap; never transmitted, may be stricter than the mutual timer |
+| `/purge now [alias]` | Delete stored messages immediately — all conversations, or just one |
+
+Deletion is at-rest and local-only, best-effort: peer deletion is
+cooperative (nothing stops a screenshot), and browser storage deletion is
+not forensic erasure.
 
 ### Terminal tips
 
@@ -136,10 +152,6 @@ marked `UNVERIFIED` until you `/verify` the new key and `/verified` it again.
 
 ### Not here yet (build order in CLAUDE.md §8)
 
-- **W4** — the KEM double-ratchet for continued conversations (forward
-  secrecy / post-compromise security), `/verify` + `/verified` safety
-  numbers, `/ack`
-- **W5** — `/timer` disappearing messages, `/purge`, the hardening sweep
 - **W6** — `/bench` PQC-vs-classical benchmark suite
 
 ## Layout
@@ -147,11 +159,15 @@ marked `UNVERIFIED` until you `/verify` the new key and `/verified` it again.
 ```
 client/          TypeScript + Vite + xterm.js frontend
   src/terminal/  UI, command parser, renderer
-  src/crypto/    constants, key store, prekeys, PQ-KX, envelope codec
+  src/crypto/    constants, key store, prekeys, PQ-KX, ratchet, envelope codec
   src/net/       REST + WebSocket clients
 server/
   app/           FastAPI: auth, prekeys, bundles, message queue, WS
   tests/
+  Dockerfile     production server image
+deploy/          nginx reverse-proxy image + config (TLS, CSP, static bundle)
+docker-compose.yml, .env.example   reference production topology
+SECURITY.md      vulnerability disclosure contact
 shared/vectors/  cross-impl test vectors (pyca/OpenSSL ↔ noble)
 bench/           benchmark harness (B1–B5)
 docs/adr/        architecture decision records
@@ -184,6 +200,33 @@ All of the above plus `npm audit` / `pip-audit` run blocking in CI.
   envelope v1, offline delivery via a delete-on-ack 14-day-TTL queue, live
   WebSocket push with token rotation, contact requests + TOFU identity
   pinning, cross-implementation vectors in CI.
-- Next: **W4** the KEM double-ratchet, safety numbers, key-change teardown.
+- **W4** ✓ trust + ratchet: safety numbers, `/verify` + `/verified`,
+  key-change teardown; a KEM double-ratchet (direction-split symmetric
+  chains, periodic ML-KEM re-keying for FS/PCS, bounded out-of-order
+  delivery, encrypted headers) governs every message after the PQ-KX first
+  one.
+- **W5** ✓ lifecycle + hardening: `/timer`, `/purge set`/`/purge now`;
+  per-connection WS rate cap + idle-kill + client heartbeat; a
+  production-boot-safety gate that refuses to start with a dev-shaped
+  config; §7 sweep (CORS/SSRF absence, nonce uniqueness, HSTS); reference
+  `docker-compose.yml` + Dockerfiles + `SECURITY.md`.
+- Next: **W6** the `/bench` PQC-vs-classical benchmark suite.
 
 See CLAUDE.md §8 for the full build order.
+
+## Production deployment
+
+A reference Docker topology lives at the repo root: Postgres, the FastAPI
+server, and an nginx edge that serves the built client same-origin and
+terminates TLS.
+
+```
+cp .env.example .env   # fill in POSTGRES_PASSWORD, PQTERM_WS_ORIGINS, TLS_CERT_DIR
+docker compose build
+docker compose up -d
+```
+
+See `deploy/nginx.conf` for the TLS policy (TLS 1.3, `X25519MLKEM768` hybrid
+group — verify your nginx image's OpenSSL supports it before relying on it)
+and `SECURITY.md` for the disclosure contact. This config has not been
+build-tested against a live Docker daemon — review it before a real deploy.
