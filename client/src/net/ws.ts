@@ -10,9 +10,15 @@ export interface WsHandlers {
   onClose(intentional: boolean): void;
 }
 
+// Server closes an idle connection (no frames at all) after 90s (§5, §7.11
+// WS_IDLE_TIMEOUT_SECONDS); ping well inside that window so a healthy,
+// otherwise-quiet connection is never mistaken for an idle one.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 export class WsClient {
   private socket: WebSocket | null = null;
   private closing = false;
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
 
   isConnected(): boolean {
     return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
@@ -26,6 +32,11 @@ export class WsClient {
     this.socket = socket;
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: "auth", token }));
+      this.heartbeat = setInterval(() => {
+        if (this.isConnected()) {
+          this.socket?.send(JSON.stringify({ type: "ping" }));
+        }
+      }, HEARTBEAT_INTERVAL_MS);
     };
     socket.onmessage = (event: MessageEvent) => {
       if (typeof event.data !== "string") {
@@ -61,6 +72,7 @@ export class WsClient {
     };
     socket.onclose = () => {
       const intentional = this.closing;
+      this.stopHeartbeat();
       this.socket = null;
       handlers.onClose(intentional);
     };
@@ -72,9 +84,17 @@ export class WsClient {
     }
   }
 
+  private stopHeartbeat(): void {
+    if (this.heartbeat !== null) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = null;
+    }
+  }
+
   close(): void {
     if (this.socket !== null) {
       this.closing = true;
+      this.stopHeartbeat();
       this.socket.close();
       this.socket = null;
     }

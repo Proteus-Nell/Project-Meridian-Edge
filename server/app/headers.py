@@ -23,6 +23,10 @@ SECURITY_HEADERS: dict[str, str] = {
         "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()"
     ),
     "Cache-Control": "no-store",
+    # Browsers only honor this over HTTPS, so it is harmless to send in plain-
+    # HTTP dev; in production it is the belt to the reverse proxy's suspenders
+    # (CLAUDE.md §5 checklist: max-age=63072000; includeSubDomains; preload).
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 }
 
 

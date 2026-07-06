@@ -1,0 +1,94 @@
+"""Production boot-safety gate (CLAUDE.md §5 checklist: "DEBUG=0 asserted at
+startup (refuse to boot otherwise in prod mode)").
+
+_assert_production_safe is a no-op unless PQTERM_ENV=production is set, so
+these tests exercise it directly rather than through the app/client fixtures
+(which never set that env var and must stay unaffected).
+"""
+
+from __future__ import annotations
+
+import pytest
+from argon2 import PasswordHasher
+
+from app import security
+from app.constants import ARGON2ID_ITERATIONS, ARGON2ID_MEM_KIB, ARGON2ID_PARALLELISM
+from app.main import _assert_production_safe, create_app
+
+
+@pytest.fixture()
+def real_hasher(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The session-wide fast_argon2 autouse fixture (conftest.py) swaps in weak
+    # params for test speed; restore the real ones for the "everything is
+    # correctly configured" case so it isn't accidentally the thing that fails.
+    monkeypatch.setattr(
+        security,
+        "_hasher",
+        PasswordHasher(
+            time_cost=ARGON2ID_ITERATIONS,
+            memory_cost=ARGON2ID_MEM_KIB,
+            parallelism=ARGON2ID_PARALLELISM,
+        ),
+    )
+
+
+def test_passes_with_a_fully_production_shaped_config(real_hasher: None) -> None:
+    _assert_production_safe(
+        dev=False,
+        ws_origins=["https://pqterm.example"],
+        database_url="postgresql://user:pass@db/pqterm",
+    )
+
+
+def test_noop_when_prod_env_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PQTERM_ENV", raising=False)
+    # Every input here is dev-shaped; if the gate ran, it would raise.
+    _assert_production_safe(dev=True, ws_origins=None, database_url="sqlite://")
+
+
+def test_refuses_when_dev_docs_enabled(monkeypatch: pytest.MonkeyPatch, real_hasher: None) -> None:
+    monkeypatch.setenv("PQTERM_ENV", "production")
+    with pytest.raises(RuntimeError, match="PQTERM_DEV"):
+        _assert_production_safe(
+            dev=True,
+            ws_origins=["https://pqterm.example"],
+            database_url="postgresql://user:pass@db/pqterm",
+        )
+
+
+def test_refuses_when_ws_origins_unset(monkeypatch: pytest.MonkeyPatch, real_hasher: None) -> None:
+    monkeypatch.setenv("PQTERM_ENV", "production")
+    with pytest.raises(RuntimeError, match="PQTERM_WS_ORIGINS"):
+        _assert_production_safe(
+            dev=False, ws_origins=None, database_url="postgresql://user:pass@db/pqterm"
+        )
+
+
+def test_refuses_when_database_is_sqlite(
+    monkeypatch: pytest.MonkeyPatch, real_hasher: None
+) -> None:
+    monkeypatch.setenv("PQTERM_ENV", "production")
+    with pytest.raises(RuntimeError, match="SQLite"):
+        _assert_production_safe(
+            dev=False, ws_origins=["https://pqterm.example"], database_url="sqlite:///./x.db"
+        )
+
+
+def test_refuses_when_argon2_params_are_weak(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No real_hasher fixture here - the session-wide weak params from
+    # fast_argon2 are exactly what should trip this branch.
+    monkeypatch.setenv("PQTERM_ENV", "production")
+    with pytest.raises(RuntimeError, match="Argon2id"):
+        _assert_production_safe(
+            dev=False,
+            ws_origins=["https://pqterm.example"],
+            database_url="postgresql://user:pass@db/pqterm",
+        )
+
+
+def test_create_app_refuses_to_boot_in_production_with_dev_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PQTERM_ENV", "production")
+    with pytest.raises(RuntimeError):
+        create_app("sqlite://")

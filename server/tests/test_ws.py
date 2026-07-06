@@ -99,3 +99,45 @@ def test_ws_origin_allowlist(clock: FakeClock) -> None:
             ) as ws:
                 ws.receive_json()
         assert exc.value.code == 4403
+
+
+def test_ws_idle_connection_is_closed(clock: FakeClock) -> None:
+    # The idle-kill window is real wall-clock time (asyncio.wait_for), not the
+    # injectable business-logic `clock` - override it directly to a tiny value
+    # so the test doesn't sleep for the real 90s default.
+    app = create_app("sqlite://", clock=clock, ws_idle_timeout_seconds=0.05)
+    with TestClient(app) as fast_idle_client:
+        _, token = register_and_login(fast_idle_client)
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with fast_idle_client.websocket_connect("/v1/ws") as ws:
+                ws.send_text(json.dumps({"type": "auth", "token": token}))
+                ws.receive_json()  # rotated token
+                ws.receive_json()  # nothing else arrives - idle-kill fires
+        assert exc.value.code == 4408
+
+
+def test_ws_heartbeat_ping_keeps_a_quiet_connection_alive(client: TestClient) -> None:
+    _, token = register_and_login(client)
+    with client.websocket_connect("/v1/ws") as ws:
+        ws.send_text(json.dumps({"type": "auth", "token": token}))
+        ws.receive_json()
+        # A ping (the client's periodic heartbeat) is ordinary traffic, not a
+        # special case - repeated pings keep an otherwise-quiet connection open.
+        for _ in range(3):
+            ws.send_text(json.dumps({"type": "ping"}))
+            assert ws.receive_json() == {"type": "pong"}
+
+
+def test_ws_per_connection_frame_rate_limited(client: TestClient, clock: FakeClock) -> None:
+    _, token = register_and_login(client)
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with client.websocket_connect("/v1/ws") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": token}))
+            ws.receive_json()
+            # Burst well past the per-connection budget without letting the
+            # clock refill it.
+            for _ in range(50):
+                ws.send_text(json.dumps({"type": "ping"}))
+            for _ in range(50):
+                ws.receive_json()
+    assert exc.value.code == 4429

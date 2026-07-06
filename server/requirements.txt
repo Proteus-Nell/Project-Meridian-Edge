@@ -8,3 +8,6 @@ pydantic==2.13.4
 cryptography==49.0.0
 # W2: Argon2id hashing of recovery codes at rest.
 argon2-cffi==25.1.0
+# W5: Postgres driver for production (SQLite is a dev-only artifact, §7.5);
+# binary wheel so the runtime image needs no C toolchain.
+psycopg[binary]==3.2.13

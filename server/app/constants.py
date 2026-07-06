@@ -39,6 +39,13 @@ ACK_MAX_IDS = 256
 # WebSocket delivery (CLAUDE.md section 5 checklist).
 WS_AUTH_TIMEOUT_SECONDS = 10.0
 WS_MAX_FRAME_BYTES = 65536
+# Idle-kill: a connection that sends nothing (not even a ping) for this long is
+# closed. The client hearts-beat well inside this window (see ws.ts).
+WS_IDLE_TIMEOUT_SECONDS = 90.0
+# Per-connection inbound frame budget (separate from the per-UID REST rate
+# limits): caps how fast one live socket can send ack/ping frames.
+WS_FRAME_RATE_CAPACITY = 30
+WS_FRAME_RATE_WINDOW_SECONDS = 10.0
 
 # Rate limits (CLAUDE.md section 5): register 3/hour/IP, login-challenge
 # 10/min/IP, bundle fetch 30/min/UID, message send 60/min/UID.

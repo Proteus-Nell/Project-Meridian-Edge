@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -22,6 +23,8 @@ from .constants import (
     ACK_MAX_IDS,
     MESSAGE_TTL_SECONDS,
     WS_AUTH_TIMEOUT_SECONDS,
+    WS_FRAME_RATE_CAPACITY,
+    WS_FRAME_RATE_WINDOW_SECONDS,
     WS_MAX_FRAME_BYTES,
 )
 from .models import QueuedMessage, SessionToken
@@ -33,6 +36,31 @@ router = APIRouter()
 WS_CLOSE_BAD_ORIGIN = 4403
 WS_CLOSE_AUTH_FAILED = 4401
 WS_CLOSE_PROTOCOL = 4400
+WS_CLOSE_RATE_LIMITED = 4429
+WS_CLOSE_IDLE = 4408
+
+
+class _FrameBudget:
+    """Per-connection token bucket for inbound frames (§5, §7.11). Deliberately
+    not the shared TokenBucketLimiter: that keys on strings in a dict that
+    outlives the connection, which would leak one entry per socket ever
+    opened over the server's lifetime."""
+
+    def __init__(self, clock: Callable[[], float]) -> None:
+        self._clock = clock
+        self._tokens = float(WS_FRAME_RATE_CAPACITY)
+        self._rate = WS_FRAME_RATE_CAPACITY / WS_FRAME_RATE_WINDOW_SECONDS
+        self._updated = clock()
+
+    def allow(self) -> bool:
+        now = self._clock()
+        elapsed = max(0.0, now - self._updated)
+        self._tokens = min(WS_FRAME_RATE_CAPACITY, self._tokens + elapsed * self._rate)
+        self._updated = now
+        if self._tokens >= 1.0:
+            self._tokens -= 1.0
+            return True
+        return False
 
 
 class WsHub:
@@ -77,6 +105,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     # application code (a pre-accept close surfaces as an opaque HTTP 403).
     # Nothing is attached to any queue until origin AND auth both pass.
     await websocket.accept()
+    idle_timeout: float = websocket.app.state.ws_idle_timeout_seconds
     allowed_origins: list[str] | None = websocket.app.state.ws_origins
     if allowed_origins is not None:
         origin = websocket.headers.get("origin", "")
@@ -116,10 +145,18 @@ async def ws_endpoint(websocket: WebSocket) -> None:
 
     hub = websocket.app.state.ws_hub
     hub.register(user_id, websocket)
+    budget = _FrameBudget(clock)
     try:
         await _push_pending(websocket, maker, user_id, clock())
         while True:
-            raw = await websocket.receive_text()
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=idle_timeout)
+            except TimeoutError:
+                await websocket.close(code=WS_CLOSE_IDLE)
+                return
+            if not budget.allow():
+                await websocket.close(code=WS_CLOSE_RATE_LIMITED)
+                return
             frame = _parse_frame(raw)
             if frame is None:
                 await websocket.close(code=WS_CLOSE_PROTOCOL)

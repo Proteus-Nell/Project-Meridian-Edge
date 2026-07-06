@@ -65,3 +65,26 @@ def test_security_headers_on_success_and_error(client: TestClient) -> None:
     error_response = client.get("/v1/does-not-exist")
     for name, value in SECURITY_HEADERS.items():
         assert error_response.headers.get(name) == value
+
+
+def test_no_cors_headers_ever_returned(client: TestClient) -> None:
+    # No CORS middleware is installed at all (CLAUDE.md section 5 checklist:
+    # "exact origin only, no wildcard, credentials disabled"). The strongest
+    # version of that is simply never answering the CORS handshake - a cross-
+    # origin page's fetch() gets no Access-Control-Allow-* headers to read,
+    # regardless of what Origin it sends.
+    res = client.get(
+        "/v1/does-not-exist", headers={"Origin": "https://evil.example"}
+    )
+    for header in res.headers:
+        assert not header.lower().startswith("access-control-")
+
+    preflight = client.options(
+        "/v1/register",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    for header in preflight.headers:
+        assert not header.lower().startswith("access-control-")

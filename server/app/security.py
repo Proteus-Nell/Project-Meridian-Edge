@@ -31,6 +31,12 @@ _hasher = PasswordHasher(
 )
 
 
+def hasher_params() -> tuple[int, int, int]:
+    """(time_cost, memory_cost, parallelism) of the live hasher - boot-time
+    introspection for _assert_production_safe, not for runtime hashing."""
+    return (_hasher.time_cost, _hasher.memory_cost, _hasher.parallelism)
+
+
 def new_session_token() -> str:
     return secrets.token_hex(SESSION_TOKEN_BYTES)
 
