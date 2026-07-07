@@ -226,7 +226,11 @@ docker compose build
 docker compose up -d
 ```
 
-See `deploy/nginx.conf` for the TLS policy (TLS 1.3, `X25519MLKEM768` hybrid
-group — verify your nginx image's OpenSSL supports it before relying on it)
-and `SECURITY.md` for the disclosure contact. This config has not been
-build-tested against a live Docker daemon — review it before a real deploy.
+**Full instructions — TLS certificates, the `X25519MLKEM768` hybrid-group
+caveat, verification, operations, scaling limits, and troubleshooting — are in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).** That guide also covers running the
+dev servers and multi-user local testing. See [SECURITY.md](SECURITY.md) for the
+disclosure contact.
+
+> This config has not been build-tested against a live Docker daemon — review it
+> before a real deploy.
