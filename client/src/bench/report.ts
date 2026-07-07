@@ -2,7 +2,7 @@
 // monospace tables for the terminal and Markdown tables for the report file,
 // plus a JSON blob. Pure - no timing, no I/O.
 
-import type { LatencyResult, SizeResult, SuiteResult } from "./suites";
+import type { LatencyResult, ProtocolResult, SizeResult, SuiteResult } from "./suites";
 
 export function formatMs(ms: number): string {
   if (ms === 0) {
@@ -61,6 +61,15 @@ function sizeRows(result: SizeResult): string[][] {
   ]);
 }
 
+function protocolRows(result: ProtocolResult): string[][] {
+  return result.rows.map((row) => [
+    row.metric,
+    formatMs(row.stats.medianMs),
+    formatMs(row.stats.p95Ms),
+    `${Math.round(row.stats.opsPerSec).toLocaleString("en-US")} ${row.unit}/s`,
+  ]);
+}
+
 /** Terminal-friendly rendering (one string per line). */
 export function renderTerminal(results: readonly SuiteResult[]): string[] {
   const lines: string[] = [];
@@ -73,6 +82,15 @@ export function renderTerminal(results: readonly SuiteResult[]): string[] {
           ["op", `${result.pqcName} med`, "p95", `${result.classicalName} med`, "p95", "factor"],
           latencyRows(result),
         ).map((l) => `  ${l}`),
+      );
+      if (result.note !== undefined) {
+        lines.push(`  note: ${result.note}`);
+      }
+    } else if (result.kind === "protocol") {
+      lines.push(
+        ...alignedTable(["metric", "median", "p95", "rate"], protocolRows(result)).map(
+          (l) => `  ${l}`,
+        ),
       );
       if (result.note !== undefined) {
         lines.push(`  note: ${result.note}`);
@@ -114,6 +132,11 @@ export function renderMarkdown(results: readonly SuiteResult[], generatedAt: str
           latencyRows(result),
         ),
       );
+      if (result.note !== undefined) {
+        parts.push("", `_${result.note}_`);
+      }
+    } else if (result.kind === "protocol") {
+      parts.push(mdTable(["metric", "median", "p95", "rate"], protocolRows(result)));
       if (result.note !== undefined) {
         parts.push("", `_${result.note}_`);
       }

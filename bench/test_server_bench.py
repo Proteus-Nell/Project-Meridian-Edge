@@ -10,6 +10,7 @@ from __future__ import annotations
 from server_bench import (  # type: ignore[import-not-found]
     bench_b1,
     bench_b2,
+    bench_b5_memory,
     render_markdown,
     summarize,
 )
@@ -44,3 +45,13 @@ def test_b2_runs_and_renders_markdown() -> None:
     md = render_markdown([result])
     assert "B2 - signature primitive latency" in md
     assert "| verify |" in md
+
+
+def test_b5_memory_measures_per_session_footprint() -> None:
+    fp = bench_b5_memory(sessions=100)
+    assert fp.suite == "B5"
+    assert fp.sessions == 100
+    assert fp.total_bytes > 0
+    assert fp.bytes_per_session > 0
+    md = render_markdown([bench_b2(iters=3)], fp)
+    assert "B5 - server footprint" in md

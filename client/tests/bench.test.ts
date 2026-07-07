@@ -82,6 +82,7 @@ describe("parseSuite", () => {
     expect(parseSuite("B1")).toBe("b1");
     expect(parseSuite("b3")).toBe("b3");
     expect(parseSuite("all")).toBe("all");
+    expect(parseSuite("B4")).toBe("b4");
     expect(parseSuite("b9")).toBeNull();
     expect(parseSuite("garbage")).toBeNull();
   });
@@ -111,11 +112,26 @@ describe("runBench end-to-end (tiny iteration count)", () => {
     }
   });
 
+  it("runs the B4 protocol suite (handshake + ratchet throughput)", async () => {
+    const out = await runBench("b4", { config: tiny });
+    expect(out.results).toHaveLength(1);
+    const result = out.results[0];
+    expect(result?.kind).toBe("protocol");
+    if (result?.kind === "protocol") {
+      expect(result.rows.map((r) => r.metric)).toContain("handshake round-trip");
+      // every metric produced real samples and the ratchet did not desync
+      expect(result.rows.every((r) => r.stats.iters === 3)).toBe(true);
+      const throughput = result.rows.find((r) => r.display === "throughput");
+      expect(throughput?.stats.opsPerSec).toBeGreaterThan(0);
+    }
+    expect(out.markdown).toContain("B4 - protocol level");
+  });
+
   it("runs all suites in order", async () => {
     const progress: string[] = [];
     const out = await runBench("all", { config: tiny, onProgress: (m) => progress.push(m) });
-    expect(out.results.map((r) => r.suite)).toEqual(["B1", "B2", "B3"]);
-    expect(progress).toHaveLength(3);
+    expect(out.results.map((r) => r.suite)).toEqual(["B1", "B2", "B3", "B4"]);
+    expect(progress).toHaveLength(4);
     expect(renderMarkdown(out.results, "now")).toContain("# PQTerm benchmark report");
   });
 });

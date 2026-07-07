@@ -10,6 +10,8 @@
 
 import { ml_kem768 } from "@noble/post-quantum/ml-kem.js";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
+import { sha512 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 import {
   ML_DSA_65_PUBKEY_BYTES,
@@ -18,6 +20,10 @@ import {
   ML_KEM_768_PUBKEY_BYTES,
   OPK_BATCH_MAX,
 } from "../crypto/constants";
+import { initiateKx, respondKx } from "../crypto/kx";
+import type { Bundle, PrekeyLookup } from "../crypto/kx";
+import { generateOpkBatch, generateSpk } from "../crypto/prekeys";
+import { initRatchet, ratchetDecrypt, ratchetEncrypt } from "../crypto/ratchet";
 import { timeit } from "./harness";
 import type { Stats } from "./harness";
 
@@ -59,7 +65,23 @@ export interface SizeResult {
   readonly rows: readonly SizeRow[];
 }
 
-export type SuiteResult = LatencyResult | SizeResult;
+export interface ProtocolRow {
+  readonly metric: string;
+  readonly stats: Stats;
+  /** latency rows report median/p95; throughput rows headline ops/sec. */
+  readonly display: "latency" | "throughput";
+  readonly unit: string;
+}
+
+export interface ProtocolResult {
+  readonly kind: "protocol";
+  readonly suite: "B4";
+  readonly title: string;
+  readonly note?: string;
+  readonly rows: readonly ProtocolRow[];
+}
+
+export type SuiteResult = LatencyResult | SizeResult | ProtocolResult;
 
 // Classical primitives run ~100x faster than the PQC ones, near the browser's
 // clamped timer resolution, so they time more calls per sample (see harness).
@@ -252,6 +274,109 @@ export function benchB3(): SizeResult {
       },
       { object: "Handshake first message", classicalBytes: classicalHandshake, pqcBytes: pqcHandshake },
       { object: "Ratchet KEM step header", classicalBytes: classicalRatchetStep, pqcBytes: pqcRatchetStep },
+    ],
+  };
+}
+
+interface ProtocolFixture {
+  readonly alicePub: Uint8Array;
+  readonly aliceSec: Uint8Array;
+  readonly bobPub: Uint8Array;
+  readonly bundle: Bundle;
+  readonly lookup: PrekeyLookup;
+}
+
+/** A self-contained handshake fixture: two ML-DSA identities and a signed
+ * prekey bundle for Bob, exactly as the real protocol builds one. */
+function buildProtocolFixture(): ProtocolFixture {
+  const alice = ml_dsa65.keygen();
+  const bob = ml_dsa65.keygen();
+  const spk = generateSpk(bob.secretKey);
+  const batch = generateOpkBatch(bob.secretKey, 1);
+  const opkPub = batch.pubs[0];
+  const opkSec = batch.secs[0];
+  if (opkPub === undefined || opkSec === undefined) {
+    throw new Error("prekey fixture generation failed");
+  }
+  const spkHash = bytesToHex(sha512(spk.pub));
+  const opkHash = bytesToHex(sha512(opkPub));
+  return {
+    alicePub: alice.publicKey,
+    aliceSec: alice.secretKey,
+    bobPub: bob.publicKey,
+    bundle: {
+      ikPub: bob.publicKey,
+      spkPub: spk.pub,
+      spkSig: spk.sig,
+      opk: { pub: opkPub, index: 0, leaves: batch.leaves, rootSig: batch.rootSig },
+    },
+    lookup: {
+      spkByHash: (h) => (h === spkHash ? { pub: spk.pub, sec: spk.sec, storeKey: "spk/1" } : null),
+      opkByHash: (h) => (h === opkHash ? { pub: opkPub, sec: opkSec, storeKey: "opk/1" } : null),
+    },
+  };
+}
+
+/** B4 - protocol-level latency and throughput (MVP §8). Measures the crypto
+ * cost of the real handshake and ratchet paths; network RTT is excluded (it is
+ * identical for classical and PQC). Protocol metrics use >=100 iterations. */
+export async function benchB4(cfg: BenchConfig): Promise<ProtocolResult> {
+  const warmup = Math.min(cfg.warmup, 20);
+  const iters = Math.min(cfg.iters, 200);
+  const { yieldEvery } = cfg;
+  const fx = buildProtocolFixture();
+
+  // Time-to-first-message: the initiator's cost to produce the first sealed
+  // message (verifyBundle + ML-KEM encaps + ML-DSA sign + AEAD).
+  const ttfm = await timeit(
+    "ttfm",
+    () => void initiateKx(fx.alicePub, fx.aliceSec, fx.bundle, MESSAGE),
+    { warmup, iters, batch: 1, yieldEvery },
+  );
+
+  // Full handshake, both sides: initiate + respond (decaps + verify + derive).
+  const handshake = await timeit(
+    "handshake",
+    () => {
+      const { envelope } = initiateKx(fx.alicePub, fx.aliceSec, fx.bundle, MESSAGE);
+      respondKx(fx.bobPub, fx.lookup, envelope);
+    },
+    { warmup, iters, batch: 1, yieldEvery },
+  );
+
+  // Sustained ratchet throughput on one established session, alternating
+  // direction so every message drives a fresh KEM step (the PQC-heavy path).
+  const opened = initiateKx(fx.alicePub, fx.aliceSec, fx.bundle, MESSAGE);
+  const responded = respondKx(fx.bobPub, fx.lookup, opened.envelope);
+  if (!responded.ok) {
+    throw new Error(`protocol fixture handshake failed: ${responded.reason}`);
+  }
+  const aState = initRatchet(opened.session.rk, opened.session.role);
+  const bState = initRatchet(responded.session.rk, responded.session.role);
+  let aToB = true;
+  const throughput = await timeit(
+    "ratchet-msg",
+    () => {
+      const result = aToB
+        ? ratchetDecrypt(bState, ratchetEncrypt(aState, MESSAGE))
+        : ratchetDecrypt(aState, ratchetEncrypt(bState, MESSAGE));
+      if (!result.ok) {
+        throw new Error(`ratchet throughput desync: ${result.reason}`);
+      }
+      aToB = !aToB;
+    },
+    { warmup, iters, batch: 1, yieldEvery },
+  );
+
+  return {
+    kind: "protocol",
+    suite: "B4",
+    title: "B4 - protocol level",
+    note: "Crypto only, no network RTT. A 4x-CPU-throttle handshake (browser devtools) is ~4x the handshake row.",
+    rows: [
+      { metric: "time-to-first-message (send)", stats: ttfm, display: "latency", unit: "op" },
+      { metric: "handshake round-trip", stats: handshake, display: "latency", unit: "op" },
+      { metric: "sustained ratchet message", stats: throughput, display: "throughput", unit: "msg" },
     ],
   };
 }

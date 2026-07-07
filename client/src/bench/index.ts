@@ -2,14 +2,14 @@
 // the results plus terminal / Markdown / JSON renderings. Driven by the /bench
 // command; also importable headlessly by tests.
 
-import { benchB1, benchB2, benchB3, DEFAULT_CONFIG } from "./suites";
+import { benchB1, benchB2, benchB3, benchB4, DEFAULT_CONFIG } from "./suites";
 import type { BenchConfig, SuiteResult } from "./suites";
 import { renderMarkdown, renderTerminal } from "./report";
 
 export type { BenchConfig, SuiteResult } from "./suites";
 export { DEFAULT_CONFIG } from "./suites";
 
-export type SuiteName = "b1" | "b2" | "b3" | "all";
+export type SuiteName = "b1" | "b2" | "b3" | "b4" | "all";
 
 /** Normalize a raw /bench argument to a suite name, or null if unrecognized. */
 export function parseSuite(raw: string | undefined): SuiteName | null {
@@ -17,7 +17,7 @@ export function parseSuite(raw: string | undefined): SuiteName | null {
     return "all";
   }
   const lower = raw.toLowerCase();
-  if (lower === "b1" || lower === "b2" || lower === "b3" || lower === "all") {
+  if (lower === "b1" || lower === "b2" || lower === "b3" || lower === "b4" || lower === "all") {
     return lower;
   }
   return null;
@@ -42,6 +42,7 @@ const TITLES: Record<Exclude<SuiteName, "all">, string> = {
   b1: "B1 (KEM latency)",
   b2: "B2 (signature latency)",
   b3: "B3 (size overhead)",
+  b4: "B4 (protocol level)",
 };
 
 export async function runBench(suite: SuiteName, options: RunOptions = {}): Promise<BenchOutput> {
@@ -49,7 +50,7 @@ export async function runBench(suite: SuiteName, options: RunOptions = {}): Prom
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   const progress = options.onProgress ?? ((): void => {});
   const order: Exclude<SuiteName, "all">[] =
-    suite === "all" ? ["b1", "b2", "b3"] : [suite];
+    suite === "all" ? ["b1", "b2", "b3", "b4"] : [suite];
 
   const results: SuiteResult[] = [];
   for (const name of order) {
@@ -58,8 +59,10 @@ export async function runBench(suite: SuiteName, options: RunOptions = {}): Prom
       results.push(await benchB1(config));
     } else if (name === "b2") {
       results.push(await benchB2(config));
-    } else {
+    } else if (name === "b3") {
       results.push(benchB3());
+    } else {
+      results.push(await benchB4(config));
     }
   }
 

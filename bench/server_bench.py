@@ -97,6 +97,54 @@ class LatencyResult:
     rows: list[LatencyRow]
 
 
+@dataclass(frozen=True)
+class FootprintResult:
+    suite: str
+    title: str
+    sessions: int
+    total_bytes: int
+    bytes_per_session: float
+    note: str
+
+
+def bench_b5_memory(sessions: int) -> FootprintResult:
+    """B5 - server footprint per active session. Measures the Python-heap
+    allocation (tracemalloc) for the real per-session server object - a
+    SessionToken ORM instance plus its SHA-512 token hash - across `sessions`
+    sessions. Excludes the DB engine and native/OpenSSL allocations, which
+    tracemalloc does not see; it is a per-session Python-heap figure, not full
+    RSS (psutil/resource are not portable and unavailable here)."""
+    import gc
+    import tracemalloc
+
+    server_dir = Path(__file__).resolve().parent.parent / "server"
+    if str(server_dir) not in sys.path:
+        sys.path.insert(0, str(server_dir))
+    from app.models import SessionToken  # type: ignore[import-not-found]
+    from app.security import hash_token, new_session_token  # type: ignore[import-not-found]
+
+    gc.collect()
+    tracemalloc.start()
+    base = tracemalloc.get_traced_memory()[0]
+    held: list[SessionToken] = []
+    for i in range(sessions):
+        token = new_session_token()
+        held.append(
+            SessionToken(token_hash=hash_token(token), user_id=i, last_used=0.0, revoked=False)
+        )
+    used = tracemalloc.get_traced_memory()[0] - base
+    tracemalloc.stop()
+    assert len(held) == sessions  # keep `held` alive across the measurement
+    return FootprintResult(
+        suite="B5",
+        title="B5 - server footprint (per active session)",
+        sessions=sessions,
+        total_bytes=used,
+        bytes_per_session=used / sessions if sessions else 0.0,
+        note="Python-heap (tracemalloc) for the SessionToken object + hashed token; excludes DB engine and native/OpenSSL memory.",
+    )
+
+
 def bench_b1(iters: int) -> LatencyResult:
     """B1 - KEM latency: ML-KEM-768 vs X25519."""
     kem_sk = mlkem.MLKEM768PrivateKey.generate()
@@ -169,7 +217,7 @@ def _factor(pqc: float, classical: float) -> str:
     return f"x{round(f)}" if f >= 10 else f"x{f:.1f}"
 
 
-def render_terminal(results: list[LatencyResult]) -> str:
+def render_terminal(results: list[LatencyResult], footprint: FootprintResult | None = None) -> str:
     lines: list[str] = [f"Environment: {platform.python_implementation()} {platform.python_version()} on {platform.platform()}"]
     for r in results:
         lines.append("")
@@ -183,10 +231,15 @@ def render_terminal(results: list[LatencyResult]) -> str:
                 f"{_fmt_us(row.classical.median_us):>14} {_fmt_us(row.classical.p95_us):>12} "
                 f"{_factor(row.pqc.median_us, row.classical.median_us):>7}"
             )
+    if footprint is not None:
+        lines.append("")
+        lines.append(f"{footprint.title}  ({footprint.sessions} sessions)")
+        lines.append(f"  {footprint.bytes_per_session:,.0f} bytes/session ({footprint.total_bytes:,} total)")
+        lines.append(f"  note: {footprint.note}")
     return "\n".join(lines)
 
 
-def render_markdown(results: list[LatencyResult]) -> str:
+def render_markdown(results: list[LatencyResult], footprint: FootprintResult | None = None) -> str:
     parts = [
         "# PQTerm server benchmark (§8)",
         "",
@@ -203,11 +256,22 @@ def render_markdown(results: list[LatencyResult]) -> str:
                 f"{_fmt_us(row.classical.median_us)} | {_fmt_us(row.classical.p95_us)} | "
                 f"{_factor(row.pqc.median_us, row.classical.median_us)} |"
             )
+    if footprint is not None:
+        parts += [
+            "",
+            f"## {footprint.title}",
+            "",
+            f"| sessions | bytes/session | total |",
+            "| --- | --- | --- |",
+            f"| {footprint.sessions} | {footprint.bytes_per_session:,.0f} | {footprint.total_bytes:,} |",
+            "",
+            f"_{footprint.note}_",
+        ]
     return "\n".join(parts) + "\n"
 
 
-def _to_json(results: list[LatencyResult]) -> str:
-    payload = {
+def _to_json(results: list[LatencyResult], footprint: FootprintResult | None = None) -> str:
+    payload: dict[str, object] = {
         "environment": {
             "python": platform.python_version(),
             "implementation": platform.python_implementation(),
@@ -228,6 +292,8 @@ def _to_json(results: list[LatencyResult]) -> str:
             for r in results
         ],
     }
+    if footprint is not None:
+        payload["footprint"] = asdict(footprint)
     return json.dumps(payload, indent=2)
 
 
@@ -235,20 +301,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="PQTerm server benchmark (§8 B1/B2)")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of tables")
     parser.add_argument("--iters", type=int, default=ITERS, help="iterations per op")
+    parser.add_argument("--sessions", type=int, default=1000, help="sessions for the B5 footprint")
     parser.add_argument("--out", type=Path, default=None, help="write report.md + results.json here")
     args = parser.parse_args(argv)
 
     results = [bench_b1(args.iters), bench_b2(args.iters)]
+    footprint = bench_b5_memory(args.sessions)
 
     if args.out is not None:
         args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / "report.md").write_text(render_markdown(results), encoding="utf-8")
-        (args.out / "results.json").write_text(_to_json(results), encoding="utf-8")
+        (args.out / "report.md").write_text(render_markdown(results, footprint), encoding="utf-8")
+        (args.out / "results.json").write_text(_to_json(results, footprint), encoding="utf-8")
         print(f"wrote {args.out / 'report.md'} and {args.out / 'results.json'}")
     elif args.json:
-        print(_to_json(results))
+        print(_to_json(results, footprint))
     else:
-        print(render_terminal(results))
+        print(render_terminal(results, footprint))
     return 0
 
 

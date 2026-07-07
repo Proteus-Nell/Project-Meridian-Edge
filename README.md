@@ -150,9 +150,17 @@ not forensic erasure.
 - One identity per browser profile: `/register` on a device that already has
   a store points you to `/login` (or `/wipe` first).
 
-### Not here yet (build order in CLAUDE.md §8)
+### Researcher tools
 
-- **W6** — `/bench` PQC-vs-classical benchmark suite
+- **`/bench [b1|b2|b3|b4|all]`** — run the PQC-vs-classical benchmark suites in
+  the browser: primitive latency (B1/B2), size overhead (B3), and protocol-level
+  timings (B4). Tables print in the terminal; full JSON + Markdown go to the
+  console. The server-side and footprint suites (B5) run via `make bench` — see
+  [bench/README.md](bench/README.md).
+
+The MVP build order (W1–W6, CLAUDE.md §8) is complete. Remaining items are
+documented could-haves (charts, a rehearsed demo script) and the B4/B5
+methodology notes in the bench README.
 
 ## Layout
 
@@ -210,7 +218,11 @@ All of the above plus `npm audit` / `pip-audit` run blocking in CI.
   production-boot-safety gate that refuses to start with a dev-shaped
   config; §7 sweep (CORS/SSRF absence, nonce uniqueness, HSTS); reference
   `docker-compose.yml` + Dockerfiles + `SECURITY.md`.
-- Next: **W6** the `/bench` PQC-vs-classical benchmark suite.
+- **W6** ✓ benchmarks: `/bench` B1–B4 in the browser (primitive latency, size
+  overhead, protocol-level) + a server harness (`make bench`) for native B1/B2
+  and the B5 footprint. Headline finding: the PQC libraries are *smaller* than
+  the classical curves baseline — the PQC cost is latency and wire size, not JS
+  bundle.
 
 See CLAUDE.md §8 for the full build order.
 
