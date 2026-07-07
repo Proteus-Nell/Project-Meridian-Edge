@@ -21,6 +21,9 @@ build/
 *.sqlite
 *.sqlite3
 
+# Generated benchmark reports (§8) - regenerate with `make bench`
+bench/out/
+
 # Environment / secrets
 .env
 .env.*

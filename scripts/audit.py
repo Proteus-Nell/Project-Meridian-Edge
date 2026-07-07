@@ -7,8 +7,10 @@ Scope:
   - client/src/**/*.ts, client/index.html  (TypeScript application code)
   - server/app/**/*.py                     (Python application code)
 
-bench/ is deliberately out of scope: classical baselines (X25519, Ed25519)
-live there by design for the B1/B2 comparisons.
+Out of scope by design: the top-level bench/ AND client/src/bench/. Both hold
+the classical baselines (X25519, Ed25519) that exist only as the B1/B2
+comparison yardstick - the browser benchmark harness lives under
+client/src/bench/ so Vite/tsc/vitest see it, but it is not application code.
 """
 
 from __future__ import annotations
@@ -73,7 +75,12 @@ def scan(files: list[Path], patterns: list[str]) -> list[str]:
 
 
 def main() -> int:
-    client_files = sorted((ROOT / "client" / "src").rglob("*.ts"))
+    src_root = ROOT / "client" / "src"
+    # client/src/bench/ holds the classical B1/B2 baselines by design (see the
+    # module docstring); exclude it exactly like the top-level bench/ dir.
+    client_files = [
+        p for p in sorted(src_root.rglob("*.ts")) if p.relative_to(src_root).parts[0] != "bench"
+    ]
     client_html = ROOT / "client" / "index.html"
     if client_html.exists():
         client_files.append(client_html)

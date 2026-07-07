@@ -225,7 +225,6 @@ const WIPE_CONFIRM_WINDOW_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SEGMENT_OF: Partial<Record<Command["name"], string>> = {
-  bench: "W6 (benchmarks)",
   "settings-notify": "W6 (could-have)",
 };
 
@@ -386,6 +385,9 @@ export class Executor {
         return;
       case "purge-now":
         this.run(() => this.doPurgeNow(cmd.alias));
+        return;
+      case "bench":
+        this.run(() => this.doBench(cmd.suite));
         return;
       default: {
         const segment = SEGMENT_OF[cmd.name] ?? "a later segment";
@@ -921,6 +923,38 @@ export class Executor {
     }
     const count = await this.deleteMessages(`msg/${contact.uid}/`);
     this.renderer.event("success", `purged ${count} stored message(s) with ${contact.alias}`);
+  }
+
+  // ----- benchmarks (§8) ----------------------------------------------------
+
+  /** `/bench [suite]`: run the PQC-vs-classical benchmark suites (B1-B3) in the
+   * browser and print the tables. The whole bench module - including its
+   * classical baseline primitives - is dynamically imported so it only loads on
+   * demand and never enters the main bundle (keeps the B5 delta honest). */
+  private async doBench(suite: string | undefined): Promise<void> {
+    const bench = await import("../bench/index");
+    const parsed = bench.parseSuite(suite);
+    if (parsed === null) {
+      this.renderer.event("failure", "unknown suite - use b1, b2, b3, or omit for all");
+      return;
+    }
+    this.renderer.event(
+      "info",
+      "running benchmarks (PQC vs classical primitives) - primitive latency takes a few seconds...",
+    );
+    const output = await bench.runBench(parsed, {
+      onProgress: (message) => this.renderer.event("info", message),
+    });
+    for (const line of output.terminalLines) {
+      this.renderer.plain(line);
+    }
+    // The full machine-readable report goes to the browser console for the
+    // researcher to capture (the terminal shows the human-readable tables).
+    if (typeof console !== "undefined") {
+      console.log(output.markdown);
+      console.log(output.json);
+    }
+    this.renderer.event("success", "benchmark complete - JSON + Markdown logged to the browser console");
   }
 
   // ----- receive ------------------------------------------------------------
