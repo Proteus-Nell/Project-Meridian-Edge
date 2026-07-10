@@ -48,15 +48,42 @@ interface MetaRecord {
   readonly wrappedDek: WrappedRecord;
 }
 
-/** Non-secret UI preferences. Stored UNENCRYPTED and deliberately so: they
- * must be readable before the store is unlocked (the passphrase-mask setting
- * governs the very first login prompt), and they contain nothing an attacker
- * with the raw database could exploit. */
-export interface DisplayPrefs {
-  readonly secretMask: "asterisk" | "hidden";
+import { COLOR_SLOTS, isEmblemName, isSchemeName, normalizeHex } from "../terminal/theme";
+import type { ColorSlot, EmblemName, SchemeName } from "../terminal/theme";
+
+/** Toggleable visual atmosphere layers (/settings theme). Purely cosmetic. */
+export interface ThemePrefs {
+  readonly emblem: boolean;
+  readonly scanlines: boolean;
+  readonly vignette: boolean;
+  readonly dock: boolean;
 }
 
-const DEFAULT_PREFS: DisplayPrefs = { secretMask: "asterisk" };
+/** Non-secret UI preferences. Stored UNENCRYPTED and deliberately so: they
+ * must be readable before the store is unlocked (the passphrase-mask setting
+ * governs the very first login prompt, and the theme skins the lock screen
+ * too), and they contain nothing an attacker with the raw database could
+ * exploit. */
+export interface DisplayPrefs {
+  readonly secretMask: "asterisk" | "hidden";
+  readonly theme: ThemePrefs;
+  /** Base color scheme (/settings scheme). */
+  readonly scheme: SchemeName;
+  /** Medallion glyph (/settings emblem). */
+  readonly emblemGlyph: EmblemName;
+  /** Per-slot HEX overrides layered on the scheme (/settings color). */
+  readonly colorOverrides: Partial<Record<ColorSlot, string>>;
+}
+
+const DEFAULT_THEME: ThemePrefs = { emblem: true, scanlines: true, vignette: true, dock: true };
+
+const DEFAULT_PREFS: DisplayPrefs = {
+  secretMask: "asterisk",
+  theme: DEFAULT_THEME,
+  scheme: "dark",
+  emblemGlyph: "pq",
+  colorOverrides: {},
+};
 
 export class StoreLockedError extends Error {
   constructor() {
@@ -127,14 +154,48 @@ export class KeyStore {
     return (await this.readRaw(META_KEY)) !== undefined;
   }
 
-  /** Non-secret display preferences; readable with or without a passphrase. */
+  /** Non-secret display preferences; readable with or without a passphrase.
+   * Field-by-field validation so a legacy or hand-tampered record degrades to
+   * defaults instead of poisoning the UI (theme absent → all layers on). */
   async getDisplayPrefs(): Promise<DisplayPrefs> {
-    const raw = (await this.readRaw(PREFS_KEY)) as Partial<DisplayPrefs> | undefined;
+    const raw = (await this.readRaw(PREFS_KEY)) as
+      | {
+          secretMask?: unknown;
+          theme?: Partial<Record<keyof ThemePrefs, unknown>>;
+          scheme?: unknown;
+          emblemGlyph?: unknown;
+          colorOverrides?: Record<string, unknown>;
+        }
+      | undefined;
     if (raw === undefined) {
       return DEFAULT_PREFS;
     }
     const mask = raw.secretMask === "hidden" ? "hidden" : "asterisk";
-    return { secretMask: mask };
+    const theme: ThemePrefs = {
+      emblem: typeof raw.theme?.emblem === "boolean" ? raw.theme.emblem : DEFAULT_THEME.emblem,
+      scanlines:
+        typeof raw.theme?.scanlines === "boolean" ? raw.theme.scanlines : DEFAULT_THEME.scanlines,
+      vignette:
+        typeof raw.theme?.vignette === "boolean" ? raw.theme.vignette : DEFAULT_THEME.vignette,
+      dock: typeof raw.theme?.dock === "boolean" ? raw.theme.dock : DEFAULT_THEME.dock,
+    };
+    const scheme =
+      typeof raw.scheme === "string" && isSchemeName(raw.scheme) ? raw.scheme : DEFAULT_PREFS.scheme;
+    const emblemGlyph =
+      typeof raw.emblemGlyph === "string" && isEmblemName(raw.emblemGlyph)
+        ? raw.emblemGlyph
+        : DEFAULT_PREFS.emblemGlyph;
+    const colorOverrides: Partial<Record<ColorSlot, string>> = {};
+    for (const slot of COLOR_SLOTS) {
+      const value = raw.colorOverrides?.[slot];
+      if (typeof value === "string") {
+        const hex = normalizeHex(value);
+        if (hex !== null) {
+          colorOverrides[slot] = hex;
+        }
+      }
+    }
+    return { secretMask: mask, theme, scheme, emblemGlyph, colorOverrides };
   }
 
   async setDisplayPrefs(prefs: DisplayPrefs): Promise<void> {

@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import { Renderer, sanitizeText } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
+import type { EventLevel, LineSink, StatusSink } from "../src/terminal/renderer";
 
 class CaptureSink implements LineSink {
   lines: string[] = [];
   printLine(line: string): void {
     this.lines.push(line);
+  }
+}
+
+class CaptureStatus implements StatusSink {
+  last: { level: EventLevel; text: string } | null = null;
+  status(level: EventLevel, text: string): void {
+    this.last = { level, text };
   }
 }
 
@@ -43,5 +50,44 @@ describe("Renderer", () => {
     const line = sink.lines[0] ?? "";
     expect(line).toContain("[✗]"); // renderer's own ANSI prefix intact
     expect(line).toContain("bad[31minput"); // user ESC stripped
+  });
+});
+
+describe("Renderer peer messages", () => {
+  it("colors the alias label and sanitizes both untrusted fields", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.peerMessage("bob\x1b[31m", "hi\x1b[2Jthere");
+    const line = sink.lines[0] ?? "";
+    expect(line).toContain("\x1b[96m"); // renderer's own label styling intact
+    expect(line).toContain("[bob[31m]"); // alias ESC stripped
+    expect(line).toContain("hi[2Jthere"); // message ESC stripped
+    expect(line).not.toContain("\x1b[2J");
+  });
+});
+
+describe("Renderer status strip", () => {
+  it("mirrors the latest event into the status sink (sanitized, no ANSI)", () => {
+    const sink = new CaptureSink();
+    const status = new CaptureStatus();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0), status);
+    renderer.event("failure", "bad\x1b[31minput");
+    expect(status.last).toEqual({ level: "failure", text: "bad[31minput" });
+  });
+
+  it("status() updates the strip only, with no transcript line", () => {
+    const sink = new CaptureSink();
+    const status = new CaptureStatus();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0), status);
+    renderer.status("success", "sent to bob");
+    expect(status.last).toEqual({ level: "success", text: "sent to bob" });
+    expect(sink.lines).toEqual([]);
+  });
+
+  it("is a no-op without a status sink (default)", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    expect(() => renderer.status("info", "noop")).not.toThrow();
+    expect(sink.lines).toEqual([]);
   });
 });

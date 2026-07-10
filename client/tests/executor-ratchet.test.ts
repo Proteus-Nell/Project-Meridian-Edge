@@ -60,9 +60,37 @@ class CaptureSink implements LineSink {
   printLine(line: string): void {
     this.lines.push(line);
   }
+  /** Joined output with ANSI styling stripped, so assertions read plainly
+   * (peerMessage colors the alias label). */
   text(): string {
-    return this.lines.join("\n");
+    return this.lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "");
   }
+}
+
+class FakeChrome {
+  confirms = 0;
+  rejects = 0;
+  clears = 0;
+  context: string | null = null;
+  emblem = "unset";
+  confirmSent(): void {
+    this.confirms += 1;
+  }
+  rejectSent(): void {
+    this.rejects += 1;
+  }
+  clearScreen(): void {
+    this.clears += 1;
+  }
+  setChatContext(text: string | null): void {
+    this.context = text;
+  }
+  applyTheme(): void {}
+  setEmblemState(state: string): void {
+    this.emblem = state;
+  }
+  applyScheme(): void {}
+  applyEmblem(): void {}
 }
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -147,11 +175,16 @@ function bobSend(bob: Bob, text: string): Uint8Array {
 
 const sent: Uint8Array[] = [];
 
-async function bootstrapAlice(): Promise<{ executor: Executor; output: CaptureSink }> {
+async function bootstrapAlice(): Promise<{
+  executor: Executor;
+  output: CaptureSink;
+  chrome: FakeChrome;
+}> {
   const store = new KeyStore(`pqterm-ratchet-${Math.random()}`, new IDBFactory());
   const output = new CaptureSink();
   const shell = new FakeShell();
-  const executor = new Executor(new Renderer(output), shell, store);
+  const chrome = new FakeChrome();
+  const executor = new Executor(new Renderer(output), shell, store, undefined, chrome);
 
   const uid = nextUid();
   vi.mocked(api.register).mockResolvedValueOnce({ uid, recovery_codes: Array(10).fill("AAAA-AAAA") });
@@ -170,7 +203,7 @@ async function bootstrapAlice(): Promise<{ executor: Executor; output: CaptureSi
   shell.secrets = ["passphrase-123", "passphrase-123"];
   executor.handle(parseLine("/register"));
   await executor.idle();
-  return { executor, output };
+  return { executor, output, chrome };
 }
 
 async function send(executor: Executor, text: string): Promise<void> {
@@ -199,7 +232,7 @@ beforeEach(() => {
 
 describe("continued messaging over the ratchet", () => {
   it("hands off from the KX first message to ratchet follow-ups (send side)", async () => {
-    const { executor } = await bootstrapAlice();
+    const { executor, chrome } = await bootstrapAlice();
     const bob = makeBob();
     vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
 
@@ -214,6 +247,33 @@ describe("continued messaging over the ratchet", () => {
     expect(bobReceiveKx(bob, sent[0] as Uint8Array)).toBe("first");
     expect(bobReceive(bob, sent[1] as Uint8Array)).toBe("second");
     expect(bobReceive(bob, sent[2] as Uint8Array)).toBe("third");
+    // Each delivered message raised a right-edge tick, not a transcript line;
+    // the two /add + /chat commands are not sends and raise none.
+    expect(chrome.confirms).toBe(3);
+    expect(chrome.rejects).toBe(0);
+  });
+
+  it("drives the emblem medallion: active after login, idle after /lock", async () => {
+    const { executor, chrome } = await bootstrapAlice();
+    // bootstrapAlice registers, which auto-logs-in: a live session spins.
+    expect(chrome.emblem).toBe("active");
+    await send(executor, "/lock");
+    expect(chrome.emblem).toBe("idle");
+  });
+
+  it("keeps the §1.5 chat-context line in sync with /chat and /timer", async () => {
+    const { executor, chrome } = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+
+    await send(executor, `/add ${bob.uid} bob`);
+    expect(chrome.context).toBeNull(); // no active conversation yet
+    await send(executor, "/chat bob");
+    expect(chrome.context).toBe("[chatting with: bob (UNVERIFIED)]");
+    await send(executor, "/timer bob 1h");
+    expect(chrome.context).toBe("[chatting with: bob (UNVERIFIED)] [timer: 1h]");
+    await send(executor, "/timer bob off");
+    expect(chrome.context).toBe("[chatting with: bob (UNVERIFIED)]");
   });
 
   it("decrypts a ratchet reply and heals across a full round trip (receive side)", async () => {

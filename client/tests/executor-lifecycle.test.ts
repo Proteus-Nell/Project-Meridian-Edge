@@ -20,7 +20,7 @@ import type { RatchetState } from "../src/crypto/ratchet";
 import { decodeMsgEnvelope, encodeMsgEnvelope } from "../src/crypto/envelope";
 import { KeyStore } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
-import { parseLine } from "../src/terminal/parser";
+import { formatUid, parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
 import type { LineSink } from "../src/terminal/renderer";
 import type { ShellIO } from "../src/terminal/shell";
@@ -120,8 +120,16 @@ function bobReceiveKx(bob: Bob, kxEnvelope: Uint8Array): void {
   bob.ratchet = initRatchet(res.session.rk, res.session.role);
 }
 
-/** Bob reads a ratchet MSG and returns the executor app payload {m?, tmr}. */
-function bobReceive(bob: Bob, msgEnvelope: Uint8Array): { text: string | null; tmr: number } {
+interface AppRecord {
+  text: string | null;
+  tmr: number;
+  id: string | null;
+  del: string[] | null;
+  ds: boolean;
+}
+
+/** Bob reads a ratchet MSG and returns the executor app payload {m?, tmr, id?, del?, ds?}. */
+function bobReceive(bob: Bob, msgEnvelope: Uint8Array): AppRecord {
   const body = decodeMsgEnvelope(msgEnvelope);
   if (body === null || bob.ratchet === null) {
     throw new Error("not a MSG / no ratchet");
@@ -130,17 +138,44 @@ function bobReceive(bob: Bob, msgEnvelope: Uint8Array): { text: string | null; t
   if (!r.ok) {
     throw new Error(`ratchetDecrypt failed: ${r.reason}`);
   }
-  const parsed = JSON.parse(dec.decode(r.plaintext)) as { m?: string; tmr?: number };
-  return { text: typeof parsed.m === "string" ? parsed.m : null, tmr: parsed.tmr ?? 0 };
+  const parsed = JSON.parse(dec.decode(r.plaintext)) as {
+    m?: string;
+    tmr?: number;
+    id?: string;
+    del?: string[];
+    ds?: boolean;
+  };
+  return {
+    text: typeof parsed.m === "string" ? parsed.m : null,
+    tmr: parsed.tmr ?? 0,
+    id: typeof parsed.id === "string" ? parsed.id : null,
+    del: Array.isArray(parsed.del) ? parsed.del : null,
+    ds: parsed.ds === true,
+  };
 }
 
-function bobSend(bob: Bob, text: string | null, tmr: number): Uint8Array {
+function bobSend(bob: Bob, text: string | null, tmr: number, mid?: string): Uint8Array {
   if (bob.ratchet === null) {
     throw new Error("no ratchet");
   }
-  const record: { m?: string; tmr: number } = { tmr };
+  const record: { m?: string; tmr: number; id?: string } = { tmr };
   if (text !== null) {
     record.m = text;
+  }
+  if (mid !== undefined) {
+    record.id = mid;
+  }
+  return encodeMsgEnvelope(ratchetEncrypt(bob.ratchet, enc.encode(JSON.stringify(record))));
+}
+
+/** Bob sends a cooperative delete directive for messages he had sent Alice. */
+function bobSendDelete(bob: Bob, mids: string[], silent: boolean): Uint8Array {
+  if (bob.ratchet === null) {
+    throw new Error("no ratchet");
+  }
+  const record: { tmr: number; del: string[]; ds?: boolean } = { tmr: 0, del: mids };
+  if (silent) {
+    record.ds = true;
   }
   return encodeMsgEnvelope(ratchetEncrypt(bob.ratchet, enc.encode(JSON.stringify(record))));
 }
@@ -195,10 +230,17 @@ async function deliverToAlice(alice: Alice, envelope: Uint8Array): Promise<void>
   vi.mocked(api.fetchMessages).mockResolvedValue({ messages: [] });
 }
 
-async function storedMessages(alice: Alice): Promise<{ text: string; tmrExpiresAt?: number }[]> {
-  const out: { text: string; tmrExpiresAt?: number }[] = [];
+interface StoredMsg {
+  text: string;
+  dir: "in" | "out";
+  tmrExpiresAt?: number;
+  mid?: string;
+}
+
+async function storedMessages(alice: Alice): Promise<StoredMsg[]> {
+  const out: StoredMsg[] = [];
   for (const key of await alice.store.listKeys("msg/")) {
-    const rec = await alice.store.getJson<{ text: string; tmrExpiresAt?: number }>(key);
+    const rec = await alice.store.getJson<StoredMsg>(key);
     if (rec !== null) {
       out.push(rec);
     }
@@ -327,5 +369,246 @@ describe("local purge (§5.3)", () => {
     alice.clock.now += 2 * HOUR_MS;
     await run(alice, "/purge set 1h");
     expect((await storedMessages(alice)).some((m) => m.text === "old")).toBe(false);
+  });
+});
+
+describe("/delete own messages, bilateral (§5.3a)", () => {
+  // Set up Alice with a live session to bob, kept in ratchet sync (bob decodes
+  // each of Alice's sends), plus one incoming message from bob so we can prove
+  // it survives deletion of Alice's own messages.
+  async function withHistory(): Promise<{ alice: Alice; bob: Bob }> {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob");
+    await run(alice, "first"); // KX first message (out)
+    bobReceiveKx(bob, sent[0] as Uint8Array);
+    alice.clock.now += 1000; // distinct msg/<uid>/<ts> keys
+    await run(alice, "second");
+    bobReceive(bob, sent[1] as Uint8Array);
+    alice.clock.now += 1000;
+    await run(alice, "third");
+    bobReceive(bob, sent[2] as Uint8Array);
+    // One incoming message from bob so we can prove it survives deletion.
+    alice.clock.now += 1000;
+    await deliverToAlice(alice, bobSend(bob, "from-bob", 0));
+    return { alice, bob };
+  }
+
+  it("/delete last removes only your newest outgoing message", async () => {
+    const { alice } = await withHistory();
+    await run(alice, "/delete last");
+    const texts = (await storedMessages(alice)).map((m) => m.text).sort();
+    expect(texts).toEqual(["first", "from-bob", "second"]);
+    expect(alice.output.text()).toContain("deleted 1 of your message(s) with bob");
+  });
+
+  it("/delete N removes your newest N outgoing messages, leaving incoming intact", async () => {
+    const { alice } = await withHistory();
+    await run(alice, "/delete 2");
+    const remaining = await storedMessages(alice);
+    expect(remaining.filter((m) => m.dir === "out").map((m) => m.text)).toEqual(["first"]);
+    expect(remaining.some((m) => m.text === "from-bob")).toBe(true);
+  });
+
+  it("/delete all removes every outgoing message in the conversation only", async () => {
+    const { alice } = await withHistory();
+    await run(alice, "/delete all");
+    const remaining = await storedMessages(alice);
+    expect(remaining.every((m) => m.dir === "in")).toBe(true);
+    expect(remaining.map((m) => m.text)).toEqual(["from-bob"]);
+  });
+
+  it("/delete purge removes your outgoing messages across all conversations", async () => {
+    const { alice } = await withHistory();
+    // A second contact with its own outgoing message.
+    const carol = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(carol.bundle);
+    await run(alice, `/add ${carol.uid} carol`);
+    await run(alice, "/chat carol");
+    alice.clock.now += 1000;
+    await run(alice, "hey-carol");
+
+    await run(alice, "/delete purge");
+    const remaining = await storedMessages(alice);
+    expect(remaining.every((m) => m.dir === "in")).toBe(true);
+    expect(remaining.map((m) => m.text)).toEqual(["from-bob"]);
+  });
+
+  it("/delete last /s deletes silently with no confirmation line", async () => {
+    const { alice } = await withHistory();
+    const before = alice.output.lines.length;
+    await run(alice, "/delete last /s");
+    expect(alice.output.lines.length).toBe(before); // no output emitted
+    expect((await storedMessages(alice)).some((m) => m.text === "third")).toBe(false);
+  });
+
+  it("pushes a delete directive naming the same message id to the peer", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob");
+    await run(alice, "first");
+    bobReceiveKx(bob, sent[0] as Uint8Array);
+    alice.clock.now += 1000;
+    await run(alice, "second");
+    bobReceive(bob, sent[1] as Uint8Array);
+    const midSecond = (await storedMessages(alice)).find((m) => m.text === "second")?.mid;
+    expect(midSecond).toBeDefined();
+
+    await run(alice, "/delete last");
+    // The latest thing on the wire is the delete-control message.
+    const control = bobReceive(bob, sent[sent.length - 1] as Uint8Array);
+    expect(control.text).toBeNull();
+    expect(control.del).toEqual([midSecond]);
+    expect(control.ds).toBe(false);
+    expect((await storedMessages(alice)).some((m) => m.text === "second")).toBe(false);
+  });
+
+  it("removes a peer's messages when they send a delete directive, and announces it", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob");
+    await run(alice, "first");
+    bobReceiveKx(bob, sent[0] as Uint8Array);
+
+    await deliverToAlice(alice, bobSend(bob, "keeper", 0, "mid-keep"));
+    alice.clock.now += 1000;
+    await deliverToAlice(alice, bobSend(bob, "gone", 0, "mid-gone"));
+    expect(
+      (await storedMessages(alice)).filter((m) => m.dir === "in").map((m) => m.text).sort(),
+    ).toEqual(["gone", "keeper"]);
+
+    await deliverToAlice(alice, bobSendDelete(bob, ["mid-gone"], false));
+    const remaining = await storedMessages(alice);
+    expect(remaining.some((m) => m.text === "gone")).toBe(false);
+    expect(remaining.some((m) => m.text === "keeper")).toBe(true);
+    expect(alice.output.text()).toContain("bob deleted 1 message");
+  });
+
+  it("honors a silent peer delete without any notice", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob");
+    await run(alice, "first");
+    bobReceiveKx(bob, sent[0] as Uint8Array);
+    await deliverToAlice(alice, bobSend(bob, "quiet", 0, "mid-quiet"));
+
+    await deliverToAlice(alice, bobSendDelete(bob, ["mid-quiet"], true));
+    expect((await storedMessages(alice)).some((m) => m.text === "quiet")).toBe(false);
+    expect(alice.output.text()).not.toContain("deleted");
+  });
+});
+
+describe("focused chat view & /home (§1.5)", () => {
+  it("/chat switches into a focused conversation view with a header", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob");
+    expect(alice.output.text()).toContain("conversation with bob");
+  });
+
+  it("/contacts lists saved contacts with their UIDs and trust", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    const carol = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, `/add ${carol.uid} carol`);
+
+    await run(alice, "/contacts");
+    const text = alice.output.text();
+    expect(text).toContain("contacts (2)");
+    expect(text).toContain("bob");
+    expect(text).toContain(formatUid(bob.uid));
+    expect(text).toContain(formatUid(carol.uid));
+    expect(text).toContain("UNVERIFIED");
+  });
+
+  it("/contacts reports an empty list before any contact is added", async () => {
+    const alice = await bootstrapAlice();
+    await run(alice, "/contacts");
+    expect(alice.output.text()).toContain("no contacts yet");
+  });
+
+  it("/return toggles between the last two screens and names where it went", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob"); // home -> chat bob (previous = home)
+    await run(alice, "/home"); // chat bob -> home (previous = chat bob)
+
+    let before = alice.output.lines.length;
+    await run(alice, "/return"); // back to the bob conversation
+    let out = alice.output.lines.slice(before).join("\n");
+    expect(out).toContain("returned to the conversation with bob");
+    expect(out).toContain("conversation with bob"); // the focused view was rebuilt
+
+    before = alice.output.lines.length;
+    await run(alice, "/return"); // toggle forward to home again
+    out = alice.output.lines.slice(before).join("\n");
+    expect(out).toContain("returned to home");
+  });
+
+  it("/return reports when there is no previous screen", async () => {
+    const alice = await bootstrapAlice();
+    await run(alice, "/return");
+    expect(alice.output.text()).toContain("no previous screen");
+  });
+
+  it("/home renders the contacts dashboard", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/home");
+    const after = alice.output.text();
+    expect(after).toContain("home");
+    expect(after).toContain("bob");
+  });
+
+  it("holds an off-screen message, surfaces it as unread on /home, and shows it on /chat", async () => {
+    const alice = await bootstrapAlice();
+    const bob = makeBob();
+    const carol = makeBob();
+
+    // Establish a live session bob<->alice (Alice sends the KX first message).
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await run(alice, `/add ${bob.uid} bob`);
+    await run(alice, "/chat bob");
+    await run(alice, "hi bob");
+    bobReceiveKx(bob, sent[0] as Uint8Array);
+
+    // Focus a different contact.
+    vi.mocked(api.fetchBundle).mockResolvedValue(carol.bundle);
+    await run(alice, `/add ${carol.uid} carol`);
+    await run(alice, "/chat carol");
+    const before = alice.output.lines.length;
+
+    // Bob messages Alice while she is focused on carol: stored, but not appended
+    // to the carol-focused transcript.
+    await deliverToAlice(alice, bobSend(bob, "psst-offscreen", 0, "mid-off"));
+    expect((await storedMessages(alice)).some((m) => m.text === "psst-offscreen")).toBe(true);
+    expect(alice.output.lines.slice(before).join("\n")).not.toContain("psst-offscreen");
+
+    // The home dashboard surfaces it as unread.
+    await run(alice, "/home");
+    expect(alice.output.text()).toContain("1 unread");
+
+    // Opening bob's conversation shows the held message and clears the unread mark.
+    await run(alice, "/chat bob");
+    expect(alice.output.text()).toContain("psst-offscreen");
+    const afterOpen = alice.output.lines.length;
+    await run(alice, "/home");
+    expect(alice.output.lines.slice(afterOpen).join("\n")).not.toContain("unread");
   });
 });

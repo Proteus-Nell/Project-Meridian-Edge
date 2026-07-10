@@ -123,6 +123,12 @@ function bundleFor(peer: Peer): api.WireBundle {
   };
 }
 
+/** Switch to strict manual verification (trust-on-first-use is the default). */
+async function manualTrust(executor: Executor): Promise<void> {
+  executor.handle(parseLine("/settings trust manual"));
+  await executor.idle();
+}
+
 beforeEach(() => {
   vi.mocked(api.register).mockReset();
   vi.mocked(api.loginChallenge).mockReset();
@@ -189,6 +195,7 @@ describe("/verify and /verified", () => {
 describe("key-change teardown", () => {
   it("detects a changed identity key during /verify, blocks, and requires /ack", async () => {
     const { executor, output } = await bootstrap();
+    await manualTrust(executor); // strict flow: key change blocks until /ack
     const peerA = makePeer();
     const peerB = makePeer(); // stands in for a rotated/attacker key
 
@@ -230,6 +237,7 @@ describe("key-change teardown", () => {
 
   it("blocks sending while a key change is unacknowledged", async () => {
     const { executor, output } = await bootstrap();
+    await manualTrust(executor); // strict flow
     const peerA = makePeer();
     const peerB = makePeer();
 
@@ -270,5 +278,47 @@ describe("key-change teardown", () => {
     executor.handle(parseLine("/ack bob"));
     await executor.idle();
     expect(output.text()).toContain("nothing to acknowledge");
+  });
+});
+
+describe("trust-on-first-use (default, /settings trust auto)", () => {
+  it("auto-verifies a new contact's first key without /verified", async () => {
+    const { executor, output } = await bootstrap();
+    const peer = makePeer();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bundleFor(peer));
+
+    executor.handle(parseLine(`/add ${peer.uid} bob`));
+    await executor.idle();
+    // /verify pins the key; auto-trust marks it verified on the spot.
+    executor.handle(parseLine("/verify bob"));
+    await executor.idle();
+    executor.handle(parseLine("/chat bob"));
+    expect(output.text()).toContain("(verified)");
+  });
+
+  it("auto-accepts a key change without blocking, dropping to UNVERIFIED", async () => {
+    const { executor, output } = await bootstrap();
+    const peerA = makePeer();
+    const peerB = makePeer();
+
+    vi.mocked(api.fetchBundle).mockResolvedValueOnce(bundleFor(peerA));
+    executor.handle(parseLine(`/add ${peerA.uid} bob`));
+    await executor.idle();
+    executor.handle(parseLine("/verify bob"));
+    await executor.idle();
+
+    // Server swaps in a different key; auto-trust re-pins and lets the send go
+    // through on the new key rather than blocking on /ack.
+    vi.mocked(api.fetchBundle).mockResolvedValueOnce(bundleFor(peerB));
+    vi.mocked(api.sendMessage).mockResolvedValue(undefined);
+    executor.handle(parseLine("/chat bob"));
+    executor.handle(parseLine("hello bob"));
+    await executor.idle();
+    expect(output.text()).toContain("IDENTITY KEY CHANGED");
+    expect(output.text()).toContain("auto-accepted");
+    expect(api.sendMessage).toHaveBeenCalledTimes(1);
+
+    executor.handle(parseLine("/chat bob"));
+    expect(output.text()).toContain("(UNVERIFIED)");
   });
 });

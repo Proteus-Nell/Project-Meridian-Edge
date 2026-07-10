@@ -2,11 +2,22 @@ import { describe, expect, it } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 
 import { KeyStore, StoreLockedError } from "../src/crypto/store";
-import type { Argon2Params } from "../src/crypto/store";
+import type { Argon2Params, ThemePrefs } from "../src/crypto/store";
 
 // Weak parameters for test speed; production params are the section-0
 // constants and are stored beside the ciphertext either way.
 const FAST: Argon2Params = { mKib: 64, t: 1, p: 1 };
+
+const ALL_OFF: ThemePrefs = { emblem: false, scanlines: false, vignette: false, dock: false };
+
+/** Baseline prefs record for tests that only care about one field. */
+const BASE = {
+  secretMask: "asterisk",
+  theme: { emblem: true, scanlines: true, vignette: true, dock: true },
+  scheme: "dark",
+  emblemGlyph: "pq",
+  colorOverrides: {},
+} as const;
 
 function freshStore(factory = new IDBFactory()): { store: KeyStore; factory: IDBFactory } {
   return { store: new KeyStore("pqterm-test", factory), factory };
@@ -120,7 +131,7 @@ describe("KeyStore", () => {
     const first = new KeyStore("pqterm-test", factory);
     // Default before anything is written.
     expect((await first.getDisplayPrefs()).secretMask).toBe("asterisk");
-    await first.setDisplayPrefs({ secretMask: "hidden" });
+    await first.setDisplayPrefs({ ...BASE, secretMask: "hidden", theme: ALL_OFF });
 
     // A fresh instance (reload) reads it back WITHOUT unlocking - the point
     // is the first login prompt honors it.
@@ -129,12 +140,80 @@ describe("KeyStore", () => {
     expect((await second.getDisplayPrefs()).secretMask).toBe("hidden");
   });
 
+  it("round-trips the theme block and defaults it to all-on", async () => {
+    const factory = new IDBFactory();
+    const store = new KeyStore("pqterm-test", factory);
+    // Nothing written yet: every layer defaults on.
+    expect((await store.getDisplayPrefs()).theme).toEqual({
+      emblem: true,
+      scanlines: true,
+      vignette: true,
+      dock: true,
+    });
+    await store.setDisplayPrefs({
+      ...BASE,
+      theme: { emblem: false, scanlines: true, vignette: false, dock: true },
+    });
+    const reread = new KeyStore("pqterm-test", factory);
+    expect((await reread.getDisplayPrefs()).theme).toEqual({
+      emblem: false,
+      scanlines: true,
+      vignette: false,
+      dock: true,
+    });
+  });
+
+  it("legacy prefs without a theme block degrade to all-on defaults", async () => {
+    const factory = new IDBFactory();
+    const store = new KeyStore("pqterm-test", factory);
+    // Simulate a record written by the pre-theme client: mask only.
+    await store.setDisplayPrefs({ secretMask: "hidden" } as unknown as Parameters<
+      typeof store.setDisplayPrefs
+    >[0]);
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.secretMask).toBe("hidden");
+    expect(prefs.theme).toEqual({ emblem: true, scanlines: true, vignette: true, dock: true });
+  });
+
   it("keeps display prefs out of vault key listings", async () => {
     const { store } = freshStore();
     await store.create("correct horse battery", FAST);
-    await store.setDisplayPrefs({ secretMask: "hidden" });
+    await store.setDisplayPrefs({ ...BASE, secretMask: "hidden", theme: ALL_OFF });
     await store.putJson("spk/1", { a: 1 });
     expect(await store.listKeys("")).toEqual(["spk/1"]);
+  });
+
+  it("round-trips scheme, emblem glyph, and color overrides; legacy defaults apply", async () => {
+    const factory = new IDBFactory();
+    const store = new KeyStore("pqterm-test", factory);
+    // Nothing written: defaults.
+    const defaults = await store.getDisplayPrefs();
+    expect(defaults.scheme).toBe("dark");
+    expect(defaults.emblemGlyph).toBe("pq");
+    expect(defaults.colorOverrides).toEqual({});
+
+    await store.setDisplayPrefs({
+      ...BASE,
+      scheme: "parchment",
+      emblemGlyph: "globe",
+      colorOverrides: { accent: "#112233" },
+    });
+    const reread = await new KeyStore("pqterm-test", factory).getDisplayPrefs();
+    expect(reread.scheme).toBe("parchment");
+    expect(reread.emblemGlyph).toBe("globe");
+    expect(reread.colorOverrides).toEqual({ accent: "#112233" });
+
+    // Tampered/legacy values degrade to defaults rather than poisoning the UI.
+    await store.setDisplayPrefs({
+      ...BASE,
+      scheme: "neon",
+      emblemGlyph: "skull",
+      colorOverrides: { accent: "not-a-color", background: "#abcdef", bogus: "#000000" },
+    } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
+    const cleaned = await store.getDisplayPrefs();
+    expect(cleaned.scheme).toBe("dark");
+    expect(cleaned.emblemGlyph).toBe("pq");
+    expect(cleaned.colorOverrides).toEqual({ background: "#abcdef" });
   });
 
   it("lists and deletes prefixed keys", async () => {

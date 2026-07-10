@@ -3,12 +3,93 @@
   <head>
     <meta charset="utf-8" />
     <!-- Production CSP is set by the reverse proxy (CLAUDE.md §5); no inline
-         script/style may ever be added to this file. -->
+         script/style may ever be added to this file. Only structural elements
+         and class names live here — all behaviour is in the bundled module. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <title>PQTerm</title>
   </head>
   <body>
-    <div id="terminal"></div>
+    <!-- App shell: a scrolling transcript above a fixed footer that holds the
+         status strip and the bottom-pinned command line. The autosuggest dropdown
+         floats above the command line. Terminals mount into #transcript and
+         #command-line at runtime; ticks are xterm decorations inside #transcript. -->
+    <div id="app">
+      <div id="transcript-pane">
+        <!-- Background emblem medallion: decorative, spins around its vertical
+             axis via CSS (rotateY + perspective). Static app-generated markup —
+             never touched by untrusted content. States: paused when idle,
+             slow spin while a session is live (body.is-playing), fast spin +
+             pulse ring while a security event or contact request awaits
+             acknowledgement (body.is-tx). Toggled by /settings theme emblem. -->
+        <div class="medallion" aria-hidden="true">
+          <svg class="emblem-svg" viewBox="0 0 140 140">
+            <!-- Shared framing: solid ring + dashed inner ring. The inner glyph
+                 is selectable via /settings emblem (body.em-pq/em-globe/em-tree). -->
+            <circle cx="70" cy="70" r="64" fill="none" stroke="var(--emblem)" stroke-width="2.2"/>
+            <circle cx="70" cy="70" r="57" fill="none" stroke="var(--emblem-dim)" stroke-width="1" stroke-dasharray="2 5"/>
+            <g class="glyph glyph-pq">
+              <text x="70" y="84" font-family="'Cascadia Mono', 'Fira Mono', Menlo, Consolas, monospace" font-size="44" font-weight="700" fill="var(--emblem)" text-anchor="middle">PQ</text>
+              <g fill="var(--emblem)">
+                <circle cx="70" cy="30" r="3"/>
+              </g>
+              <g stroke="var(--emblem)" fill="none" stroke-linecap="round">
+                <path d="M48 104 Q70 114 92 104" stroke-width="2.2"/>
+                <path d="M58 106 Q62 111 58 115" stroke-width="1.6"/>
+                <path d="M82 106 Q78 111 82 115" stroke-width="1.6"/>
+                <path d="M70 106 L70 116" stroke-width="1.6"/>
+              </g>
+            </g>
+            <g class="glyph glyph-globe" stroke="var(--emblem)" fill="none" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="70" cy="70" r="40"/>
+              <ellipse cx="70" cy="70" rx="17" ry="40"/>
+              <ellipse cx="70" cy="70" rx="31" ry="40"/>
+              <path d="M30 70 L110 70"/>
+              <path d="M34 52 Q70 42 106 52"/>
+              <path d="M34 88 Q70 98 106 88"/>
+            </g>
+            <g class="glyph glyph-tree">
+              <g stroke="var(--emblem)" stroke-width="3" fill="none" stroke-linecap="round">
+                <path d="M70 104 L70 58"/>
+                <path d="M70 78 Q56 70 50 56"/>
+                <path d="M70 78 Q84 70 90 56"/>
+                <path d="M70 90 Q60 86 55 76"/>
+                <path d="M70 90 Q80 86 85 76"/>
+              </g>
+              <g fill="var(--emblem)">
+                <circle cx="70" cy="40" r="7"/>
+                <circle cx="56" cy="45" r="5.5"/>
+                <circle cx="84" cy="45" r="5.5"/>
+                <circle cx="47" cy="54" r="4.5"/>
+                <circle cx="93" cy="54" r="4.5"/>
+                <circle cx="61" cy="52" r="4"/>
+                <circle cx="79" cy="52" r="4"/>
+                <circle cx="52" cy="72" r="3"/>
+                <circle cx="88" cy="72" r="3"/>
+                <ellipse cx="70" cy="31" rx="3" ry="4.5"/>
+              </g>
+              <g stroke="var(--emblem)" fill="none" stroke-linecap="round">
+                <path d="M48 104 Q70 114 92 104" stroke-width="2.2"/>
+                <path d="M58 106 Q62 111 58 115" stroke-width="1.6"/>
+                <path d="M82 106 Q78 111 82 115" stroke-width="1.6"/>
+                <path d="M70 106 L70 116" stroke-width="1.6"/>
+              </g>
+            </g>
+          </svg>
+          <div class="medallion-pulse" aria-hidden="true"></div>
+        </div>
+        <div id="transcript"></div>
+      </div>
+      <div id="vignette"></div>
+      <div id="footer">
+        <div id="divider"></div>
+        <div id="status-strip">
+          <span id="status-event" class="status-event status-info"></span>
+          <span id="status-context"></span>
+        </div>
+        <div id="autosuggest"></div>
+        <div id="command-line"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

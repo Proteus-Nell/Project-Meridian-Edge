@@ -31,7 +31,9 @@ describe("message vs command discrimination", () => {
 });
 
 describe("zero-arg commands", () => {
-  it.each(["register", "login", "logout", "lock", "whoami", "wipe"] as const)(
+  it.each(
+    ["register", "login", "logout", "lock", "whoami", "home", "return", "contacts", "wipe"] as const,
+  )(
     "parses /%s",
     (name) => {
       expect(parseLine(`/${name}`)).toEqual({ kind: "command", command: { name } });
@@ -40,6 +42,7 @@ describe("zero-arg commands", () => {
 
   it("rejects extra arguments instead of guessing", () => {
     expect(parseLine("/register please").kind).toBe("invalid");
+    expect(parseLine("/home now").kind).toBe("invalid");
   });
 
   it("is case-insensitive on the command word", () => {
@@ -111,6 +114,62 @@ describe("subcommands", () => {
     expect(parseLine("/settings rotation day someday").kind).toBe("invalid");
   });
 
+  it("parses /settings theme variants and rejects bad values", () => {
+    expect(parseLine("/settings theme scanlines off")).toEqual({
+      kind: "command",
+      command: { name: "settings-theme", element: "scanlines", enabled: false },
+    });
+    expect(parseLine("/settings theme all on")).toEqual({
+      kind: "command",
+      command: { name: "settings-theme", element: "all", enabled: true },
+    });
+    expect(parseLine("/settings theme glow on").kind).toBe("invalid");
+    expect(parseLine("/settings theme emblem maybe").kind).toBe("invalid");
+    expect(parseLine("/settings theme emblem").kind).toBe("invalid");
+    expect(parseLine("/settings theme").kind).toBe("invalid");
+  });
+
+  it("parses /settings scheme, emblem, and color variants", () => {
+    expect(parseLine("/settings scheme parchment")).toEqual({
+      kind: "command",
+      command: { name: "settings-scheme", scheme: "parchment" },
+    });
+    expect(parseLine("/settings scheme neon").kind).toBe("invalid");
+    expect(parseLine("/settings emblem globe")).toEqual({
+      kind: "command",
+      command: { name: "settings-emblem", emblem: "globe" },
+    });
+    expect(parseLine("/settings emblem skull").kind).toBe("invalid");
+    expect(parseLine("/settings color accent #1A2B3C")).toEqual({
+      kind: "command",
+      command: { name: "settings-color", slot: "accent", hex: "#1a2b3c" },
+    });
+    expect(parseLine("/settings color background e3e7d3")).toEqual({
+      kind: "command",
+      command: { name: "settings-color", slot: "background", hex: "#e3e7d3" },
+    });
+    expect(parseLine("/settings color reset")).toEqual({
+      kind: "command",
+      command: { name: "settings-color-reset" },
+    });
+    expect(parseLine("/settings color accent red").kind).toBe("invalid");
+    expect(parseLine("/settings color glow #112233").kind).toBe("invalid");
+    expect(parseLine("/settings color accent").kind).toBe("invalid");
+  });
+
+  it("parses /settings trust variants and rejects bad values", () => {
+    expect(parseLine("/settings trust auto")).toEqual({
+      kind: "command",
+      command: { name: "settings-trust", mode: "auto" },
+    });
+    expect(parseLine("/settings trust manual")).toEqual({
+      kind: "command",
+      command: { name: "settings-trust", mode: "manual" },
+    });
+    expect(parseLine("/settings trust off").kind).toBe("invalid");
+    expect(parseLine("/settings trust").kind).toBe("invalid");
+  });
+
   it("parses /settings mask variants and rejects bad values", () => {
     expect(parseLine("/settings mask hidden")).toEqual({
       kind: "command",
@@ -148,6 +207,54 @@ describe("subcommands", () => {
   });
 });
 
+describe("/delete (own-message deletion)", () => {
+  it("parses last / all / purge scopes", () => {
+    expect(parseLine("/delete last")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "last" }, silent: false },
+    });
+    expect(parseLine("/delete all")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "all" }, silent: false },
+    });
+    expect(parseLine("/delete purge")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "purge" }, silent: false },
+    });
+  });
+
+  it("parses a positive count", () => {
+    expect(parseLine("/delete 5")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "count", count: 5 }, silent: false },
+    });
+  });
+
+  it("accepts a trailing /s for silent deletion on every scope", () => {
+    expect(parseLine("/delete last /s")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "last" }, silent: true },
+    });
+    expect(parseLine("/delete 3 /s")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "count", count: 3 }, silent: true },
+    });
+    expect(parseLine("/delete purge /s")).toEqual({
+      kind: "command",
+      command: { name: "delete", scope: { kind: "purge" }, silent: true },
+    });
+  });
+
+  it("rejects a missing or malformed scope", () => {
+    expect(parseLine("/delete").kind).toBe("invalid");
+    expect(parseLine("/delete 0").kind).toBe("invalid");
+    expect(parseLine("/delete -1").kind).toBe("invalid");
+    expect(parseLine("/delete everything").kind).toBe("invalid");
+    expect(parseLine("/delete last extra").kind).toBe("invalid");
+    expect(parseLine("/delete /s").kind).toBe("invalid");
+  });
+});
+
 describe("/help", () => {
   it("accepts a known topic with or without slash", () => {
     expect(parseLine("/help timer")).toEqual({
@@ -169,5 +276,74 @@ describe("uid helpers", () => {
   it("round-trips format/normalize", () => {
     expect(formatUid(UID)).toBe(UID_DASHED);
     expect(normalizeUid(UID_DASHED)).toBe(UID);
+  });
+});
+
+describe("/clr and did-you-mean suggestions", () => {
+  it("parses /clr with no arguments", () => {
+    expect(parseLine("/clr")).toEqual({ kind: "command", command: { name: "clr" } });
+  });
+
+  it("rejects /clr with arguments", () => {
+    expect(parseLine("/clr now").kind).toBe("invalid");
+  });
+
+  it("suggests the nearest command for a typo", () => {
+    const r = parseLine("/loing");
+    expect(r.kind).toBe("invalid");
+    if (r.kind === "invalid") {
+      expect(r.suggestion).toBe("/login");
+    }
+  });
+
+  it("suggests /register for a near-miss typo", () => {
+    const r = parseLine("/registr");
+    if (r.kind !== "invalid") throw new Error("expected invalid");
+    expect(r.suggestion).toBe("/register");
+  });
+
+  it("leaves suggestion undefined for far-off input", () => {
+    const r = parseLine("/zzzzzzzz now");
+    if (r.kind !== "invalid") throw new Error("expected invalid");
+    expect(r.suggestion).toBeUndefined();
+  });
+});
+
+describe("command aliases (execute the canonical command)", () => {
+  it("routes every /chat alias to chat with the same target", () => {
+    for (const alias of ["text", "msg", "message", "dm"]) {
+      expect(parseLine(`/${alias} bob`)).toEqual({
+        kind: "command",
+        command: { name: "chat", target: "bob" },
+      });
+    }
+  });
+
+  it("routes the login / register / logout / clr / return aliases", () => {
+    expect(parseLine("/signin")).toEqual({ kind: "command", command: { name: "login" } });
+    expect(parseLine("/sign-in")).toEqual({ kind: "command", command: { name: "login" } });
+    expect(parseLine("/logon")).toEqual({ kind: "command", command: { name: "login" } });
+    expect(parseLine("/signup")).toEqual({ kind: "command", command: { name: "register" } });
+    expect(parseLine("/sign-up")).toEqual({ kind: "command", command: { name: "register" } });
+    expect(parseLine("/signout")).toEqual({ kind: "command", command: { name: "logout" } });
+    expect(parseLine("/clear")).toEqual({ kind: "command", command: { name: "clr" } });
+    expect(parseLine("/cls")).toEqual({ kind: "command", command: { name: "clr" } });
+    expect(parseLine("/back")).toEqual({ kind: "command", command: { name: "return" } });
+  });
+
+  it("is case-insensitive and validates aliased args like the canonical command", () => {
+    expect(parseLine("/TEXT bob")).toEqual({
+      kind: "command",
+      command: { name: "chat", target: "bob" },
+    });
+    expect(parseLine("/text").kind).toBe("invalid"); // /chat needs a target, so /text does too
+    expect(parseLine("/back now").kind).toBe("invalid"); // zero-arg alias rejects extra args
+  });
+
+  it("resolves aliases in /help topics", () => {
+    expect(parseLine("/help text")).toEqual({
+      kind: "command",
+      command: { name: "help", topic: "chat" },
+    });
   });
 });

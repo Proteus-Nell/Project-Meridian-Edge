@@ -50,25 +50,25 @@ pqterm/
 
 ## 1. Website / Terminal UI & Commands
 
-**Goal:** one interaction surface - an xterm.js terminal. Commands in, styled text out. No forms, no buttons, no modals.
+**Goal:** a terminal-centric surface. Two xterm.js terminals — a scrolling *transcript* and a bottom-pinned *command line* — sit in a small CSS-grid DOM app-shell that also holds a status strip, an autosuggest dropdown, and right-edge delivery ticks. Commands in, styled text out. No traditional forms/buttons/modals; the DOM chrome renders only app-generated text via `textContent`/`createElement` (never markup), so untrusted content still lives exclusively in xterm text cells.
 
 **Build tasks**
 
-1. Terminal shell: xterm.js instance, fit addon, input line editing (history with up/down, Ctrl+L clear), monospace throughout.
+1. Terminal shell: two xterm.js instances (a read-only transcript + a single-row command line), a fit addon on each, input line editing (history with up/down, Ctrl+L clear, Tab completion, `/clr`), monospace throughout. A CSS-grid app-shell (`client/index.html`) pins the command line to the viewport bottom with the status strip directly above it. Autosuggest lists matching `/` commands as you type and is keyboard-navigable (↑/↓ move a highlight, Enter/Tab fill it, Esc closes, rows are click-to-fill; history recall only when the dropdown is closed — the `SuggestionNav` seam between `shell.ts` and `chrome.ts`); it continues into argument slots (`/settings ` → its subcommands, `/settings theme ` → the layers, `/keys ` → status/refill, `/delete ` → scopes, etc.) via a static per-command option grammar in `suggest.ts` that mirrors what the parser accepts, staying quiet on free-form slots (UID, alias, duration, hex); an unknown command yields a "did you mean …?" hint (synonyms + edit distance, `client/src/terminal/suggest.ts`). `/help` renders a grouped, column-aligned command reference (`client/src/terminal/help.ts`). Toggleable CSS atmosphere layers (emblem medallion, scanlines, vignette, footer dock) via `/settings theme <element|all> <on|off>`; selectable color schemes (`/settings scheme <dark|parchment|olive>` — five slots per scheme feeding CSS custom properties + both xterm themes, with per-slot HEX overrides via `/settings color <slot> <#rrggbb>` and a `reset`) and selectable medallion glyphs (`/settings emblem <pq|globe|tree>`, `client/src/terminal/theme.ts`). All persisted unencrypted in the store's display prefs so they apply before unlock. The emblem is a 3-D "engraved medallion" (static inline SVG in `index.html`, CSS `rotateY` inside a `perspective` parent, `prefers-reduced-motion` respected) whose animation state tracks the app: paused when locked/logged out, a slow 9 s spin while a session is live (`body.is-playing`), and a fast 3.2 s spin + pulse ring while an unacknowledged key-change or held contact request awaits the user (`body.is-tx`), driven by `chrome.setEmblemState` from the executor.
 2. Command parser (`src/terminal/parser.ts`):
-   - A line starting with `/` is tokenized against a **static allowlist** (a literal map of command name → arg schema). Anything else is message text for the active conversation.
+   - A line starting with `/` is tokenized against a **static allowlist** (a literal map of command name → arg schema). Anything else is message text for the active conversation. A small `COMMAND_ALIASES` map (also static, non-destructive commands only) resolves alternate spellings to their canonical command *before* the allowlist check, so `/text`, `/msg`, `/message`, `/dm` = `/chat`; `/signin`/`/sign-in`/`/logon` = `/login`; `/signup`/`/sign-up` = `/register`; `/signout`/`/sign-out` = `/logout`; `/clear`/`/cls` = `/clr`; `/back` = `/return` — arguments validate identically. The autosuggest dropdown still lists only canonical names; `/help` prints the alias summary (generated from the map).
    - A leading space escapes a literal `/` at message start.
    - Arg types are validated client-side (UID = Crockford Base32, 26 chars; durations = `^\d+(m|h|d|w)$|^off$`); reject with usage help, never guess.
    - No dynamic dispatch from user input; the parser returns a typed discriminated union consumed by a `switch`.
-3. Renderer: output lines are typed events - `[✓]` success, `[!]` warning, `[✗]` failure, `[*]` info - each timestamped, written as plain text (xterm.js `write` with ANSI colors; no HTML path exists).
+3. Renderer: output lines are typed events - `[✓]` success, `[!]` warning, `[✗]` failure, `[*]` info - each timestamped, written as plain text into the transcript terminal (xterm.js `write` with ANSI colors; content never becomes markup). Incoming conversation lines render via `peerMessage` (bright-cyan alias label, both fields sanitized); echoed outgoing *messages* are brighter than echoed *commands*. The latest event is also mirrored into the DOM status strip with its glyph + timestamp (sanitized text via `textContent`) and fades to dim after ~6 s so stale statuses don't read as current (security events never fade). A successful message send raises a right-edge `✓` tick (an xterm decoration pinned to the echoed line) plus a status-strip update, instead of a per-message `[✓] sent to X` transcript line.
 4. Security-critical events (identity key change, signature verification failure, SPK rotation failure) use a distinct high-visibility style and **block the affected conversation** until acknowledged with `/ack <alias>`.
-5. Active-conversation model: `/chat` sets the target; a persistent status line shows `[chatting with: alias (verified|UNVERIFIED)] [timer: 1d] [locked in Xm]`.
+5. Active-conversation model: `/chat` sets the target; a persistent status-strip segment (right-aligned, never fades) shows `[chatting with: alias (verified|UNVERIFIED)] [timer: 1d]`, kept in sync by the executor's `refreshChatContext()` on every trust/timer/key-change/login mutation. (The spec's `[locked in Xm]` countdown remains unimplemented.) **Focused view / home:** `/chat` switches the transcript to a *focused conversation view* — it clears the screen and reprints only that conversation's stored history (oldest first, `renderActiveConversation()`), hiding everything else; `/home` returns to a *home dashboard* (`renderHome()`) listing every contact with trust/unread/timer/key-change state and any held contact requests. `/return` (`returnToPreviousView()`, tracked via `previousView: ViewRef`) toggles back to the screen shown before the current one — the two swap each call, like a back/forward button — and names where it went (`returned to home` / `returned to the conversation with <alias>`), falling back to home if the remembered conversation's contact is gone. A message that arrives for a conversation you are **not** focused on is stored but not appended to the transcript — it bumps an in-memory per-uid unread mark (shown on `/home`, cleared when you `/chat` that contact) and posts a status-strip notice, so the focused view stays uncluttered. View rebuilds run on a dedicated render lane (`enqueueRender`, separate from the command `tail`) so a redraw scheduled by `/chat` never trips the `busy` guard for a message typed right after; `idle()` drains both lanes.
 6. Responsive layout so mobile browsers are usable (terminal fills viewport; software keyboard does not cover the input line).
 7. Optional (Could-have): browser toast notifications for background events, permission requested only on first `/settings notify on`.
 
-**Commands owned by this segment:** `/help [command]`, `/chat <alias|uid>`, `/add <uid> [alias]`, `/whoami`, `/ack <alias>`, `/settings notify <on|off>`.
+**Commands owned by this segment:** `/help [command]`, `/chat <alias|uid>`, `/home`, `/return`, `/contacts`, `/add <uid> [alias]`, `/whoami`, `/ack <alias>`, `/clr`, `/settings notify <on|off>`.
 
-**Definition of done:** parser has a fuzz test (random bytes + mutated valid commands never throw uncaught, never execute unlisted commands); no `innerHTML` anywhere (CI grep); all output paths go through the typed renderer.
+**Definition of done:** parser has a fuzz test (random bytes + mutated valid commands never throw uncaught, never execute unlisted commands); no `innerHTML`/markup sinks anywhere (CI grep, `scripts/audit.py`); all *content* (messages, peer text, server strings) flows through the sanitizing typed renderer into xterm text cells, and the DOM chrome (status strip, autosuggest, ticks) renders only app-generated text via `textContent`.
 
 ---
 
@@ -130,6 +130,7 @@ pqterm/
 
 5. **Safety number:** `SN = SHA-512(min(IK_A,IK_B) ‖ max(IK_A,IK_B) ‖ UID_A ‖ UID_B)` → 60 decimal digits in 12 groups. `/verify <alias>` prints it (and a QR as Could-have).
 6. `/verified <alias>` sets the flag locally. Any subsequent identity-key change: tear down session, block sending, show high-visibility warning, require `/verify` + `/verified` again. Unverified conversations show `UNVERIFIED` in the status line permanently.
+6a. **Trust-on-first-use mode (`/settings trust <auto|manual>`, default `auto`, `settings/trust` in the encrypted store):** a usability/security trade-off, chosen by the product owner over the strict default in §6 above. When **auto** (default), the first identity key seen for a contact is auto-pinned and auto-marked **verified** (no `/verify`/`/verified` needed), and a later key change is auto-re-pinned with the session torn down, dropped to **UNVERIFIED**, and a loud `[SECURITY]` warning — but **not blocked**, so `/ack` is unnecessary. When **manual**, the strict §6 behavior applies: verify by hand and a key change blocks until `/ack` then re-verify. Honest limitation: auto mode trusts the server not to swap keys at first contact and only warns (rather than blocks) on a change, so it weakens MITM detection; it is surfaced plainly in the command output and `/help`. The key-substitution defence and the blocking/`/ack` path still exist and are tested under `manual`.
 
 **Definition of done:** FS test (dump full ratchet state, prove previously captured ciphertexts still undecryptable); PCS test (leak state, continue conversation, prove attacker copy loses decrypt ability within one full round-trip); out-of-order test (deliver messages 3,1,2 - all decrypt, skipped-key bound enforced); key-substitution test (server swaps IK_B - client refuses to send and warns).
 
@@ -141,7 +142,8 @@ pqterm/
 
 1. **Server queue:** ciphertext blobs in per-recipient queue; delete-on-ack (same transaction as delivery confirmation); TTL 14 days via scheduled job; queue table excluded from any backup tooling; no delivered-message archive of any kind.
 2. **Mutual disappearing timer:** `/timer <alias> <duration|off>` - carried in encrypted headers, applies to both sides, every change announced as an inline system line in both terminals, countdown starts on read. Default: off.
-3. **Local purge:** `/purge set <duration|off>` (personal retention cap, never transmitted, may be stricter than the mutual timer), `/purge now [alias]` (immediate local deletion).
+3. **Local purge:** `/purge set <duration|off>` (personal retention cap, never transmitted, may be stricter than the mutual timer), `/purge now [alias]` (immediate local deletion, both directions).
+3a. **Cooperative message deletion (`/delete`):** delete *your own* (outgoing) messages on **both sides**. `/delete last` (newest), `/delete <N>` (newest N), `/delete all` (whole active conversation), `/delete purge` (every conversation). Each outgoing message carries a random 128-bit shared id (`mid`) in the encrypted payload; deletion removes the local copy and, where a live session exists, pushes a delete directive naming those ids over the ratchet so the peer's copy is removed too (matched by `mid`, incoming-only — a peer can only be asked to drop messages that peer received from you). A trailing `/s` makes it silent: no confirmation locally and no inline notice on the peer's end (otherwise the peer sees `[alias] deleted N message(s)`). Messages with no live session (or a key-change block) are removed locally but cannot be signalled — reported honestly. This is **cooperative, not forensic**: it relies on the peer's client honoring the request, the peer may already hold copies or screenshots, and browser deletion is not forensic erasure (§5.4, §7.12). **Screen consistency:** a non-silent delete redraws the focused conversation view (`renderActiveConversation()`) so the removed lines actually disappear rather than lingering in an append-only log — this reads cleanly precisely because `/chat` is a focused view (§1.5). Storage integrity: `recordMessage` disambiguates same-millisecond `msg/<uid>/<ts>` keys with a sub-index so no message is silently overwritten (which would leave `/delete` unable to remove it and history incomplete).
 4. UI help and docs state plainly: peer deletion is cooperative; screenshots exist; browser deletion is not forensic erasure.
 
 **Transport & platform hardening checklist**
@@ -157,7 +159,7 @@ pqterm/
 - [ ] CORS: exact origin only, no wildcard, credentials disabled (token is not a cookie).
 - [ ] CI gates: `npm audit --audit-level=high`, `pip-audit`, the classical-crypto grep (§7.9), parser fuzz test, and full test suite - all blocking.
 
-**Commands owned by this segment:** `/timer <alias> <duration|off>`, `/purge set <duration|off>`, `/purge now [alias]`.
+**Commands owned by this segment:** `/timer <alias> <duration|off>`, `/purge set <duration|off>`, `/purge now [alias]`, `/delete <last|N|all|purge> [/s]`.
 
 **Definition of done:** Mozilla Observatory (or equivalent header scan) grade A; rate-limit tests pass; a captured queue row disappears on ack in the same transaction; TTL job evicts correctly; timers fire on both simulated clients.
 
@@ -173,21 +175,31 @@ pqterm/
 | `/lock` | - | 2 | Immediate local lock |
 | `/whoami` | - | 1 | Own UID + identity-key fingerprint |
 | `/add` | `<uid> [alias]` | 1 | Alias is local-only |
-| `/chat` | `<alias\|uid>` | 1 | Sets active conversation |
+| `/contacts` | - | 1 | List saved contacts with their UIDs + trust state, and any pending request UIDs |
+| `/chat` | `<alias\|uid>` | 1 | Sets active conversation and switches to its focused view (hides everything else, retained) |
+| `/home` | - | 1 | Returns to the home dashboard of all conversations (unread marks, requests) |
+| `/return` | - | 1 | Toggles back to the previous screen (home ⇆ a conversation), naming where it went |
 | `/verify` | `<alias>` | 4 | Prints safety number |
 | `/verified` | `<alias>` | 4 | Marks contact verified (local flag) |
 | `/ack` | `<alias>` | 1 | Acknowledges a blocking security warning |
 | `/timer` | `<alias> <1h\|1d\|1w\|off>` | 5 | Mutual disappearing timer |
 | `/purge set` | `<duration\|off>` | 5 | Local retention cap |
-| `/purge now` | `[alias]` | 5 | Immediate local deletion |
+| `/purge now` | `[alias]` | 5 | Immediate local deletion (both directions) |
+| `/delete` | `<last\|N\|all\|purge> [/s]` | 5 | Delete your own (outgoing) messages on both sides: `last`, newest `N`, `all` in the active chat, or `purge` across every chat; `/s` = silent (no confirmation, no peer notice). Cooperative, not forensic |
 | `/rotate passphrase` | - | 2 | Re-wraps DEK locally |
 | `/settings rotation` | `<on\|off\|day <weekday>>` | 2 | Weekly rotation prompt config |
 | `/settings notify` | `<on\|off>` | 1 | Toast notifications (Could-have) |
 | `/settings mask` | `<asterisk\|hidden>` | 2 | Passphrase echo style (persisted, unencrypted, pre-unlock) |
+| `/settings trust` | `<auto\|manual>` | 4 | Trust-on-first-use (default auto: auto-verify + auto-accept key changes with a warning) vs. strict manual verify + `/ack` (§4.6a) |
+| `/settings theme` | `<emblem\|scanlines\|vignette\|dock\|all> <on\|off>` | 1 | Toggle visual atmosphere layers (persisted, unencrypted, pre-unlock) |
+| `/settings scheme` | `<dark\|parchment\|olive>` | 1 | Base color scheme — 5 slots (accent/background/panel/text/muted) feeding CSS vars + both xterm themes |
+| `/settings emblem` | `<pq\|globe\|tree>` | 1 | Medallion glyph (ring framing shared across all three) |
+| `/settings color` | `<slot> <#rrggbb>` \| `reset` | 1 | Per-slot HEX override on the active scheme (terminal-native color picker); reset clears all |
 | `/keys status` | - | 2 | SPK age, OPK count |
 | `/keys refill` | - | 2 | Manual OPK replenishment |
 | `/bench` | `[suite]` | bench | Runs benchmark suites B1-B5 |
 | `/wipe` | - | 2 | Panic-destroy local store (double confirm) |
+| `/clr` | - | 1 | Clear the transcript screen (also Ctrl+L) |
 | `/help` | `[command]` | 1 | Usage |
 
 ---
