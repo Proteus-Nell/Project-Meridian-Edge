@@ -361,7 +361,18 @@ export class Executor {
       case "invalid": {
         this.renderer.event("failure", result.error);
         if (result.usage !== undefined) {
-          this.renderer.plain(`    usage: ${result.usage}`);
+          // A usage string may enumerate several forms joined by "  |  " (e.g.
+          // /settings). Dumping them on one line is unreadable, so split and
+          // print one form per line; single-form usages stay inline.
+          const forms = result.usage.split("  |  ");
+          if (forms.length > 1) {
+            this.renderer.plain("    usage:");
+            for (const form of forms) {
+              this.renderer.plain(`      ${form}`);
+            }
+          } else {
+            this.renderer.plain(`    usage: ${result.usage}`);
+          }
         }
         if (result.suggestion !== undefined) {
           this.renderer.event("info", `did you mean ${result.suggestion}?`);
@@ -1374,9 +1385,12 @@ export class Executor {
     unreachable -= signalled;
 
     // Rebuild the on-screen conversation so the deleted lines actually vanish
-    // from view (not just from storage). Skipped when silent — a discreet delete
-    // leaves no visible trace, including no screen redraw.
-    if (!silent && this.active !== null) {
+    // from view (not just from storage). This runs even for a silent delete:
+    // "silent" suppresses the local confirmation line and the peer-side notice
+    // (§5.3a), but your OWN deleted messages must still disappear from your OWN
+    // screen — leaving them visible is exactly the "didn't delete" symptom. The
+    // append-only transcript can only drop a line by clearing and reprinting.
+    if (this.active !== null) {
       await this.renderActiveConversation();
     }
 
@@ -1553,12 +1567,17 @@ export class Executor {
         removed += 1;
       }
     }
+    // Redraw the conversation so the removed lines actually disappear from view.
+    // This runs even for a SILENT request: `/s` suppresses the inline notice
+    // below (§5.3a), not the screen's agreement with storage. Skipping it left
+    // the peer's transcript showing messages that were already gone from the
+    // store — the "delete /s didn't delete for the recipient" symptom, which
+    // only showed up when the peer happened to be focused on that conversation.
+    if (removed > 0 && this.isActiveConversation(uid)) {
+      await this.renderActiveConversation();
+    }
     if (!silent && removed > 0) {
-      // Redraw the conversation first (so the deleted lines disappear from view),
-      // then note who deleted them just below the rebuilt history.
-      if (this.isActiveConversation(uid)) {
-        await this.renderActiveConversation();
-      }
+      // Note who deleted them, just below the rebuilt history.
       this.renderer.event(
         "info",
         `${label} deleted ${removed} message(s) they had sent - removed from your history`,

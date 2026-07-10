@@ -21,7 +21,13 @@
              slow spin while a session is live (body.is-playing), fast spin +
              pulse ring while a security event or contact request awaits
              acknowledgement (body.is-tx). Toggled by /settings theme emblem. -->
-        <div class="medallion" aria-hidden="true">
+        <!-- `hidden` keeps the raw SVG out of the very first paint: the UA
+             stylesheet's [hidden]{display:none} applies before our style.css
+             loads (in dev, Vite injects the CSS via JS a frame late), so the
+             unstyled medallion can't flash at intrinsic size. Once the sheet
+             loads, `body.th-emblem .medallion { display: block }` wins on
+             specificity and shows it normally. CSP forbids an inline style. -->
+        <div class="medallion" aria-hidden="true" hidden>
           <svg class="emblem-svg" viewBox="0 0 140 140">
             <!-- Shared framing: solid ring + dashed inner ring. The inner glyph
                  is selectable via /settings emblem (body.em-globe/em-tree). -->

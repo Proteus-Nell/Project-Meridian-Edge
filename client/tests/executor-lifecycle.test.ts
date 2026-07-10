@@ -436,12 +436,15 @@ describe("/delete own messages, bilateral (§5.3a)", () => {
     expect(remaining.map((m) => m.text)).toEqual(["from-bob"]);
   });
 
-  it("/delete last /s deletes silently with no confirmation line", async () => {
+  it("/delete last /s deletes silently: no confirmation line, but the view still redraws", async () => {
     const { alice } = await withHistory();
-    const before = alice.output.lines.length;
     await run(alice, "/delete last /s");
-    expect(alice.output.lines.length).toBe(before); // no output emitted
+    // The message is gone from storage...
     expect((await storedMessages(alice)).some((m) => m.text === "third")).toBe(false);
+    // ...with no "deleted N message(s)" confirmation printed (that is what /s
+    // suppresses). The screen is still redrawn so your own deleted line actually
+    // disappears from view rather than lingering in the append-only transcript.
+    expect(alice.output.text()).not.toContain("deleted 1 of your message");
   });
 
   it("pushes a delete directive naming the same message id to the peer", async () => {
@@ -500,9 +503,18 @@ describe("/delete own messages, bilateral (§5.3a)", () => {
     bobReceiveKx(bob, sent[0] as Uint8Array);
     await deliverToAlice(alice, bobSend(bob, "quiet", 0, "mid-quiet"));
 
+    const before = alice.output.lines.length;
     await deliverToAlice(alice, bobSendDelete(bob, ["mid-quiet"], true));
+    const emitted = alice.output.lines.slice(before).join("\n");
+
     expect((await storedMessages(alice)).some((m) => m.text === "quiet")).toBe(false);
+    // Silent: no "bob deleted N message(s)" notice anywhere.
     expect(alice.output.text()).not.toContain("deleted");
+    // ...but the focused view is still redrawn, so the removed line actually
+    // disappears from the recipient's screen instead of lingering in the
+    // append-only transcript while it is already gone from the store.
+    expect(emitted).toContain("conversation with bob");
+    expect(emitted).not.toContain("quiet");
   });
 });
 
