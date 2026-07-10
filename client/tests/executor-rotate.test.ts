@@ -46,7 +46,7 @@ async function setup(): Promise<{
   output: CaptureSink;
   store: KeyStore;
 }> {
-  const store = new KeyStore("pqterm-exec-test", new IDBFactory());
+  const store = new KeyStore("meridian-edge-exec-test", new IDBFactory());
   await store.create("original passphrase", FAST);
   const output = new CaptureSink();
   const shell = new FakeShell();

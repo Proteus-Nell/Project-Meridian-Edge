@@ -132,6 +132,6 @@ describe("runBench end-to-end (tiny iteration count)", () => {
     const out = await runBench("all", { config: tiny, onProgress: (m) => progress.push(m) });
     expect(out.results.map((r) => r.suite)).toEqual(["B1", "B2", "B3", "B4"]);
     expect(progress).toHaveLength(4);
-    expect(renderMarkdown(out.results, "now")).toContain("# PQTerm benchmark report");
+    expect(renderMarkdown(out.results, "now")).toContain("# Meridian Edge benchmark report");
   });
 });

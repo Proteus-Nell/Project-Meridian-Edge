@@ -117,15 +117,14 @@ shell.setClearHandler(() => chrome.clearScreen());
 // before the user reaches the first prompt.
 void executor.init();
 
-// Startup banner: kept ≤ 32 columns so a 38-column mobile viewport fits it.
+// Startup banner: a compact boxed wordmark. Widths are derived from the text so
+// the frame always aligns, and it stays ≤ 32 columns for a 38-column mobile
+// viewport ("MERIDIAN EDGE" in block letters would not fit, so it is spaced).
 const DIM_CYAN = "\x1b[2;36m";
 const RESET = "\x1b[0m";
-for (const row of [
-  " ___  ___  _____ ___ ___ __  __",
-  "| _ \\/ _ \\|_   _| __| _ \\  \\/  |",
-  "|  _/ (_) | | | | _||   / |\\/| |",
-  "|_|  \\__\\_\\ |_| |___|_|_\\_|  |_|",
-]) {
+const WORDMARK = "M E R I D I A N   E D G E";
+const rule = "─".repeat(WORDMARK.length + 2);
+for (const row of [`╭${rule}╮`, `│ ${WORDMARK} │`, `╰${rule}╯`]) {
   transcriptTerm.writeln(`${DIM_CYAN}${row}${RESET}`);
 }
 transcriptTerm.writeln("");

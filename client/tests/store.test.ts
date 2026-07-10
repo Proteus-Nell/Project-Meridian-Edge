@@ -15,12 +15,12 @@ const BASE = {
   secretMask: "asterisk",
   theme: { emblem: true, scanlines: true, vignette: true, dock: true },
   scheme: "dark",
-  emblemGlyph: "pq",
+  emblemGlyph: "globe",
   colorOverrides: {},
 } as const;
 
 function freshStore(factory = new IDBFactory()): { store: KeyStore; factory: IDBFactory } {
-  return { store: new KeyStore("pqterm-test", factory), factory };
+  return { store: new KeyStore("meridian-edge-test", factory), factory };
 }
 
 describe("KeyStore", () => {
@@ -35,13 +35,13 @@ describe("KeyStore", () => {
 
   it("survives a reload locked and unlocks with the right passphrase", async () => {
     const factory = new IDBFactory();
-    const first = new KeyStore("pqterm-test", factory);
+    const first = new KeyStore("meridian-edge-test", factory);
     await first.create("correct horse battery", FAST);
     await first.putJson("identity", { uid: "ABC" });
     first.lock();
 
     // "Reload": a brand-new store instance over the same IndexedDB.
-    const second = new KeyStore("pqterm-test", factory);
+    const second = new KeyStore("meridian-edge-test", factory);
     expect(await second.exists()).toBe(true);
     expect(second.isUnlocked()).toBe(false);
     expect(await second.unlock("correct horse battery")).toBe(true);
@@ -50,7 +50,7 @@ describe("KeyStore", () => {
 
   it("rejects a wrong passphrase", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     await store.create("correct horse battery", FAST);
     store.lock();
     expect(await store.unlock("wrong passphrase!!")).toBe(false);
@@ -70,7 +70,7 @@ describe("KeyStore", () => {
 
   it("a stolen database without the passphrase yields only ciphertext", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     await store.create("correct horse battery", FAST);
     const marker = new TextEncoder().encode("TOP-SECRET-IDENTITY-KEY");
     await store.putBytes("identity", marker);
@@ -78,7 +78,7 @@ describe("KeyStore", () => {
 
     // Thief copies the IndexedDB directory: same factory, no passphrase.
     const raw = await new Promise<unknown>((resolve, reject) => {
-      const open = factory.open("pqterm-test", 1);
+      const open = factory.open("meridian-edge-test", 1);
       open.onsuccess = () => {
         const db = open.result;
         const req = db.transaction("vault", "readonly").objectStore("vault").get("identity");
@@ -91,14 +91,14 @@ describe("KeyStore", () => {
     const ctText = new TextDecoder("utf-8", { fatal: false }).decode(record.ct);
     expect(ctText).not.toContain("TOP-SECRET");
     // And brute unlock attempts with wrong passphrases fail.
-    const thief = new KeyStore("pqterm-test", factory);
+    const thief = new KeyStore("meridian-edge-test", factory);
     expect(await thief.unlock("password")).toBe(false);
     expect(await thief.unlock("")).toBe(false);
   });
 
   it("rotatePassphrase re-wraps the DEK: old fails, new works, data intact", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     await store.create("old passphrase 1", FAST);
     await store.putJson("identity", { uid: "KEEP" });
     expect(await store.rotatePassphrase("old passphrase 1", "new passphrase 2")).toBe(true);
@@ -118,31 +118,31 @@ describe("KeyStore", () => {
 
   it("wipe destroys everything", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     await store.create("correct horse battery", FAST);
     await store.putBytes("identity", new Uint8Array([1]));
     await store.wipe();
-    const after = new KeyStore("pqterm-test", factory);
+    const after = new KeyStore("meridian-edge-test", factory);
     expect(await after.exists()).toBe(false);
   });
 
   it("stores display prefs unencrypted, readable before unlock", async () => {
     const factory = new IDBFactory();
-    const first = new KeyStore("pqterm-test", factory);
+    const first = new KeyStore("meridian-edge-test", factory);
     // Default before anything is written.
     expect((await first.getDisplayPrefs()).secretMask).toBe("asterisk");
     await first.setDisplayPrefs({ ...BASE, secretMask: "hidden", theme: ALL_OFF });
 
     // A fresh instance (reload) reads it back WITHOUT unlocking - the point
     // is the first login prompt honors it.
-    const second = new KeyStore("pqterm-test", factory);
+    const second = new KeyStore("meridian-edge-test", factory);
     expect(second.isUnlocked()).toBe(false);
     expect((await second.getDisplayPrefs()).secretMask).toBe("hidden");
   });
 
   it("round-trips the theme block and defaults it to all-on", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     // Nothing written yet: every layer defaults on.
     expect((await store.getDisplayPrefs()).theme).toEqual({
       emblem: true,
@@ -154,7 +154,7 @@ describe("KeyStore", () => {
       ...BASE,
       theme: { emblem: false, scanlines: true, vignette: false, dock: true },
     });
-    const reread = new KeyStore("pqterm-test", factory);
+    const reread = new KeyStore("meridian-edge-test", factory);
     expect((await reread.getDisplayPrefs()).theme).toEqual({
       emblem: false,
       scanlines: true,
@@ -165,7 +165,7 @@ describe("KeyStore", () => {
 
   it("legacy prefs without a theme block degrade to all-on defaults", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     // Simulate a record written by the pre-theme client: mask only.
     await store.setDisplayPrefs({ secretMask: "hidden" } as unknown as Parameters<
       typeof store.setDisplayPrefs
@@ -185,11 +185,11 @@ describe("KeyStore", () => {
 
   it("round-trips scheme, emblem glyph, and color overrides; legacy defaults apply", async () => {
     const factory = new IDBFactory();
-    const store = new KeyStore("pqterm-test", factory);
+    const store = new KeyStore("meridian-edge-test", factory);
     // Nothing written: defaults.
     const defaults = await store.getDisplayPrefs();
     expect(defaults.scheme).toBe("dark");
-    expect(defaults.emblemGlyph).toBe("pq");
+    expect(defaults.emblemGlyph).toBe("globe");
     expect(defaults.colorOverrides).toEqual({});
 
     await store.setDisplayPrefs({
@@ -198,7 +198,7 @@ describe("KeyStore", () => {
       emblemGlyph: "globe",
       colorOverrides: { accent: "#112233" },
     });
-    const reread = await new KeyStore("pqterm-test", factory).getDisplayPrefs();
+    const reread = await new KeyStore("meridian-edge-test", factory).getDisplayPrefs();
     expect(reread.scheme).toBe("parchment");
     expect(reread.emblemGlyph).toBe("globe");
     expect(reread.colorOverrides).toEqual({ accent: "#112233" });
@@ -212,7 +212,7 @@ describe("KeyStore", () => {
     } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
     const cleaned = await store.getDisplayPrefs();
     expect(cleaned.scheme).toBe("dark");
-    expect(cleaned.emblemGlyph).toBe("pq");
+    expect(cleaned.emblemGlyph).toBe("globe");
     expect(cleaned.colorOverrides).toEqual({ background: "#abcdef" });
   });
 

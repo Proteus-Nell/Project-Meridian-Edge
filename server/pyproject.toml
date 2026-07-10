@@ -1,7 +1,7 @@
 [project]
-name = "pqterm-server"
+name = "meridian-edge-server"
 version = "0.1.0"
-description = "PQTerm server: dumb ciphertext router, never sees plaintext or private keys"
+description = "Meridian Edge server: dumb ciphertext router, never sees plaintext or private keys"
 requires-python = ">=3.12"
 
 [tool.mypy]

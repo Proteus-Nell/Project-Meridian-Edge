@@ -13,8 +13,8 @@ COPY --from=builder /install /usr/local
 WORKDIR /app
 COPY app ./app
 
-RUN groupadd --system pqterm && useradd --system --gid pqterm --no-create-home pqterm
-USER pqterm
+RUN groupadd --system meridian_edge && useradd --system --gid meridian_edge --no-create-home meridian_edge
+USER meridian_edge
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 EXPOSE 8000

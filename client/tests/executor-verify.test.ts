@@ -82,7 +82,7 @@ interface Rig {
 }
 
 async function bootstrap(): Promise<Rig> {
-  const store = new KeyStore(`pqterm-verify-${Math.random()}`, new IDBFactory());
+  const store = new KeyStore(`meridian-edge-verify-${Math.random()}`, new IDBFactory());
   const output = new CaptureSink();
   const shell = new FakeShell();
   const executor = new Executor(new Renderer(output), shell, store);

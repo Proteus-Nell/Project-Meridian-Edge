@@ -2,7 +2,7 @@
 
 Project Meridian Edge is a passion project of mine that stemmed from a coursework assignment during my first year studying Computer Science.
 
-The project builds **PQTerm** — a pure post-quantum end-to-end-encrypted 1:1
+The project builds **Meridian Edge** — a pure post-quantum end-to-end-encrypted 1:1
 terminal messenger. Every asymmetric operation uses NIST-standardized PQC:
 ML-KEM-768 (FIPS 203) for key establishment and ML-DSA-65 (FIPS 204) for
 identity and authentication. No classical public-key crypto exists in the
@@ -32,7 +32,7 @@ Everything happens inside the terminal that loads: commands start with `/`,
 anything else is (eventually) message text. `/help` lists every command;
 `/help <command>` shows its usage.
 
-## Using PQTerm today (W1-W5)
+## Using Meridian Edge today (W1-W5)
 
 ### Create your identity — `/register`
 
@@ -233,7 +233,7 @@ server, and an nginx edge that serves the built client same-origin and
 terminates TLS.
 
 ```
-cp .env.example .env   # fill in POSTGRES_PASSWORD, PQTERM_WS_ORIGINS, TLS_CERT_DIR
+cp .env.example .env   # fill in POSTGRES_PASSWORD, MERIDIAN_EDGE_WS_ORIGINS, TLS_CERT_DIR
 docker compose build
 docker compose up -d
 ```

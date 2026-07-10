@@ -114,7 +114,7 @@ function mdTable(headers: readonly string[], rows: readonly (readonly string[])[
 /** Markdown rendering for the report file. */
 export function renderMarkdown(results: readonly SuiteResult[], generatedAt: string): string {
   const parts: string[] = [
-    "# PQTerm benchmark report",
+    "# Meridian Edge benchmark report",
     "",
     `Generated: ${generatedAt}`,
     "",

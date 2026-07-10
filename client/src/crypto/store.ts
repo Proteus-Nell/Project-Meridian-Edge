@@ -81,7 +81,7 @@ const DEFAULT_PREFS: DisplayPrefs = {
   secretMask: "asterisk",
   theme: DEFAULT_THEME,
   scheme: "dark",
-  emblemGlyph: "pq",
+  emblemGlyph: "globe",
   colorOverrides: {},
 };
 
@@ -112,7 +112,7 @@ export class KeyStore {
   private dek: Uint8Array | null = null;
 
   constructor(
-    private readonly dbName: string = "pqterm",
+    private readonly dbName: string = "meridian-edge",
     private readonly idb: IDBFactory = indexedDB,
   ) {}
 
@@ -214,7 +214,7 @@ export class KeyStore {
     const dek = crypto.getRandomValues(new Uint8Array(DEK_BYTES));
     const kek = deriveKek(passphrase, salt, params);
     const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
-    const ct = xchacha20poly1305(kek, nonce, new TextEncoder().encode("pqterm-dek")).encrypt(dek);
+    const ct = xchacha20poly1305(kek, nonce, new TextEncoder().encode("meridian-edge-dek")).encrypt(dek);
     kek.fill(0);
     const meta: MetaRecord = {
       version: STORE_VERSION,
@@ -234,7 +234,7 @@ export class KeyStore {
     }
     const kek = deriveKek(passphrase, meta.salt, meta.params);
     try {
-      this.dek = xchacha20poly1305(kek, meta.wrappedDek.nonce, new TextEncoder().encode("pqterm-dek")).decrypt(
+      this.dek = xchacha20poly1305(kek, meta.wrappedDek.nonce, new TextEncoder().encode("meridian-edge-dek")).decrypt(
         meta.wrappedDek.ct,
       );
       return true;
@@ -320,7 +320,7 @@ export class KeyStore {
     const oldKek = deriveKek(oldPassphrase, meta.salt, meta.params);
     let dek: Uint8Array;
     try {
-      dek = xchacha20poly1305(oldKek, meta.wrappedDek.nonce, new TextEncoder().encode("pqterm-dek")).decrypt(
+      dek = xchacha20poly1305(oldKek, meta.wrappedDek.nonce, new TextEncoder().encode("meridian-edge-dek")).decrypt(
         meta.wrappedDek.ct,
       );
     } catch {
@@ -331,7 +331,7 @@ export class KeyStore {
     const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
     const newKek = deriveKek(newPassphrase, salt, meta.params);
     const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
-    const ct = xchacha20poly1305(newKek, nonce, new TextEncoder().encode("pqterm-dek")).encrypt(dek);
+    const ct = xchacha20poly1305(newKek, nonce, new TextEncoder().encode("meridian-edge-dek")).encrypt(dek);
     newKek.fill(0);
     const next: MetaRecord = {
       version: meta.version,

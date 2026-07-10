@@ -2,9 +2,9 @@
 // registers, Bob registers and goes offline, Alice sends, Bob logs in and
 // reads, and the queue row is provably deleted after ack.
 //
-// Skipped unless PQTERM_E2E=1 (needs uvicorn on 127.0.0.1:8000 with a fresh
+// Skipped unless MERIDIAN_EDGE_E2E=1 (needs uvicorn on 127.0.0.1:8000 with a fresh
 // or disposable database):
-//   PQTERM_E2E=1 npx vitest run tests/live.e2e.test.ts
+//   MERIDIAN_EDGE_E2E=1 npx vitest run tests/live.e2e.test.ts
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
@@ -102,7 +102,7 @@ function toLookup(actor: Actor): PrekeyLookup {
   };
 }
 
-describe.skipIf(process.env["PQTERM_E2E"] !== "1")("live: offline first message", () => {
+describe.skipIf(process.env["MERIDIAN_EDGE_E2E"] !== "1")("live: offline first message", () => {
   // One actor pair for the whole file: registration is limited to 3/hour/IP.
   let alice: Actor;
   let bob: Actor;

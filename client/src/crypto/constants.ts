@@ -3,10 +3,10 @@
 
 export const PROTOCOL_VERSION = 1;
 
-export const KDF_INFO_KX = "PQTerm-v1-KX";
-export const KDF_INFO_RK = "PQTerm-v1-RK";
-export const KDF_INFO_CK = "PQTerm-v1-CK";
-export const KDF_INFO_HDR = "PQTerm-v1-HDR";
+export const KDF_INFO_KX = "MeridianEdge-v1-KX";
+export const KDF_INFO_RK = "MeridianEdge-v1-RK";
+export const KDF_INFO_CK = "MeridianEdge-v1-CK";
+export const KDF_INFO_HDR = "MeridianEdge-v1-HDR";
 
 // Argon2id parameters (RFC 9106); stored beside ciphertext for future upgrades.
 export const ARGON2ID_MEM_KIB = 65536;

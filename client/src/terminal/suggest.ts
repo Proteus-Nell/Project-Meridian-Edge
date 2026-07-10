@@ -79,7 +79,7 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
         case "scheme":
           return n === 1 ? ["dark", "parchment", "olive"] : [];
         case "emblem":
-          return n === 1 ? ["pq", "globe", "tree"] : [];
+          return n === 1 ? ["globe", "tree"] : [];
         case "color":
           return n === 1 ? ["accent", "background", "panel", "text", "muted", "reset"] : [];
         default:

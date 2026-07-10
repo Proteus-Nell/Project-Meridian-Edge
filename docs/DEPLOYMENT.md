@@ -1,6 +1,6 @@
-# PQTerm deployment guide
+# Meridian Edge deployment guide
 
-How to run PQTerm — for local development and for a hardened production
+How to run Meridian Edge — for local development and for a hardened production
 deployment. It reflects the actual artifacts in this repo (`server/Dockerfile`,
 `deploy/`, `docker-compose.yml`); the security rationale behind each choice
 lives in [CLAUDE.md](../CLAUDE.md) §5.
@@ -71,7 +71,7 @@ client dev server proxies `/v1` to the backend, so you only open the client URL.
 # terminal 1 — backend (API on :8000, SQLite dev DB, docs enabled)
 cd server
 pip install -r requirements.txt -r requirements-dev.txt
-PQTERM_DEV=1 uvicorn app.main:create_app --factory --reload
+MERIDIAN_EDGE_DEV=1 uvicorn app.main:create_app --factory --reload
 
 # terminal 2 — client (terminal UI on :5173, proxies /v1 → :8000)
 cd client
@@ -115,7 +115,7 @@ python scripts/audit.py                         # classical-crypto / injection g
 ### 1. Clone and enter the repo
 
 ```bash
-git clone <your-fork-url> pqterm && cd pqterm
+git clone <your-fork-url> meridian_edge && cd meridian_edge
 ```
 
 ### 2. Provide TLS certificates
@@ -148,11 +148,11 @@ see [Configuration reference](#configuration-reference)):
 
 ```ini
 POSTGRES_PASSWORD=<a long random secret>
-PQTERM_WS_ORIGINS=https://pqterm.example      # your exact public origin(s)
+MERIDIAN_EDGE_WS_ORIGINS=https://meridian-edge.example      # your exact public origin(s)
 TLS_CERT_DIR=./tls
 ```
 
-`PQTERM_WS_ORIGINS` must be the **exact** origin(s) browsers will connect from
+`MERIDIAN_EDGE_WS_ORIGINS` must be the **exact** origin(s) browsers will connect from
 (scheme + host + optional port, comma-separated for more than one). The
 WebSocket upgrade is rejected if the `Origin` header doesn't match — a wrong
 value here breaks live message delivery.
@@ -167,7 +167,7 @@ docker compose up -d
 ```
 
 `server` waits for `db` to pass its health check before starting. On boot the
-server runs `_assert_production_safe` (because `PQTERM_ENV=production` is set in
+server runs `_assert_production_safe` (because `MERIDIAN_EDGE_ENV=production` is set in
 compose) and **refuses to start** if the config is dev-shaped — see
 [Boot-safety gate](#boot-safety-gate).
 
@@ -178,17 +178,17 @@ compose) and **refuses to start** if the config is dev-shaped — see
 docker compose ps
 
 # The API answers uniformly through the proxy over TLS
-curl -sS https://pqterm.example/v1/keys/status \
+curl -sS https://meridian-edge.example/v1/keys/status \
   -H 'Authorization: Bearer not-a-real-token' -i | head -n1
 #   → HTTP/2 401        (uniform auth_failed body; the stack is wired)
 
 # Security headers + HSTS are present on a page response
-curl -sSI https://pqterm.example/ | grep -iE 'strict-transport|content-security'
+curl -sSI https://meridian-edge.example/ | grep -iE 'strict-transport|content-security'
 
 # http redirects to https
-curl -sSI http://pqterm.example/ | grep -i location
+curl -sSI http://meridian-edge.example/ | grep -i location
 
-# Then open https://pqterm.example in a browser and /register.
+# Then open https://meridian-edge.example in a browser and /register.
 ```
 
 A `401` (not a `502`/connection error) on the first curl means the browser →
@@ -203,12 +203,12 @@ server; check `docker compose logs server`.
 
 | Variable | Purpose | Dev default | Production |
 |---|---|---|---|
-| `PQTERM_ENV` | Enables the boot-safety gate when `production` | unset | `production` (set by compose) |
-| `PQTERM_DATABASE_URL` | SQLAlchemy URL | `sqlite:///./pqterm_dev.db` | `postgresql+psycopg://…` (from compose) |
-| `PQTERM_WS_ORIGINS` | Exact WS `Origin` allowlist, comma-separated | unset (open, dev only) | **required** |
-| `PQTERM_DEV` | Enables `/docs` + `/openapi.json` | unset | must stay unset in prod |
+| `MERIDIAN_EDGE_ENV` | Enables the boot-safety gate when `production` | unset | `production` (set by compose) |
+| `MERIDIAN_EDGE_DATABASE_URL` | SQLAlchemy URL | `sqlite:///./meridian_edge_dev.db` | `postgresql+psycopg://…` (from compose) |
+| `MERIDIAN_EDGE_WS_ORIGINS` | Exact WS `Origin` allowlist, comma-separated | unset (open, dev only) | **required** |
+| `MERIDIAN_EDGE_DEV` | Enables `/docs` + `/openapi.json` | unset | must stay unset in prod |
 
-In production, `PQTERM_DATABASE_URL` and `PQTERM_WS_ORIGINS` are derived from
+In production, `MERIDIAN_EDGE_DATABASE_URL` and `MERIDIAN_EDGE_WS_ORIGINS` are derived from
 `.env` inside `docker-compose.yml`; you normally only touch `.env`.
 
 ### Compose / host `.env` variables
@@ -216,7 +216,7 @@ In production, `PQTERM_DATABASE_URL` and `PQTERM_WS_ORIGINS` are derived from
 | Variable | Used by | Notes |
 |---|---|---|
 | `POSTGRES_PASSWORD` | db + server URL | any long random secret |
-| `PQTERM_WS_ORIGINS` | server | your public origin(s) |
+| `MERIDIAN_EDGE_WS_ORIGINS` | server | your public origin(s) |
 | `TLS_CERT_DIR` | proxy | host dir with `fullchain.pem` + `privkey.pem` |
 
 ### Ports
@@ -234,12 +234,12 @@ internal Docker network.
 ### Boot-safety gate
 
 `_assert_production_safe` (in `server/app/main.py`) runs **only** when
-`PQTERM_ENV=production`. It refuses to boot — with an explicit message — if any
+`MERIDIAN_EDGE_ENV=production`. It refuses to boot — with an explicit message — if any
 of these dev-shaped conditions hold:
 
-- `PQTERM_DEV=1` is set (would expose `/docs`)
-- `PQTERM_WS_ORIGINS` is unset (would disable WS origin checking)
-- `PQTERM_DATABASE_URL` is a SQLite URL (a dev artifact, never deploy it — §7.5)
+- `MERIDIAN_EDGE_DEV=1` is set (would expose `/docs`)
+- `MERIDIAN_EDGE_WS_ORIGINS` is unset (would disable WS origin checking)
+- `MERIDIAN_EDGE_DATABASE_URL` is a SQLite URL (a dev artifact, never deploy it — §7.5)
 - the live Argon2id parameters have drifted from the §0 constants
   (m = 64 MiB, t = 3, p = 1)
 
@@ -302,7 +302,7 @@ days per policy.
 The only durable state is the `db-data` volume. Back it up with `pg_dump`:
 
 ```bash
-docker compose exec db pg_dump -U pqterm pqterm > backup-$(date +%F).sql
+docker compose exec db pg_dump -U meridian_edge meridian_edge > backup-$(date +%F).sql
 ```
 
 Note what this contains and does **not**: public keys, prekey bundles, session
@@ -367,11 +367,11 @@ proxy scale independently in the usual ways.
 | API deny-all CSP + `nosniff`/`Referrer-Policy`/COOP/CORP/Permissions-Policy | `server/app/headers.py` |
 | Same-origin bundle, zero CDN assets | proxy serves `dist/` |
 | No CORS (no wildcard, no credentials) | server installs no CORS middleware |
-| WS origin allowlist, auth-before-subscribe, frame cap, idle-kill, rate cap | `server/app/ws.py` + `PQTERM_WS_ORIGINS` |
+| WS origin allowlist, auth-before-subscribe, frame cap, idle-kill, rate cap | `server/app/ws.py` + `MERIDIAN_EDGE_WS_ORIGINS` |
 | Rate limits (register/login/bundle/message) | `server/app/rate_limit.py` |
 | Non-root, read-only fs, no shell, secrets via env | Dockerfiles + compose `read_only`/`tmpfs` |
 | `DEBUG=0` / dev-config refused at boot | `_assert_production_safe` |
-| Docs/openapi disabled in prod | `PQTERM_DEV` unset → `docs_url=None` |
+| Docs/openapi disabled in prod | `MERIDIAN_EDGE_DEV` unset → `docs_url=None` |
 | No outbound requests (SSRF) | no HTTP client dependency (asserted by test) |
 
 ---
@@ -393,11 +393,11 @@ The proxy runs non-root with a read-only root filesystem; `/var/cache/nginx`,
 `/var/run`, and `/tmp` are provided as writable tmpfs by compose. If you edited
 the compose tmpfs list or the Dockerfile `chown` targets, nginx may be unable to
 write its pid file — re-check that those three paths are tmpfs and writable by
-the `pqterm` user. (This is one of the untested interplays flagged at the top —
+the `meridian_edge` user. (This is one of the untested interplays flagged at the top —
 verify on first build.)
 
 **Browser loads the client but messages never deliver live.**
-`PQTERM_WS_ORIGINS` doesn't match the origin the browser uses (scheme/host/port
+`MERIDIAN_EDGE_WS_ORIGINS` doesn't match the origin the browser uses (scheme/host/port
 must be exact). Fix `.env`, `docker compose up -d` to recreate `server`. Messages
 still deliver on reconnect; only the live push is affected.
 
@@ -407,7 +407,7 @@ The proxy can't reach the server. Check `docker compose ps` (is `server` up?) an
 
 **`docker compose up` errors about an unset variable.**
 A required `.env` value is missing. The message names it (`POSTGRES_PASSWORD`,
-`PQTERM_WS_ORIGINS`, or `TLS_CERT_DIR`).
+`MERIDIAN_EDGE_WS_ORIGINS`, or `TLS_CERT_DIR`).
 
 ---
 

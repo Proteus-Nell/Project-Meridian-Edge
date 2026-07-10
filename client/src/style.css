@@ -106,17 +106,13 @@ body.is-tx .medallion {
 }
 
 /* Glyph selection (/settings emblem): the ring framing above is shared; only
-   one inner glyph shows. Default (before prefs load) is the PQ monogram. */
+   one inner glyph shows. Default (before prefs load) is the globe. */
 .glyph {
   display: none;
 }
 
-body.em-pq .glyph-pq,
-body:not(.em-pq):not(.em-globe):not(.em-tree) .glyph-pq {
-  display: inline;
-}
-
-body.em-globe .glyph-globe {
+body.em-globe .glyph-globe,
+body:not(.em-globe):not(.em-tree) .glyph-globe {
   display: inline;
 }
 

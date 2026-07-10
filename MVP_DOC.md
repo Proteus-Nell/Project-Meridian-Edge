@@ -1,4 +1,4 @@
-# PQTerm - MVP Document
+# Meridian Edge - MVP Document
 
 **A Pure Post-Quantum End-to-End Encrypted Terminal Messenger**
 
@@ -11,13 +11,13 @@
 | **Timeline** | 4–6 weeks |
 | **Status** | Approved for build |
 
-> *"PQTerm" is a working title - rename freely.*
+> *"Meridian Edge" is a working title - rename freely.*
 
 ---
 
 ## 1. Executive Summary
 
-PQTerm is a web-based, terminal-style, one-to-one messaging application in which **every asymmetric cryptographic operation uses NIST-standardized post-quantum algorithms**: ML-KEM-768 (FIPS 203) for key establishment and ML-DSA-65 (FIPS 204) for identity and authentication. No classical public-key cryptography (RSA, ECDH, Ed25519) appears anywhere in the application layer.
+Meridian Edge is a web-based, terminal-style, one-to-one messaging application in which **every asymmetric cryptographic operation uses NIST-standardized post-quantum algorithms**: ML-KEM-768 (FIPS 203) for key establishment and ML-DSA-65 (FIPS 204) for identity and authentication. No classical public-key cryptography (RSA, ECDH, Ed25519) appears anywhere in the application layer.
 
 The MVP demonstrates that a pure-PQC secure messenger is buildable today, and **measures what it costs** - in latency, bandwidth, and key sizes - through a dedicated benchmark suite comparing PQC primitives against classical baselines.
 
@@ -187,7 +187,7 @@ Server stores per user a **prekey bundle**:
 **Initiator (Alice → offline Bob):**
 1. Fetch Bob's bundle (authenticated, rate-limited); verify both prekey signatures against `IK_B`. Abort loudly on failure.
 2. `(*ct₁*, ss₁) ← ML-KEM.Encaps(SPK_B)` and `(*ct₂*, ss₂) ← ML-KEM.Encaps(OPK_B)` (if an OPK is available; the handshake proceeds without ss₂ if depleted, at reduced FS for the first flight - flagged in the UI).
-3. Root secret: `RK₀ = HKDF-SHA-512(ss₁ ‖ ss₂, info = "PQTerm-v1-KX" ‖ IK_A ‖ IK_B ‖ transcript-hash)`.
+3. Root secret: `RK₀ = HKDF-SHA-512(ss₁ ‖ ss₂, info = "MeridianEdge-v1-KX" ‖ IK_A ‖ IK_B ‖ transcript-hash)`.
 4. Alice signs the handshake transcript hash with `sk_IK_A` (authenticates the initiator; this is where the deniability trade-off of §4.3 arises).
 5. First message: `ct₁ ‖ ct₂ ‖ IK_A ‖ signature ‖ AEAD(RK₀-derived key, message)`.
 

@@ -32,7 +32,7 @@
         "--app-dir", "server", "--port", "8000"
       ],
       "port": 8000,
-      "env": { "PQTERM_DEV": "1" }
+      "env": { "MERIDIAN_EDGE_DEV": "1" }
     }
   ]
 }

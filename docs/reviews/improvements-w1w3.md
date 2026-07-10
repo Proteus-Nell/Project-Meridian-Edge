@@ -1,4 +1,4 @@
-# PQTerm — Engineering & Product Review (W1–W3)
+# Meridian Edge — Engineering & Product Review (W1–W3)
 
 **Date:** 2026-07-05
 **Scope:** Implemented surface only (W1 terminal shell/parser/renderer, W2 identity/key
@@ -417,7 +417,7 @@ entries with a milestone). *Where:* `parser.ts:63-82`, `executor.ts:101-109`. **
 `executor-rotate.test.ts` exercises the executor, and only the rotate path; every send/receive
 branch (bundle-tamper abort `:408-414`, IK-change block `:416-422`, TOFU pin `:529-531`,
 unknown-sender hold `:546-572`, reduced-fs `:442-447`) is covered *only* by the opt-in,
-server-required `live.e2e.test.ts` (`skipIf PQTERM_E2E !== 1`). *Why:* these are the
+server-required `live.e2e.test.ts` (`skipIf MERIDIAN_EDGE_E2E !== 1`). *Why:* these are the
 security-critical decision points and they don't run in normal CI. *How:* the existing
 `FakeShell`/`CaptureSink` in `executor-rotate.test.ts:14-36` plus a fake `api`/`WsClient` and
 `fake-indexeddb` make a fake-transport executor test straightforward; assert the rendered
@@ -441,7 +441,7 @@ round-trip. *Where:* `client/tests/envelope.test.ts`. **Effort: S.**
 registration is limited to 3/hour/IP; every test reuses them, so tests can't be independent and
 a second run within the hour fails at registration. *Why:* brittle, order-dependent e2e; can't
 add tests that need fresh identities. *How:* a dev-only rate-limit relaxation gated behind the
-existing `PQTERM_DEV` flag (raise register capacity when dev mode is on), or a test-only
+existing `MERIDIAN_EDGE_DEV` flag (raise register capacity when dev mode is on), or a test-only
 reset endpoint gated the same way. This mirrors how docs are already dev-gated
 (`main.py`, per ASVS V13.3.1). *Where:* register rate-limit config in `main.py`/`rate_limit.py`,
 `live.e2e.test.ts:105-113`. **Effort: S.**

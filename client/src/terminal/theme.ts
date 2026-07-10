@@ -81,7 +81,7 @@ export const SCHEMES: Record<SchemeName, Scheme> = {
   },
 };
 
-export const EMBLEM_NAMES = ["pq", "globe", "tree"] as const;
+export const EMBLEM_NAMES = ["globe", "tree"] as const;
 export type EmblemName = (typeof EMBLEM_NAMES)[number];
 
 export function isEmblemName(word: string): word is EmblemName {

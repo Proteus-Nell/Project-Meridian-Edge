@@ -19,10 +19,10 @@ FROM nginx:1.27-alpine
 COPY --from=client-build /build/dist /usr/share/nginx/html
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
 
-RUN addgroup -S pqterm && adduser -S pqterm -G pqterm \
-    && chown -R pqterm:pqterm /var/cache/nginx /var/run \
-    && touch /var/run/nginx.pid && chown pqterm:pqterm /var/run/nginx.pid
-USER pqterm
+RUN addgroup -S meridian_edge && adduser -S meridian_edge -G meridian_edge \
+    && chown -R meridian_edge:meridian_edge /var/cache/nginx /var/run \
+    && touch /var/run/nginx.pid && chown meridian_edge:meridian_edge /var/run/nginx.pid
+USER meridian_edge
 
 EXPOSE 443
 CMD ["nginx", "-g", "daemon off;"]

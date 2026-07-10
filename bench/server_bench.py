@@ -33,7 +33,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, mldsa, mlkem, x25
 
 WARMUP = 100
 ITERS = 1000
-MESSAGE = b"PQTerm benchmark fixed message"
+MESSAGE = b"Meridian Edge benchmark fixed message"
 
 
 @dataclass(frozen=True)
@@ -241,7 +241,7 @@ def render_terminal(results: list[LatencyResult], footprint: FootprintResult | N
 
 def render_markdown(results: list[LatencyResult], footprint: FootprintResult | None = None) -> str:
     parts = [
-        "# PQTerm server benchmark (§8)",
+        "# Meridian Edge server benchmark (§8)",
         "",
         f"Environment: {platform.python_implementation()} {platform.python_version()}, "
         f"{platform.platform()}. pyca/cryptography (OpenSSL) for both PQC and classical.",
@@ -298,7 +298,7 @@ def _to_json(results: list[LatencyResult], footprint: FootprintResult | None = N
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="PQTerm server benchmark (§8 B1/B2)")
+    parser = argparse.ArgumentParser(description="Meridian Edge server benchmark (§8 B1/B2)")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of tables")
     parser.add_argument("--iters", type=int, default=ITERS, help="iterations per op")
     parser.add_argument("--sessions", type=int, default=1000, help="sessions for the B5 footprint")

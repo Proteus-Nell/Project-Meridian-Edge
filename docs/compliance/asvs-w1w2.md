@@ -1,4 +1,4 @@
-# PQTerm — OWASP ASVS 4.0.3 (Level 2) Compliance Assessment
+# Meridian Edge — OWASP ASVS 4.0.3 (Level 2) Compliance Assessment
 
 **Date:** 2026-07-04
 **Scope:** W1 (terminal shell/parser, server skeleton, UID registration) + W2 (ML-DSA-65
@@ -225,7 +225,7 @@ introduces attachments (explicitly a non-goal per `MVP_DOC.md` §3.2).
 | V13.1.4 | Properly configured API endpoints against injection | PASS | See V5.2.3; ORM-only DB access, no raw SQL | |
 | V13.2.1 | Enforce request content-type (reject unexpected types) | PASS (by framework default) | FastAPI/Pydantic requires valid JSON matching the declared model; malformed bodies produce `400 invalid_request` (`errors.py:21-23`, tested `test_register.py::test_missing_field_rejected_with_same_shape`) | |
 | V13.2.5 | Disable unnecessary HTTP methods | PASS | Only the declared method(s) per route are registered by FastAPI's router; wrong-method requests get a uniform `405`/`request_failed` (`test_surface.py::test_wrong_method_returns_uniform_error`) | |
-| V13.3.1 | API docs (OpenAPI/Swagger) restricted in production | PASS | `main.py:39-41` — `docs_url`/`openapi_url` are `None` unless `PQTERM_DEV=1`; tested `test_surface.py::test_docs_disabled_outside_dev` | Directly matches CLAUDE.md §7.5 |
+| V13.3.1 | API docs (OpenAPI/Swagger) restricted in production | PASS | `main.py:39-41` — `docs_url`/`openapi_url` are `None` unless `MERIDIAN_EDGE_DEV=1`; tested `test_surface.py::test_docs_disabled_outside_dev` | Directly matches CLAUDE.md §7.5 |
 | V13.4.1 | GraphQL-specific hardening | N/A | REST only, no GraphQL | |
 
 ## V14 — Configuration
@@ -234,10 +234,10 @@ introduces attachments (explicitly a non-goal per `MVP_DOC.md` §3.2).
 |---|---|---|---|---|
 | V14.1.1 | Build pipeline can be re-run to reliably rebuild binaries/deploys | PASS | `.github/workflows/ci.yml` — reproducible steps (`npm ci`, pinned `actions/setup-python@v5` at 3.12, pinned `setup-node@v4` at Node 22) | Node version in CI (22) vs `CLAUDE.md` header claiming "verified on Node 24.5.0" is a minor inconsistency worth reconciling, not a security defect |
 | V14.2.1 | Third-party components come from trusted repos, verified integrity | PASS | `requirements.txt`/`package.json` pin exact versions; CI runs `pip-audit` and `npm audit --audit-level=high` as blocking gates (`ci.yml`) | |
-| V14.3.2 | Unnecessary features/frameworks/documentation/samples removed from production | PASS | Docs endpoints gated behind `PQTERM_DEV` (see V13.3.1); no sample/demo routes found | |
+| V14.3.2 | Unnecessary features/frameworks/documentation/samples removed from production | PASS | Docs endpoints gated behind `MERIDIAN_EDGE_DEV` (see V13.3.1); no sample/demo routes found | |
 | V14.3.3 | HTTP security headers configured (CSP, X-Content-Type-Options, etc.) | PASS (API baseline) / DEFERRED(W5, page-level CSP) | `headers.py:14-26` sets a deny-everything CSP, `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, COOP, CORP, restrictive `Permissions-Policy`, `Cache-Control: no-store` on every API response — tested in `test_surface.py::test_security_headers_on_success_and_error`. The *page-serving* CSP for the client bundle is explicitly deferred to the reverse proxy at W5 (`headers.py:1-6` comment) | Good API-side baseline; note HSTS header is **absent even as a placeholder** — see Findings |
 | V14.4.1 | CORS policy (if any) is restrictive, no wildcard, credentials handled carefully | FAIL | No `CORSMiddleware` is registered anywhere in `main.py` (confirmed by grep — zero matches for `CORSMiddleware`/`add_middleware`/`allow_origins` in `server/app`) | Absence of CORS middleware means FastAPI's default (no CORS headers sent) applies, which browsers treat as same-origin-only for credentialed requests — safe by *default*, but this is not the explicit "exact origin only, no wildcard" policy `CLAUDE.md` §5 calls for; once the client and API are served from different origins (likely, given Vite dev server + separate API port), an explicit allowlisted CORS policy will be needed. Flagging now as a small, cheap fix rather than waiting for W5. |
-| V14.5.1 | Application accepts only requests matching configured components (no debug endpoints reachable) | PASS | `DEBUG`/dev-mode gate exists for docs; no other debug-only route found | CLAUDE.md §5 "`DEBUG=0` asserted at startup (refuse to boot otherwise in prod mode)" — **not implemented**: `main.py` reads `PQTERM_DEV` but never refuses to boot when misconfigured; see Findings |
+| V14.5.1 | Application accepts only requests matching configured components (no debug endpoints reachable) | PASS | `DEBUG`/dev-mode gate exists for docs; no other debug-only route found | CLAUDE.md §5 "`DEBUG=0` asserted at startup (refuse to boot otherwise in prod mode)" — **not implemented**: `main.py` reads `MERIDIAN_EDGE_DEV` but never refuses to boot when misconfigured; see Findings |
 
 ---
 
@@ -258,7 +258,7 @@ introduces attachments (explicitly a non-goal per `MVP_DOC.md` §3.2).
 2. **Login `Origin` binding has no allowlist (V2.7.2, V14.4.1).**
    `routes/login.py:36-37` reads `request.headers.get("origin", "")` and only checks
    that the *same* value reappears at verify time (`login.py:90`) — it never checks
-   that origin is actually `https://pqterm.<yourdomain>` or similar. Combined with
+   that origin is actually `https://meridian-edge.<yourdomain>` or similar. Combined with
    the complete absence of CORS middleware (finding 3), this is currently low-risk,
    but it means the "origin binding" security property documented in `MVP_DOC.md`
    §6.2 is weaker than described: it binds the *signature* to *a* origin string, not
@@ -275,11 +275,11 @@ introduces attachments (explicitly a non-goal per `MVP_DOC.md` §3.2).
    rather than waiting for the W5 pass.
 
 4. **`DEBUG=0`/prod-mode boot assertion not implemented (CLAUDE.md §5 checklist item
-   explicitly promised).** `main.py` reads `PQTERM_DEV` to gate docs but has no
+   explicitly promised).** `main.py` reads `MERIDIAN_EDGE_DEV` to gate docs but has no
    check that refuses to boot in a misconfigured "production" environment (e.g., if
-   `PQTERM_DEV` is accidentally left set to `1`, or if some future `DEBUG` flag is
+   `MERIDIAN_EDGE_DEV` is accidentally left set to `1`, or if some future `DEBUG` flag is
    introduced). **Remediation:** add an explicit startup assertion (e.g., refuse to
-   boot if `PQTERM_DEV=1` and an env flag like `PQTERM_ENV=production` is also set).
+   boot if `MERIDIAN_EDGE_DEV=1` and an env flag like `MERIDIAN_EDGE_ENV=production` is also set).
 
 5. **No independent rate limit on `/v1/login/verify`, `/v1/logout`,
    `/v1/keys/spk`, `/v1/keys/opks` (V11.1.2).** Only the challenge-issuance step is

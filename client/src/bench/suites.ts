@@ -89,7 +89,7 @@ const PQC_SLOW_BATCH = 1; // ML-DSA sign/keygen: ~1-2 ms each
 const PQC_FAST_BATCH = 8; // ML-KEM ops: ~0.1 ms each
 const CLASSICAL_BATCH = 64; // X25519/Ed25519: tens of microseconds
 
-const MESSAGE = new TextEncoder().encode("PQTerm benchmark fixed message");
+const MESSAGE = new TextEncoder().encode("Meridian Edge benchmark fixed message");
 
 type Classical = {
   ed25519: typeof import("@noble/curves/ed25519.js")["ed25519"];

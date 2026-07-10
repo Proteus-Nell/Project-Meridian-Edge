@@ -1,12 +1,12 @@
 # Security Policy
 
-PQTerm is a post-quantum E2EE messenger (CLAUDE.md, MVP_DOC.md). We take
+Meridian Edge is a post-quantum E2EE messenger (CLAUDE.md, MVP_DOC.md). We take
 reports of security issues seriously and ask that you report them privately
 rather than through a public GitHub issue.
 
 ## Reporting a vulnerability
 
-Email **security@pqterm.example** with:
+Email **security@meridian-edge.example** with:
 
 - A description of the issue and its potential impact.
 - Steps to reproduce (a minimal repro is very helpful).

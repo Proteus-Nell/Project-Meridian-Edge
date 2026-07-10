@@ -67,13 +67,13 @@ def test_nonce_valid_within_ttl(client: TestClient, clock: FakeClock) -> None:
 def test_origin_binding(client: TestClient) -> None:
     account = Account()
     register(client, account)
-    origin_a = {"origin": "https://pqterm.example"}
+    origin_a = {"origin": "https://meridian-edge.example"}
     challenge = client.post(
         "/v1/login/challenge", json={"uid": account.uid}, headers=origin_a
     ).json()
     # Signed for origin A but presented from origin B: rejected.
     signature = sign_challenge(
-        account, challenge["nonce"], "https://pqterm.example", challenge["timestamp"]
+        account, challenge["nonce"], "https://meridian-edge.example", challenge["timestamp"]
     )
     body = {"uid": account.uid, "nonce": challenge["nonce"], "signature": signature}
     res = client.post(
@@ -85,7 +85,7 @@ def test_origin_binding(client: TestClient) -> None:
 def test_origin_binding_happy_path(client: TestClient) -> None:
     account = Account()
     register(client, account)
-    token = login(client, account, origin="https://pqterm.example")
+    token = login(client, account, origin="https://meridian-edge.example")
     assert len(token) == 64  # 32 bytes hex
 
 

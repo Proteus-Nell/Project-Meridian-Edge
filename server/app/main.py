@@ -39,18 +39,18 @@ def _assert_production_safe(
     *, dev: bool, ws_origins: list[str] | None, database_url: str
 ) -> None:
     """Refuse to boot with a dev-shaped config in production (CLAUDE.md §5
-    checklist: "DEBUG=0 asserted at startup"). Only runs when PQTERM_ENV=
+    checklist: "DEBUG=0 asserted at startup"). Only runs when MERIDIAN_EDGE_ENV=
     production is explicitly set - local dev and the test suite never set it,
     so neither ever exercises this path by accident."""
-    if os.environ.get("PQTERM_ENV") != "production":
+    if os.environ.get("MERIDIAN_EDGE_ENV") != "production":
         return
     problems: list[str] = []
     if dev:
-        problems.append("PQTERM_DEV=1 is set (enables /docs) alongside PQTERM_ENV=production")
+        problems.append("MERIDIAN_EDGE_DEV=1 is set (enables /docs) alongside MERIDIAN_EDGE_ENV=production")
     if not ws_origins:
-        problems.append("PQTERM_WS_ORIGINS is unset - WS origin checking would be disabled")
+        problems.append("MERIDIAN_EDGE_WS_ORIGINS is unset - WS origin checking would be disabled")
     if database_url.startswith("sqlite"):
-        problems.append("PQTERM_DATABASE_URL is a SQLite dev artifact - never deploy it (§7.5)")
+        problems.append("MERIDIAN_EDGE_DATABASE_URL is a SQLite dev artifact - never deploy it (§7.5)")
     time_cost, memory_cost, parallelism = security.hasher_params()
     if (
         time_cost != ARGON2ID_ITERATIONS
@@ -72,23 +72,23 @@ def create_app(
 ) -> FastAPI:
     """App factory. Run with: uvicorn app.main:create_app --factory --reload
 
-    API docs are off unless PQTERM_DEV=1 (CLAUDE.md section 7.5). `clock` is
+    API docs are off unless MERIDIAN_EDGE_DEV=1 (CLAUDE.md section 7.5). `clock` is
     injectable so nonce/session expiry is testable without sleeping.
-    `ws_origins` is the exact WS Origin allowlist (or PQTERM_WS_ORIGINS as a
+    `ws_origins` is the exact WS Origin allowlist (or MERIDIAN_EDGE_WS_ORIGINS as a
     comma list); None leaves it open for local development - production must
     set it (asserted at boot, see _assert_production_safe). `ws_idle_timeout_
     seconds` is real wall-clock time (asyncio.wait_for, not `clock`) - tests
     override it directly to exercise the idle-kill path without sleeping.
     """
-    url = database_url or os.environ.get("PQTERM_DATABASE_URL", "sqlite:///./pqterm_dev.db")
-    dev = os.environ.get("PQTERM_DEV") == "1"
+    url = database_url or os.environ.get("MERIDIAN_EDGE_DATABASE_URL", "sqlite:///./meridian_edge_dev.db")
+    dev = os.environ.get("MERIDIAN_EDGE_DEV") == "1"
     if ws_origins is None:
-        env_origins = os.environ.get("PQTERM_WS_ORIGINS", "")
+        env_origins = os.environ.get("MERIDIAN_EDGE_WS_ORIGINS", "")
         ws_origins = [o.strip() for o in env_origins.split(",") if o.strip()] or None
     _assert_production_safe(dev=dev, ws_origins=ws_origins, database_url=url)
 
     app = FastAPI(
-        title="pqterm",
+        title="Meridian Edge",
         docs_url="/docs" if dev else None,
         redoc_url=None,
         openapi_url="/openapi.json" if dev else None,

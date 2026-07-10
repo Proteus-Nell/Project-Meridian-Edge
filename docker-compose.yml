@@ -12,8 +12,8 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: pqterm
-      POSTGRES_USER: pqterm
+      POSTGRES_DB: meridian_edge
+      POSTGRES_USER: meridian_edge
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - db-data:/var/lib/postgresql/data
@@ -22,7 +22,7 @@ services:
       - /tmp
       - /var/run/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pqterm -d pqterm"]
+      test: ["CMD-SHELL", "pg_isready -U meridian_edge -d meridian_edge"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -36,9 +36,9 @@ services:
       db:
         condition: service_healthy
     environment:
-      PQTERM_ENV: production
-      PQTERM_DATABASE_URL: postgresql+psycopg://pqterm:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/pqterm
-      PQTERM_WS_ORIGINS: ${PQTERM_WS_ORIGINS:?set PQTERM_WS_ORIGINS in .env, e.g. https://pqterm.example}
+      MERIDIAN_EDGE_ENV: production
+      MERIDIAN_EDGE_DATABASE_URL: postgresql+psycopg://meridian_edge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/meridian_edge
+      MERIDIAN_EDGE_WS_ORIGINS: ${MERIDIAN_EDGE_WS_ORIGINS:?set MERIDIAN_EDGE_WS_ORIGINS in .env, e.g. https://meridian-edge.example}
     read_only: true
     tmpfs:
       - /tmp

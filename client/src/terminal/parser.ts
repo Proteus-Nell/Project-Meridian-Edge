@@ -113,7 +113,7 @@ export const COMMAND_USAGE = {
   delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
   rotate: "/rotate passphrase",
   settings:
-    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <dark|parchment|olive>  |  /settings emblem <pq|globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <dark|parchment|olive>  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
   keys: "/keys status  |  /keys refill",
   bench: "/bench [suite]",
   wipe: "/wipe",

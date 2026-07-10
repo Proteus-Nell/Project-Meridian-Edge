@@ -191,7 +191,7 @@ const sent: Uint8Array[] = [];
 
 async function bootstrapAlice(): Promise<Alice> {
   const clock = { now: 1_000_000 };
-  const store = new KeyStore(`pqterm-life-${Math.random()}`, new IDBFactory());
+  const store = new KeyStore(`meridian-edge-life-${Math.random()}`, new IDBFactory());
   const output = new CaptureSink();
   const shell = new FakeShell();
   const executor = new Executor(new Renderer(output), shell, store, () => clock.now);

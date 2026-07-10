@@ -180,7 +180,7 @@ async function bootstrapAlice(): Promise<{
   output: CaptureSink;
   chrome: FakeChrome;
 }> {
-  const store = new KeyStore(`pqterm-ratchet-${Math.random()}`, new IDBFactory());
+  const store = new KeyStore(`meridian-edge-ratchet-${Math.random()}`, new IDBFactory());
   const output = new CaptureSink();
   const shell = new FakeShell();
   const chrome = new FakeChrome();

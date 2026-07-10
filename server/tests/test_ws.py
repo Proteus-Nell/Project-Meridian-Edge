@@ -91,7 +91,7 @@ def test_ws_delivers_live_messages(client: TestClient) -> None:
 
 
 def test_ws_origin_allowlist(clock: FakeClock) -> None:
-    app = create_app("sqlite://", clock=clock, ws_origins=["https://pqterm.example"])
+    app = create_app("sqlite://", clock=clock, ws_origins=["https://meridian-edge.example"])
     with TestClient(app) as restricted:
         with pytest.raises(WebSocketDisconnect) as exc:
             with restricted.websocket_connect(

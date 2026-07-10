@@ -72,7 +72,7 @@ function makeExecutor(): {
 } {
   const output = new CaptureSink();
   const chrome = new FakeChrome();
-  const store = new KeyStore(`pqterm-ui-${Math.random()}`, new IDBFactory());
+  const store = new KeyStore(`meridian-edge-ui-${Math.random()}`, new IDBFactory());
   const executor = new Executor(new Renderer(output), new FakeShell(), store, undefined, chrome);
   return { executor, output, chrome, store };
 }

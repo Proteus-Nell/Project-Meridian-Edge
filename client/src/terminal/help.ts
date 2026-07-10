@@ -60,7 +60,7 @@ const SECTIONS: readonly HelpSection[] = [
     entries: [
       { cmd: "/settings scheme <name>", blurb: "color scheme: dark | parchment | olive" },
       { cmd: "/settings color <slot> <#hex>", blurb: "override a scheme color (or 'reset')" },
-      { cmd: "/settings emblem <name>", blurb: "medallion glyph: pq | globe | tree" },
+      { cmd: "/settings emblem <name>", blurb: "medallion glyph: globe | tree" },
       { cmd: "/settings theme <layer> <on|off>", blurb: "toggle atmosphere layers" },
     ],
   },
@@ -88,7 +88,7 @@ export function renderHelp(): string[] {
     ...SECTIONS.flatMap((section) => section.entries.map((entry) => entry.cmd.length)),
   );
   const lines: string[] = [
-    "PQTerm commands  —  anything not starting with / is a message to the active chat",
+    "Meridian Edge commands  —  anything not starting with / is a message to the active chat",
   ];
   for (const section of SECTIONS) {
     lines.push("");

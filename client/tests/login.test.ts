@@ -5,7 +5,7 @@ import { buildLoginMessage } from "../src/crypto/login";
 describe("buildLoginMessage", () => {
   it("produces nonce || origin || ts_be8, byte-exact", () => {
     const nonce = new Uint8Array(32).map((_, i) => i);
-    const origin = "https://pqterm.example";
+    const origin = "https://meridian-edge.example";
     const timestamp = 1_751_600_000;
 
     const message = buildLoginMessage(nonce, origin, timestamp);
