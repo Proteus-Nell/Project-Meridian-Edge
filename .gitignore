@@ -1,0 +1,41 @@
+# Node / client
+node_modules/
+client/dist/
+client/coverage/
+*.tsbuildinfo
+
+# Python / server
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+
+# Dev databases (SQLite artifacts must never be deployed - CLAUDE.md §7.5)
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated benchmark reports (§8) - regenerate with `make bench`
+bench/out/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+tls/
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# graphify knowledge-graph artifacts (machine-local: absolute interpreter
+# paths, extraction cache; regenerate with /graphify)
+graphify-out/

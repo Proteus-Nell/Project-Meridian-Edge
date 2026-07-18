@@ -1,0 +1,13 @@
+[project]
+name = "meridian-edge-server"
+version = "0.1.0"
+description = "Meridian Edge server: dumb ciphertext router, never sees plaintext or private keys"
+requires-python = ">=3.12"
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

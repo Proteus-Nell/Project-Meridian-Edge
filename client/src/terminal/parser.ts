@@ -1,0 +1,542 @@
+// Command parser (CLAUDE.md §1.2): a line starting with "/" is tokenized
+// against a static allowlist; anything else is message text for the active
+// conversation. The parser is total — it never throws on any input — and
+// returns a typed discriminated union consumed by a switch in the executor.
+
+import { CROCKFORD_ALPHABET, UID_CHARS } from "../crypto/constants";
+import { suggestCommand } from "./suggest";
+import { isColorSlot, isEmblemName, isSchemeName, normalizeHex } from "./theme";
+import type { ColorSlot, EmblemName, SchemeName } from "./theme";
+
+export type DurationUnit = "m" | "h" | "d" | "w";
+
+export type Duration =
+  | { readonly kind: "off" }
+  | { readonly kind: "for"; readonly amount: number; readonly unit: DurationUnit };
+
+export const WEEKDAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+export type RotationSetting =
+  | { readonly kind: "on" }
+  | { readonly kind: "off" }
+  | { readonly kind: "day"; readonly day: Weekday };
+
+export const THEME_ELEMENTS = ["emblem", "scanlines", "vignette", "dock"] as const;
+export type ThemeElement = (typeof THEME_ELEMENTS)[number];
+
+/** Scope of a `/delete` of your own (outgoing) messages (§5.3):
+ * the last one, the last N, all in the active conversation, or every one
+ * across all conversations ("purge"). */
+export type DeleteScope =
+  | { readonly kind: "last" }
+  | { readonly kind: "count"; readonly count: number }
+  | { readonly kind: "all" }
+  | { readonly kind: "purge" };
+
+export type Command =
+  | { readonly name: "register" }
+  | { readonly name: "login" }
+  | { readonly name: "logout" }
+  | { readonly name: "lock" }
+  | { readonly name: "whoami" }
+  | { readonly name: "add"; readonly uid: string; readonly alias: string | undefined }
+  | { readonly name: "chat"; readonly target: string }
+  | { readonly name: "home" }
+  | { readonly name: "return" }
+  | { readonly name: "contacts" }
+  | { readonly name: "verify"; readonly alias: string }
+  | { readonly name: "verified"; readonly alias: string }
+  | { readonly name: "ack"; readonly alias: string }
+  | { readonly name: "timer"; readonly alias: string; readonly duration: Duration }
+  | { readonly name: "purge-set"; readonly duration: Duration }
+  | { readonly name: "purge-now"; readonly alias: string | undefined }
+  | { readonly name: "delete"; readonly scope: DeleteScope; readonly silent: boolean }
+  | { readonly name: "rotate-passphrase" }
+  | { readonly name: "settings-rotation"; readonly setting: RotationSetting }
+  | { readonly name: "settings-notify"; readonly enabled: boolean }
+  | { readonly name: "settings-mask"; readonly mask: "asterisk" | "hidden" }
+  | { readonly name: "settings-trust"; readonly mode: "auto" | "manual" }
+  | { readonly name: "settings-theme"; readonly element: ThemeElement | "all"; readonly enabled: boolean }
+  | { readonly name: "settings-scheme"; readonly scheme: SchemeName }
+  | { readonly name: "settings-emblem"; readonly emblem: EmblemName }
+  | { readonly name: "settings-color"; readonly slot: ColorSlot; readonly hex: string }
+  | { readonly name: "settings-color-reset" }
+  | { readonly name: "keys-status" }
+  | { readonly name: "keys-refill" }
+  | { readonly name: "bench"; readonly suite: string | undefined }
+  | { readonly name: "wipe" }
+  | { readonly name: "clr" }
+  | { readonly name: "help"; readonly topic: CommandWord | undefined };
+
+export type CommandName = Command["name"];
+
+export type ParseResult =
+  | { readonly kind: "empty" }
+  | { readonly kind: "message"; readonly text: string }
+  | { readonly kind: "command"; readonly command: Command }
+  | {
+      readonly kind: "invalid";
+      readonly error: string;
+      readonly usage: string | undefined;
+      // A "did you mean /login?" candidate when the head looked like a typo of a
+      // real command; undefined when nothing was close enough.
+      readonly suggestion: string | undefined;
+    };
+
+// The static allowlist: every slash word the terminal accepts, with usage.
+// No dynamic dispatch happens off this map — it gates membership only.
+export const COMMAND_USAGE = {
+  register: "/register",
+  login: "/login",
+  logout: "/logout",
+  lock: "/lock",
+  whoami: "/whoami",
+  add: "/add <uid> [alias]",
+  contacts: "/contacts",
+  chat: "/chat <alias|uid>",
+  home: "/home",
+  return: "/return",
+  verify: "/verify <alias>",
+  verified: "/verified <alias>",
+  ack: "/ack <alias>",
+  timer: "/timer <alias> <duration|off>  (duration: 30m, 1h, 1d, 1w, ...)",
+  purge: "/purge set <duration|off>  |  /purge now [alias]",
+  delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
+  rotate: "/rotate passphrase",
+  settings:
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <dark|parchment|olive>  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
+  keys: "/keys status  |  /keys refill",
+  bench: "/bench [suite]",
+  wipe: "/wipe",
+  clr: "/clr",
+  help: "/help [command]",
+} as const;
+
+export type CommandWord = keyof typeof COMMAND_USAGE;
+
+export function isCommandWord(word: string): word is CommandWord {
+  return Object.prototype.hasOwnProperty.call(COMMAND_USAGE, word);
+}
+
+/** Alternate spellings that execute a canonical command (§1). Resolved in
+ * parseLine before the allowlist check, so `/text bob` behaves exactly like
+ * `/chat bob` (arguments and validation are identical). Kept to non-destructive
+ * commands by design — never `/wipe` or `/delete`. The autosuggest dropdown
+ * still lists only canonical names; these are simply accepted when typed. */
+export const COMMAND_ALIASES: Record<string, CommandWord> = {
+  signup: "register",
+  "sign-up": "register",
+  signin: "login",
+  "sign-in": "login",
+  logon: "login",
+  signout: "logout",
+  "sign-out": "logout",
+  text: "chat",
+  msg: "chat",
+  message: "chat",
+  dm: "chat",
+  clear: "clr",
+  cls: "clr",
+  back: "return",
+};
+
+/** Resolve a typed word to a canonical command word: itself if it is one, its
+ * alias target if it is an alias, otherwise null. */
+export function resolveCommandWord(word: string): CommandWord | null {
+  if (isCommandWord(word)) {
+    return word;
+  }
+  return COMMAND_ALIASES[word] ?? null;
+}
+
+const ALIAS_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const DURATION_RE = /^(\d{1,4})([mhdw])$/;
+const SUITE_RE = /^[A-Za-z0-9_-]{1,16}$/;
+
+/** Canonicalize a UID: strip dashes, uppercase, Crockford ambiguity mapping
+ * (O→0, I/L→1). Returns null unless exactly 26 canonical chars remain. */
+export function normalizeUid(raw: string): string | null {
+  const cleaned = raw
+    .toUpperCase()
+    .replace(/-/g, "")
+    .replace(/O/g, "0")
+    .replace(/[IL]/g, "1");
+  if (cleaned.length !== UID_CHARS) {
+    return null;
+  }
+  for (const ch of cleaned) {
+    if (!CROCKFORD_ALPHABET.includes(ch)) {
+      return null;
+    }
+  }
+  return cleaned;
+}
+
+/** Group a canonical 26-char UID for display: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XX. */
+export function formatUid(uid: string): string {
+  const groups: string[] = [];
+  for (let i = 0; i < uid.length; i += 4) {
+    groups.push(uid.slice(i, i + 4));
+  }
+  return groups.join("-");
+}
+
+function parseAlias(token: string): string | null {
+  return ALIAS_RE.test(token) ? token : null;
+}
+
+function parseDuration(token: string): Duration | null {
+  if (token === "off") {
+    return { kind: "off" };
+  }
+  const match = DURATION_RE.exec(token);
+  if (match === null) {
+    return null;
+  }
+  const amount = Number(match[1]);
+  if (amount < 1) {
+    return null;
+  }
+  return { kind: "for", amount, unit: match[2] as DurationUnit };
+}
+
+function parseWeekday(token: string): Weekday | null {
+  const lower = token.toLowerCase();
+  return (WEEKDAYS as readonly string[]).includes(lower) ? (lower as Weekday) : null;
+}
+
+function invalid(error: string, usage?: string, suggestion?: string): ParseResult {
+  return { kind: "invalid", error, usage, suggestion };
+}
+
+function command(cmd: Command): ParseResult {
+  return { kind: "command", command: cmd };
+}
+
+function clip(word: string): string {
+  return word.length > 32 ? `${word.slice(0, 32)}…` : word;
+}
+
+export function parseLine(line: string): ParseResult {
+  if (line.trim().length === 0) {
+    return { kind: "empty" };
+  }
+  if (line.startsWith(" ")) {
+    // A leading space escapes a literal "/" at message start (CLAUDE.md §1.2).
+    return { kind: "message", text: line.slice(1) };
+  }
+  if (!line.startsWith("/")) {
+    return { kind: "message", text: line };
+  }
+  const tokens = line
+    .slice(1)
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+  const head = tokens[0];
+  if (head === undefined) {
+    return invalid("empty command", COMMAND_USAGE.help);
+  }
+  const word = head.toLowerCase();
+  const resolved = resolveCommandWord(word);
+  if (resolved === null) {
+    return invalid(
+      `unknown command: /${clip(word)}`,
+      "type /help for the command list",
+      suggestCommand(word) ?? undefined,
+    );
+  }
+  return parseCommand(resolved, tokens.slice(1));
+}
+
+function parseCommand(word: CommandWord, args: readonly string[]): ParseResult {
+  const usage = COMMAND_USAGE[word];
+  switch (word) {
+    case "register":
+    case "login":
+    case "logout":
+    case "lock":
+    case "whoami":
+    case "home":
+    case "return":
+    case "contacts":
+    case "clr":
+    case "wipe": {
+      if (args.length !== 0) {
+        return invalid(`/${word} takes no arguments`, usage);
+      }
+      return command({ name: word });
+    }
+    case "add": {
+      if (args.length < 1 || args.length > 2) {
+        return invalid("expected a UID and an optional alias", usage);
+      }
+      const uid = normalizeUid(args[0] ?? "");
+      if (uid === null) {
+        return invalid("invalid UID (26 Crockford Base32 chars, dashes optional)", usage);
+      }
+      const aliasToken = args[1];
+      if (aliasToken === undefined) {
+        return command({ name: "add", uid, alias: undefined });
+      }
+      const alias = parseAlias(aliasToken);
+      if (alias === null) {
+        return invalid("invalid alias (1-32 chars: letters, digits, _ or -)", usage);
+      }
+      return command({ name: "add", uid, alias });
+    }
+    case "chat": {
+      const token = args[0];
+      if (args.length !== 1 || token === undefined) {
+        return invalid("expected an alias or UID", usage);
+      }
+      const uid = normalizeUid(token);
+      if (uid !== null) {
+        return command({ name: "chat", target: uid });
+      }
+      const alias = parseAlias(token);
+      if (alias === null) {
+        return invalid("not a valid alias or UID", usage);
+      }
+      return command({ name: "chat", target: alias });
+    }
+    case "verify":
+    case "verified":
+    case "ack": {
+      const token = args[0];
+      if (args.length !== 1 || token === undefined) {
+        return invalid("expected an alias", usage);
+      }
+      const alias = parseAlias(token);
+      if (alias === null) {
+        return invalid("invalid alias", usage);
+      }
+      return command({ name: word, alias });
+    }
+    case "timer": {
+      const aliasToken = args[0];
+      const durationToken = args[1];
+      if (args.length !== 2 || aliasToken === undefined || durationToken === undefined) {
+        return invalid("expected an alias and a duration", usage);
+      }
+      const alias = parseAlias(aliasToken);
+      if (alias === null) {
+        return invalid("invalid alias", usage);
+      }
+      const duration = parseDuration(durationToken);
+      if (duration === null) {
+        return invalid("invalid duration (e.g. 30m, 1h, 1d, 1w, or off)", usage);
+      }
+      return command({ name: "timer", alias, duration });
+    }
+    case "purge": {
+      const sub = args[0];
+      if (sub === "set") {
+        const token = args[1];
+        if (args.length !== 2 || token === undefined) {
+          return invalid("expected a duration", usage);
+        }
+        const duration = parseDuration(token);
+        if (duration === null) {
+          return invalid("invalid duration (e.g. 30m, 1h, 1d, 1w, or off)", usage);
+        }
+        return command({ name: "purge-set", duration });
+      }
+      if (sub === "now") {
+        if (args.length > 2) {
+          return invalid("expected at most one alias", usage);
+        }
+        const aliasToken = args[1];
+        if (aliasToken === undefined) {
+          return command({ name: "purge-now", alias: undefined });
+        }
+        const alias = parseAlias(aliasToken);
+        if (alias === null) {
+          return invalid("invalid alias", usage);
+        }
+        return command({ name: "purge-now", alias });
+      }
+      return invalid("expected 'set' or 'now'", usage);
+    }
+    case "delete": {
+      // A trailing "/s" (the only token that can begin with a slash mid-line,
+      // since the leading slash was already the command word) requests a silent
+      // deletion with no confirmation output.
+      const rest = [...args];
+      let silent = false;
+      if (rest[rest.length - 1] === "/s") {
+        silent = true;
+        rest.pop();
+      }
+      const scopeToken = rest[0];
+      if (rest.length !== 1 || scopeToken === undefined) {
+        return invalid("expected last, a count, all, or purge (optionally /s)", usage);
+      }
+      if (scopeToken === "last") {
+        return command({ name: "delete", scope: { kind: "last" }, silent });
+      }
+      if (scopeToken === "all") {
+        return command({ name: "delete", scope: { kind: "all" }, silent });
+      }
+      if (scopeToken === "purge") {
+        return command({ name: "delete", scope: { kind: "purge" }, silent });
+      }
+      if (/^\d{1,4}$/.test(scopeToken)) {
+        const count = Number(scopeToken);
+        if (count >= 1) {
+          return command({ name: "delete", scope: { kind: "count", count }, silent });
+        }
+      }
+      return invalid("expected last, a positive count, all, or purge (optionally /s)", usage);
+    }
+    case "rotate": {
+      if (args.length !== 1 || args[0] !== "passphrase") {
+        return invalid("expected 'passphrase'", usage);
+      }
+      return command({ name: "rotate-passphrase" });
+    }
+    case "settings": {
+      const sub = args[0];
+      if (sub === "rotation") {
+        const value = args[1];
+        if (value === "on" && args.length === 2) {
+          return command({ name: "settings-rotation", setting: { kind: "on" } });
+        }
+        if (value === "off" && args.length === 2) {
+          return command({ name: "settings-rotation", setting: { kind: "off" } });
+        }
+        if (value === "day" && args.length === 3) {
+          const day = parseWeekday(args[2] ?? "");
+          if (day === null) {
+            return invalid("invalid weekday (monday..sunday)", usage);
+          }
+          return command({ name: "settings-rotation", setting: { kind: "day", day } });
+        }
+        return invalid("expected on, off, or day <weekday>", usage);
+      }
+      if (sub === "notify") {
+        const value = args[1];
+        if ((value === "on" || value === "off") && args.length === 2) {
+          return command({ name: "settings-notify", enabled: value === "on" });
+        }
+        return invalid("expected on or off", usage);
+      }
+      if (sub === "mask") {
+        const value = args[1];
+        if ((value === "asterisk" || value === "hidden") && args.length === 2) {
+          return command({ name: "settings-mask", mask: value });
+        }
+        return invalid("expected asterisk or hidden", usage);
+      }
+      if (sub === "trust") {
+        const value = args[1];
+        if ((value === "auto" || value === "manual") && args.length === 2) {
+          return command({ name: "settings-trust", mode: value });
+        }
+        return invalid("expected auto or manual", usage);
+      }
+      if (sub === "theme") {
+        const element = args[1];
+        const value = args[2];
+        const known =
+          element === "all" || (THEME_ELEMENTS as readonly string[]).includes(element ?? "");
+        if (known && (value === "on" || value === "off") && args.length === 3) {
+          return command({
+            name: "settings-theme",
+            element: element as ThemeElement | "all",
+            enabled: value === "on",
+          });
+        }
+        return invalid("expected <emblem|scanlines|vignette|dock|all> <on|off>", usage);
+      }
+      if (sub === "scheme") {
+        const value = args[1];
+        if (value !== undefined && isSchemeName(value) && args.length === 2) {
+          return command({ name: "settings-scheme", scheme: value });
+        }
+        return invalid("expected dark, parchment, or olive", usage);
+      }
+      if (sub === "emblem") {
+        const value = args[1];
+        if (value !== undefined && isEmblemName(value) && args.length === 2) {
+          return command({ name: "settings-emblem", emblem: value });
+        }
+        return invalid("expected pq, globe, or tree", usage);
+      }
+      if (sub === "color") {
+        if (args[1] === "reset" && args.length === 2) {
+          return command({ name: "settings-color-reset" });
+        }
+        const slotToken = args[1];
+        const hexToken = args[2];
+        if (
+          slotToken !== undefined &&
+          isColorSlot(slotToken) &&
+          hexToken !== undefined &&
+          args.length === 3
+        ) {
+          const hex = normalizeHex(hexToken);
+          if (hex === null) {
+            return invalid("invalid color (use a 6-digit hex like #1a2b3c)", usage);
+          }
+          return command({ name: "settings-color", slot: slotToken, hex });
+        }
+        return invalid(
+          "expected <accent|background|panel|text|muted> <#rrggbb>, or 'reset'",
+          usage,
+        );
+      }
+      return invalid("expected 'rotation', 'notify', 'mask', 'theme', 'scheme', 'emblem', or 'color'", usage);
+    }
+    case "keys": {
+      const sub = args[0];
+      if (sub === "status" && args.length === 1) {
+        return command({ name: "keys-status" });
+      }
+      if (sub === "refill" && args.length === 1) {
+        return command({ name: "keys-refill" });
+      }
+      return invalid("expected 'status' or 'refill'", usage);
+    }
+    case "bench": {
+      if (args.length > 1) {
+        return invalid("expected at most one suite name", usage);
+      }
+      const token = args[0];
+      if (token === undefined) {
+        return command({ name: "bench", suite: undefined });
+      }
+      if (!SUITE_RE.test(token)) {
+        return invalid("invalid suite name", usage);
+      }
+      return command({ name: "bench", suite: token });
+    }
+    case "help": {
+      if (args.length > 1) {
+        return invalid("expected at most one command name", usage);
+      }
+      const token = args[0];
+      if (token === undefined) {
+        return command({ name: "help", topic: undefined });
+      }
+      const raw = token.toLowerCase().replace(/^\//, "");
+      const topic = resolveCommandWord(raw);
+      if (topic === null) {
+        return invalid(
+          `unknown command: /${clip(raw)}`,
+          "type /help for the command list",
+          suggestCommand(raw) ?? undefined,
+        );
+      }
+      return command({ name: "help", topic });
+    }
+  }
+}

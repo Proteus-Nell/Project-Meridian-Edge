@@ -1,0 +1,376 @@
+:root {
+  /* The five scheme slots (accent / background / panel / text / muted) — the
+     defaults are the 'dark' scheme; chrome.applyScheme overwrites these from
+     the persisted prefs (scheme preset + per-slot HEX overrides). Everything
+     below derives from these five, so /settings scheme + /settings color
+     restyle the whole app. */
+  --accent: #58a6ff;
+  --bg: #0d1117;
+  --panel: #161b22;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+
+  /* Derived tones. */
+  --border: color-mix(in srgb, var(--text) 18%, var(--bg));
+  --muted-dim: color-mix(in srgb, var(--muted) 75%, var(--bg));
+
+  /* The medallion's two colors (spec requirement 2), derived from the scheme. */
+  --emblem: var(--accent);
+  --emblem-dim: color-mix(in srgb, var(--accent) 55%, var(--bg));
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Cascadia Mono", "Fira Mono", Menlo, Consolas, monospace;
+}
+
+/* App shell: the transcript fills the space above a fixed footer that holds the
+   status strip and the bottom-pinned command line. 100dvh keeps the command line
+   above the mobile software keyboard (CLAUDE.md §1.6). */
+#app {
+  position: relative; /* anchors the #vignette overlay */
+  display: grid;
+  grid-template-rows: 1fr auto;
+  /* A single column constrained to the viewport: minmax(0, 1fr) lets it shrink
+     below the terminal's intrinsic (content) width so the xterm can re-fit
+     instead of overflowing on narrow/mobile viewports. */
+  grid-template-columns: minmax(0, 1fr);
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+#transcript-pane {
+  position: relative;
+  min-width: 0; /* allow the column to shrink below the terminal's content width */
+  min-height: 0; /* let the 1fr row shrink so the transcript can scroll */
+  overflow: hidden;
+  padding: 8px 10px 0;
+}
+
+#transcript {
+  position: relative;
+  z-index: 1; /* text above the emblem medallion (z 0) */
+  width: 100%;
+  height: 100%;
+}
+
+/* xterm.css ships an OPAQUE #000 default on .xterm-viewport (a macOS scrollbar
+   workaround) that would sit above the pane background and hide the emblem
+   medallion even though the terminals run with allowTransparency. !important
+   because xterm may also re-apply the color as an inline style on theme
+   changes; this must win either way. */
+#transcript .xterm-viewport,
+#command-line .xterm-viewport {
+  background-color: transparent !important;
+}
+
+/* ----- atmosphere layers (each gated on a body class set by /settings theme;
+   all pointer-events:none and far below the dropdown's z-index 20) ---------- */
+
+/* Emblem medallion: a faint engraved roundel behind the transcript text that
+   spins around its vertical axis like a slowly turning coin (rotateY inside a
+   perspective parent, so the spin reads as 3-D). Visible because both
+   terminals run with allowTransparency and a transparent theme background.
+   States (classes on <body>, wired by chrome.setEmblemState):
+   - idle:        animation paused, frozen face-on
+   - .is-playing: full rotation every 9s (session live)
+   - .is-tx:      3.2s rotation + pulse ring (unacknowledged security event or
+                  contact request — an unread notification) */
+.medallion {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(52vmin, 480px);
+  height: min(52vmin, 480px);
+  perspective: 700px;
+  opacity: 0.14;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.th-emblem .medallion {
+  display: block;
+}
+
+/* The alert state earns a little more presence behind the text. */
+body.is-tx .medallion {
+  opacity: 0.22;
+}
+
+/* Glyph selection (/settings emblem): the ring framing above is shared; only
+   one inner glyph shows. Default (before prefs load) is the globe. */
+.glyph {
+  display: none;
+}
+
+body.em-globe .glyph-globe,
+body:not(.em-globe):not(.em-tree) .glyph-globe {
+  display: inline;
+}
+
+body.em-tree .glyph-tree {
+  display: inline;
+}
+
+.emblem-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  animation: emblem-spin 9s linear infinite;
+  animation-play-state: paused;
+}
+
+body.is-playing .emblem-svg {
+  animation-play-state: running;
+}
+
+body.is-tx .emblem-svg {
+  animation-duration: 3.2s;
+}
+
+@keyframes emblem-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
+}
+
+.medallion-pulse {
+  position: absolute;
+  inset: -7px;
+  border: 1px solid var(--emblem);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.is-tx .medallion-pulse {
+  animation: medallion-pulse 1.6s ease-out infinite;
+}
+
+@keyframes medallion-pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.14);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emblem-svg,
+  body.is-tx .emblem-svg {
+    animation: none;
+  }
+  body.is-tx .medallion-pulse {
+    animation: none;
+  }
+}
+
+/* Scanlines: a whisper of CRT texture over the transcript (text-derived so it
+   works on light schemes too). */
+body.th-scanlines #transcript-pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--text) 4%, transparent) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* Vignette: darkens the edges of the whole app; the footer sits above it.
+   Black-based on purpose — a photographic vignette reads correctly on both
+   dark and light schemes. */
+#vignette {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 38%, transparent 55%, rgba(1, 4, 9, 0.45) 100%);
+}
+
+body.th-vignette #vignette {
+  display: block;
+}
+
+/* ----- footer: divider, status strip, command line --------------------------- */
+
+#footer {
+  position: relative;
+  z-index: 4; /* above the vignette overlay */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+  padding: 4px 10px 6px;
+}
+
+#divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 5px;
+}
+
+/* Dock treatment: the footer as a slightly raised console panel. */
+body.th-dock #footer {
+  background: color-mix(in srgb, var(--panel) 55%, var(--bg));
+  box-shadow: 0 -4px 14px rgba(1, 4, 9, 0.35);
+}
+
+body.th-dock #divider {
+  background: color-mix(in srgb, var(--text) 10%, var(--bg));
+}
+
+/* Status strip: transient latest event (left) + persistent chat context (right). */
+#status-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 18px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.status-event {
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  transition: opacity 0.8s ease;
+}
+
+/* Stale: dims after a few seconds so an old status doesn't read as current. */
+.status-event.stale {
+  opacity: 0.45;
+}
+
+.status-time {
+  color: var(--muted-dim);
+}
+
+/* Event colors: success/warning/failure stay semantic (green/amber/red work on
+   every scheme); info follows the scheme accent. */
+.status-event.status-success {
+  color: #3fb950;
+}
+.status-event.status-warning {
+  color: #d29922;
+}
+.status-event.status-failure {
+  color: #f85149;
+}
+.status-event.status-info {
+  color: var(--accent);
+}
+.status-event.status-security {
+  color: #ffffff;
+  background: #da3633;
+  font-weight: 700;
+}
+
+/* Persistent §1.5 context: [chatting with: alias (verified|UNVERIFIED)] [timer: 1h] */
+#status-context {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+#command-line {
+  height: 24px;
+  min-width: 0;
+}
+
+/* Autosuggest: floats directly above the command line, tall enough to overlap
+   the bottom of the transcript pane; hidden unless .open. None of its ancestors
+   (#footer, #app) establish a stacking context, so this z-index is compared
+   directly against xterm's own layers at the document root — @xterm/xterm
+   6.0.0's delivery-tick decorations (.xterm-decoration) sit at z-index: 6 (see
+   node_modules/@xterm/xterm/css/xterm.css), which would otherwise paint through
+   the dropdown wherever a ticked line falls behind it. 20 clears every z-index
+   xterm.js ships (max observed: 11, its own scrollbar), with headroom to spare. */
+#autosuggest {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 30px;
+  display: none;
+  flex-direction: column;
+  max-height: 40vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 -6px 20px rgba(1, 4, 9, 0.4);
+  z-index: 20;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+#autosuggest.open {
+  display: flex;
+}
+
+.suggestion {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+
+/* Keyboard-highlighted row (arrow navigation). */
+.suggestion.active {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.suggestion-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.suggestion-hint {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Right-edge delivery ticks — xterm decorations pinned to a message row. These
+   classes only colour the glyph (semantic green/red on every scheme); xterm
+   owns the element's position/size. */
+.tick {
+  color: #3fb950;
+  font-weight: 700;
+}
+
+.tick-fail {
+  color: #f85149;
+}
