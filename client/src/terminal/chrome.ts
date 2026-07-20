@@ -37,6 +37,16 @@ const STATUS_STALE_MS = 6000;
  * text renders at full brightness so conversations stand out. */
 export type EchoKind = "command" | "message";
 
+/** A right-edge delivery tick: the marker pinning it to its message row, the
+ * glyph/classes to paint, and the live decoration (null until pinned, replaced
+ * on each reflow). Retained so ticks can be re-pinned to the edge on resize. */
+interface TickSpec {
+  readonly marker: IMarker;
+  readonly glyph: string;
+  readonly className: string;
+  decoration: IDecoration | null;
+}
+
 /**
  * Owns everything on the page that is not one of the two terminals.
  * Constructed with the transcript terminal (so it can pin tick decorations to
@@ -50,7 +60,11 @@ export class Chrome implements SuggestionNav {
   private readonly suggestEl: HTMLElement;
   private lastSentMarker: IMarker | null = null;
   private readonly markers: IMarker[] = [];
-  private readonly decorations: IDecoration[] = [];
+  // Each delivery tick keeps its anchoring marker + glyph so it can be
+  // re-pinned to the new right edge on resize (a decoration's column x is
+  // fixed at creation — see reflowTicks). `decoration` is the live xterm
+  // handle, replaced whenever we re-register.
+  private readonly ticks: TickSpec[] = [];
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Autosuggest state: the words currently shown, the highlighted row
@@ -147,24 +161,51 @@ export class Chrome implements SuggestionNav {
     if (marker === null || marker.line < 0) {
       return; // nothing to anchor to (e.g. the row scrolled out of scrollback)
     }
+    const spec: TickSpec = { marker, glyph, className, decoration: null };
+    this.ticks.push(spec);
+    this.pinTick(spec);
+  }
+
+  /** Register (or re-register) a tick's decoration at the CURRENT right edge.
+   * A decoration's column x is read once at creation and can't be mutated, so
+   * this is also the re-pin path used by reflowTicks after a resize. */
+  private pinTick(spec: TickSpec): void {
+    if (spec.marker.line < 0) {
+      return; // row scrolled out of scrollback since it was echoed
+    }
     const decoration = this.transcript.registerDecoration({
-      marker,
+      marker: spec.marker,
       x: Math.max(0, this.transcript.cols - 1),
       width: 1,
     });
     if (decoration === undefined) {
       return;
     }
-    this.decorations.push(decoration);
+    spec.decoration = decoration;
     decoration.onRender((el) => {
       // onRender may fire repeatedly (scroll/resize); these ops are idempotent.
       // ADD our classes rather than replacing className — xterm's own decoration
       // class carries `position: absolute`, which anchors the glyph to the cell.
-      el.textContent = glyph;
-      for (const cls of className.split(" ")) {
+      el.textContent = spec.glyph;
+      for (const cls of spec.className.split(" ")) {
         el.classList.add(cls);
       }
     });
+  }
+
+  /** Re-pin every delivery tick to the right edge after the terminal reflows.
+   * fit() on resize changes the column count, but each decoration's x was fixed
+   * at the old cols-1, so the ticks would otherwise drift inward from the edge
+   * (and be wrong from the very first fit if the terminal opened at a default
+   * width). Disposing and re-registering against the retained markers is cheap
+   * (ticks are few) and idempotent; markers scrolled out of view are skipped by
+   * pinTick. Wired to the ResizeObserver/refit path in main.ts. */
+  reflowTicks(): void {
+    for (const spec of this.ticks) {
+      spec.decoration?.dispose();
+      spec.decoration = null;
+      this.pinTick(spec);
+    }
   }
 
   // ----- autosuggest dropdown -------------------------------------------------
@@ -337,13 +378,13 @@ export class Chrome implements SuggestionNav {
    * `announce` (default true) posts a "screen cleared" status; the conversation
    * redraw after a /delete passes false so the wipe is silent before it reprints. */
   clearScreen(announce = true): void {
-    for (const decoration of this.decorations) {
-      decoration.dispose();
+    for (const spec of this.ticks) {
+      spec.decoration?.dispose();
     }
     for (const marker of this.markers) {
       marker.dispose();
     }
-    this.decorations.length = 0;
+    this.ticks.length = 0;
     this.markers.length = 0;
     this.lastSentMarker = null;
     this.transcript.clear();
