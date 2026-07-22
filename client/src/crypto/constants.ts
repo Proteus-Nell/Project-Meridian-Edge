@@ -29,6 +29,9 @@ export const ML_KEM_768_CT_BYTES = 1088;
 // Server payload cap (CLAUDE.md §3).
 export const MAX_PAYLOAD_BYTES = 65536;
 
+// Recovery codes (CLAUDE.md §2.2): 80 bits, Crockford Base32, 16 chars.
+export const RECOVERY_CODE_CHARS = 16;
+
 // Login nonces (CLAUDE.md §2.3).
 export const NONCE_BYTES = 32;
 

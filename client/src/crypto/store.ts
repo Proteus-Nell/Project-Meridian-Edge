@@ -119,6 +119,9 @@ export class KeyStore {
   constructor(
     private readonly dbName: string = "meridian-edge",
     private readonly idb: IDBFactory = indexedDB,
+    // Default derivation cost for create(); overridable so tests can use fast
+    // parameters for flows (like /recover) that create the store internally.
+    private readonly defaultParams: Argon2Params = DEFAULT_ARGON2_PARAMS,
   ) {}
 
   private async openDb(): Promise<IDBDatabase> {
@@ -212,7 +215,7 @@ export class KeyStore {
     return this.dek !== null;
   }
 
-  async create(passphrase: string, params: Argon2Params = DEFAULT_ARGON2_PARAMS): Promise<void> {
+  async create(passphrase: string, params: Argon2Params = this.defaultParams): Promise<void> {
     if (await this.exists()) {
       throw new Error("store already exists");
     }

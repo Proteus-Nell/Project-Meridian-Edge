@@ -47,6 +47,21 @@ export function register(ikPub: Uint8Array): Promise<RegisterResponse> {
   return requestJson<RegisterResponse>("POST", "/v1/register", { ik_pub: toBase64(ikPub) });
 }
 
+export interface RecoverResponse {
+  readonly uid: string;
+  readonly recovery_codes: readonly string[]; // full replacement set, shown once
+}
+
+/** Redeem a recovery code and enroll `ikPub` as the account's new identity
+ * key (§2.2). The server destroys every artifact of the old identity. */
+export function recover(uid: string, code: string, ikPub: Uint8Array): Promise<RecoverResponse> {
+  return requestJson<RecoverResponse>("POST", "/v1/recover", {
+    uid,
+    code,
+    ik_pub: toBase64(ikPub),
+  });
+}
+
 export interface ChallengeResponse {
   readonly nonce: string; // hex
   readonly timestamp: number;

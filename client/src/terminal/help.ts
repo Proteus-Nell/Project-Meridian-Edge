@@ -22,6 +22,7 @@ const SECTIONS: readonly HelpSection[] = [
     title: "Identity & session",
     entries: [
       { cmd: "/register", blurb: "create an identity (prints your UID + recovery codes)" },
+      { cmd: "/recover", blurb: "regain your account with a recovery code (new device / lost passphrase)" },
       { cmd: "/login", blurb: "unlock the local store and connect" },
       { cmd: "/logout", blurb: "revoke the session and lock" },
       { cmd: "/lock", blurb: "lock the store now" },

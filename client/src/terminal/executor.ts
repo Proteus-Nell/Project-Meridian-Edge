@@ -34,7 +34,7 @@ import {
 import { fromBase64, toBase64 } from "../util/base64";
 import { secretStringsEqual } from "../util/secret";
 import type { Command, DeleteScope, Duration, DurationUnit, ParseResult, ThemeElement, Weekday } from "./parser";
-import { COMMAND_USAGE, formatUid, normalizeUid } from "./parser";
+import { COMMAND_USAGE, formatUid, normalizeRecoveryCode, normalizeUid } from "./parser";
 import { renderCommandHelp, renderHelp } from "./help";
 import type { EventLevel, Renderer } from "./renderer";
 import type { ShellIO } from "./shell";
@@ -439,6 +439,9 @@ export class Executor {
         return;
       case "register":
         this.run(() => this.doRegister());
+        return;
+      case "recover":
+        this.run(() => this.doRecover());
         return;
       case "login":
         this.run(() => this.doLogin());
@@ -1960,6 +1963,120 @@ export class Executor {
     response.recovery_codes.forEach((code, i) => {
       this.renderer.plain(`    ${(i + 1).toString().padStart(2)}. ${code}`);
     });
+
+    await this.loginWithIdentity();
+    await this.uploadInitialBundle();
+    this.connectWs();
+    await this.refreshEmblemState();
+    this.touchAutoLock();
+  }
+
+  /** `/recover`: redeem a recovery code to take the UID back with a brand-new
+   * identity key (§2.2). The server destroys every artifact of the old
+   * identity (prekeys, sessions, queued ciphertext) and reissues the full
+   * code set; locally the store is rebuilt from scratch under a new
+   * passphrase. Peers still pin the old key, so their next contact with us
+   * raises the §4.6 identity-key-change warning - that is the designed
+   * signal that a recovery (or a MITM) happened, not a bug. */
+  private async doRecover(): Promise<void> {
+    const hadStore = await this.store.exists();
+    if (hadStore) {
+      this.renderer.event(
+        "security",
+        "an identity store exists on this device - recovery DESTROYS it (identity, keys, contacts, message history) and replaces it with the recovered account",
+      );
+      const answer = await this.shell.readLine("destroy the local store and recover? (yes/NO): ");
+      if (answer === null || answer.trim().toLowerCase() !== "yes") {
+        this.renderer.event("info", "recovery cancelled - nothing was changed");
+        return;
+      }
+    }
+    const uidRaw = await this.shell.readLine("account UID: ");
+    if (uidRaw === null) {
+      this.renderer.event("info", "recovery cancelled");
+      return;
+    }
+    const uid = normalizeUid(uidRaw.trim());
+    if (uid === null) {
+      this.renderer.event("failure", "invalid UID (26 Crockford Base32 chars, dashes optional)");
+      return;
+    }
+    const codeRaw = await this.shell.readSecret("recovery code: ");
+    if (codeRaw === null) {
+      this.renderer.event("info", "recovery cancelled");
+      return;
+    }
+    const code = normalizeRecoveryCode(codeRaw);
+    if (code === null) {
+      this.renderer.event(
+        "failure",
+        "invalid recovery code (16 Crockford Base32 chars, dashes optional)",
+      );
+      return;
+    }
+    const passphrase = await this.promptNewPassphrase();
+    if (passphrase === null) {
+      this.renderer.event("info", "recovery cancelled");
+      return;
+    }
+
+    this.renderer.event("info", "generating replacement ML-DSA-65 identity keypair...");
+    const seed = crypto.getRandomValues(new Uint8Array(32));
+    const keys = ml_dsa65.keygen(seed);
+    seed.fill(0);
+    let response: api.RecoverResponse;
+    try {
+      response = await api.recover(uid, code, keys.publicKey);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        // Uniform by design (§2.1): the server does not distinguish an unknown
+        // UID from a wrong or already-spent code, and neither do we.
+        this.renderer.event("failure", "recovery failed - unknown UID or invalid recovery code");
+        return;
+      }
+      throw err; // 429 and network failures take the standard reportError path
+    }
+    const confirmedUid = normalizeUid(response.uid);
+    if (confirmedUid === null) {
+      throw new Error("server returned malformed uid");
+    }
+
+    // The server has already switched the account to the new key; whatever
+    // local state existed belongs to a dead identity. Tear down, then rebuild.
+    this.token = null;
+    this.lockLocal();
+    this.contacts.clear();
+    this.active = null;
+    this.shell.setPrompt("> ");
+    if (hadStore) {
+      await this.store.wipe();
+    }
+    await this.store.create(passphrase);
+    const stored: StoredIdentity = {
+      uid: confirmedUid,
+      pub: toBase64(keys.publicKey),
+      sec: toBase64(keys.secretKey),
+    };
+    await this.store.putJson("identity", stored);
+    await this.store.putJson("settings/rotation", DEFAULT_ROTATION);
+    this.identity = { uid: confirmedUid, pub: keys.publicKey, sec: keys.secretKey };
+
+    this.renderer.event("success", `account recovered - your UID is ${response.uid}`);
+    this.renderer.event(
+      "security",
+      "NEW recovery codes - the old set is now void. shown ONCE, never recoverable. write them down now:",
+    );
+    response.recovery_codes.forEach((freshCode, i) => {
+      this.renderer.plain(`    ${(i + 1).toString().padStart(2)}. ${freshCode}`);
+    });
+    this.renderer.event(
+      "warning",
+      "message history, contacts, and sessions did not survive - they lived only in the old encrypted store",
+    );
+    this.renderer.event(
+      "warning",
+      "your contacts still pin the OLD identity key: your next message triggers their identity-key-change warning, and they should re-verify your safety number",
+    );
 
     await this.loginWithIdentity();
     await this.uploadInitialBundle();

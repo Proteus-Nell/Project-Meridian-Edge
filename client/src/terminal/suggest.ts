@@ -28,6 +28,8 @@ const SYNONYMS: Record<string, CommandWord> = {
   "sign-up": "register",
   create: "register",
   join: "register",
+  recovery: "recover",
+  restore: "recover",
   signin: "login",
   "sign-in": "login",
   logon: "login",

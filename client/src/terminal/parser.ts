@@ -3,7 +3,7 @@
 // conversation. The parser is total — it never throws on any input — and
 // returns a typed discriminated union consumed by a switch in the executor.
 
-import { CROCKFORD_ALPHABET, UID_CHARS } from "../crypto/constants";
+import { CROCKFORD_ALPHABET, RECOVERY_CODE_CHARS, UID_CHARS } from "../crypto/constants";
 import { suggestCommand } from "./suggest";
 import { isColorSlot, isEmblemName, isSchemeName, normalizeHex } from "./theme";
 import type { ColorSlot, EmblemName, SchemeName } from "./theme";
@@ -44,6 +44,7 @@ export type DeleteScope =
 
 export type Command =
   | { readonly name: "register" }
+  | { readonly name: "recover" }
   | { readonly name: "login" }
   | { readonly name: "logout" }
   | { readonly name: "lock" }
@@ -96,6 +97,7 @@ export type ParseResult =
 // No dynamic dispatch happens off this map — it gates membership only.
 export const COMMAND_USAGE = {
   register: "/register",
+  recover: "/recover",
   login: "/login",
   logout: "/logout",
   lock: "/lock",
@@ -135,6 +137,7 @@ export function isCommandWord(word: string): word is CommandWord {
 export const COMMAND_ALIASES: Record<string, CommandWord> = {
   signup: "register",
   "sign-up": "register",
+  restore: "recover",
   signin: "login",
   "sign-in": "login",
   logon: "login",
@@ -171,6 +174,27 @@ export function normalizeUid(raw: string): string | null {
     .replace(/O/g, "0")
     .replace(/[IL]/g, "1");
   if (cleaned.length !== UID_CHARS) {
+    return null;
+  }
+  for (const ch of cleaned) {
+    if (!CROCKFORD_ALPHABET.includes(ch)) {
+      return null;
+    }
+  }
+  return cleaned;
+}
+
+/** Canonicalize a typed recovery code: strip dashes and spaces, uppercase,
+ * Crockford ambiguity mapping (O to 0, I/L to 1) - the mirror of the server's
+ * canonicalize_recovery_code. Returns null unless exactly RECOVERY_CODE_CHARS
+ * canonical chars remain. */
+export function normalizeRecoveryCode(raw: string): string | null {
+  const cleaned = raw
+    .toUpperCase()
+    .replace(/[\s-]/g, "")
+    .replace(/O/g, "0")
+    .replace(/[IL]/g, "1");
+  if (cleaned.length !== RECOVERY_CODE_CHARS) {
     return null;
   }
   for (const ch of cleaned) {
@@ -277,6 +301,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
   const usage = COMMAND_USAGE[word];
   switch (word) {
     case "register":
+    case "recover":
     case "login":
     case "logout":
     case "lock":
