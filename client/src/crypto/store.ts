@@ -75,10 +75,15 @@ export interface DisplayPrefs {
   readonly colorOverrides: Partial<Record<ColorSlot, string>>;
 }
 
-const DEFAULT_THEME: ThemePrefs = { emblem: true, scanlines: true, vignette: true, dock: true };
+// Every atmosphere layer defaults OFF: a clean, plain terminal on first run.
+// Users opt into the emblem watermark / scanlines / vignette / dock treatment
+// via /settings theme. (The header medallion is separate and unaffected.)
+const DEFAULT_THEME: ThemePrefs = { emblem: false, scanlines: false, vignette: false, dock: false };
 
 const DEFAULT_PREFS: DisplayPrefs = {
-  secretMask: "asterisk",
+  // Passphrase entry echoes nothing by default (sudo-style); /settings mask
+  // asterisk opts into one '*' per character, which leaks length.
+  secretMask: "hidden",
   theme: DEFAULT_THEME,
   scheme: "dark",
   emblemGlyph: "globe",
@@ -156,7 +161,8 @@ export class KeyStore {
 
   /** Non-secret display preferences; readable with or without a passphrase.
    * Field-by-field validation so a legacy or hand-tampered record degrades to
-   * defaults instead of poisoning the UI (theme absent → all layers on). */
+   * defaults instead of poisoning the UI (theme absent → all layers off,
+   * mask absent → hidden). */
   async getDisplayPrefs(): Promise<DisplayPrefs> {
     const raw = (await this.readRaw(PREFS_KEY)) as
       | {
@@ -170,7 +176,7 @@ export class KeyStore {
     if (raw === undefined) {
       return DEFAULT_PREFS;
     }
-    const mask = raw.secretMask === "hidden" ? "hidden" : "asterisk";
+    const mask = raw.secretMask === "asterisk" ? "asterisk" : "hidden";
     const theme: ThemePrefs = {
       emblem: typeof raw.theme?.emblem === "boolean" ? raw.theme.emblem : DEFAULT_THEME.emblem,
       scanlines:

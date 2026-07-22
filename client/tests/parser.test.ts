@@ -314,7 +314,7 @@ describe("command aliases (execute the canonical command)", () => {
     for (const alias of ["text", "msg", "message", "dm"]) {
       expect(parseLine(`/${alias} bob`)).toEqual({
         kind: "command",
-        command: { name: "chat", target: "bob" },
+        command: { name: "chat", target: "bob", message: undefined },
       });
     }
   });
@@ -334,7 +334,7 @@ describe("command aliases (execute the canonical command)", () => {
   it("is case-insensitive and validates aliased args like the canonical command", () => {
     expect(parseLine("/TEXT bob")).toEqual({
       kind: "command",
-      command: { name: "chat", target: "bob" },
+      command: { name: "chat", target: "bob", message: undefined },
     });
     expect(parseLine("/text").kind).toBe("invalid"); // /chat needs a target, so /text does too
     expect(parseLine("/back now").kind).toBe("invalid"); // zero-arg alias rejects extra args
@@ -345,5 +345,55 @@ describe("command aliases (execute the canonical command)", () => {
       kind: "command",
       command: { name: "help", topic: "chat" },
     });
+  });
+});
+
+describe("/chat inline message (/chat <target> [message])", () => {
+  it("parses a bare target with no message", () => {
+    expect(parseLine("/chat bob")).toEqual({
+      kind: "command",
+      command: { name: "chat", target: "bob", message: undefined },
+    });
+  });
+
+  it("captures a trailing message verbatim, preserving its internal spacing", () => {
+    expect(parseLine("/chat bob hey  there   friend")).toEqual({
+      kind: "command",
+      command: { name: "chat", target: "bob", message: "hey  there   friend" },
+    });
+  });
+
+  it("preserves message case and a literal slash inside the message", () => {
+    expect(parseLine("/chat bob Hello /not-a-command")).toEqual({
+      kind: "command",
+      command: { name: "chat", target: "bob", message: "Hello /not-a-command" },
+    });
+  });
+
+  it("treats trailing-only whitespace as no message", () => {
+    expect(parseLine("/chat bob   ")).toEqual({
+      kind: "command",
+      command: { name: "chat", target: "bob", message: undefined },
+    });
+  });
+
+  it("normalizes a UID target and still captures the message", () => {
+    const r = parseLine(`/chat ${"A".repeat(26)} hi`);
+    expect(r.kind).toBe("command");
+    if (r.kind === "command" && r.command.name === "chat") {
+      expect(r.command.target).toBe("A".repeat(26));
+      expect(r.command.message).toBe("hi");
+    }
+  });
+
+  it("carries the message through a /chat alias like /dm", () => {
+    expect(parseLine("/dm bob ping")).toEqual({
+      kind: "command",
+      command: { name: "chat", target: "bob", message: "ping" },
+    });
+  });
+
+  it("still requires a target", () => {
+    expect(parseLine("/chat").kind).toBe("invalid");
   });
 });

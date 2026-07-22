@@ -40,6 +40,7 @@ class FakeChrome {
   themes: ThemePrefs[] = [];
   context: string | null = null;
   emblem = "unset";
+  echoInput(): void {}
   confirmSent(): void {}
   rejectSent(): void {}
   clearScreen(): void {
@@ -106,17 +107,18 @@ describe("executor UI wiring", () => {
 describe("/settings theme", () => {
   it("toggles one layer, applies it, and persists it while locked", async () => {
     const { executor, chrome, store } = makeExecutor();
-    executor.handle(parseLine("/settings theme emblem off"));
+    // Layers default off, so toggle one ON and confirm the others stay off.
+    executor.handle(parseLine("/settings theme emblem on"));
     await executor.idle();
     expect(chrome.themes[chrome.themes.length - 1]).toEqual({
-      emblem: false,
-      scanlines: true,
-      vignette: true,
-      dock: true,
+      emblem: true,
+      scanlines: false,
+      vignette: false,
+      dock: false,
     });
     // Persisted unencrypted: readable without ever unlocking the store.
     expect(store.isUnlocked()).toBe(false);
-    expect((await store.getDisplayPrefs()).theme.emblem).toBe(false);
+    expect((await store.getDisplayPrefs()).theme.emblem).toBe(true);
   });
 
   it("'all off' flips every layer at once", async () => {

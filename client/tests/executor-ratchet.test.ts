@@ -73,6 +73,10 @@ class FakeChrome {
   clears = 0;
   context: string | null = null;
   emblem = "unset";
+  echoes: Array<{ line: string; kind: string }> = [];
+  echoInput(line: string, kind: "command" | "message" = "command"): void {
+    this.echoes.push({ line, kind });
+  }
   confirmSent(): void {
     this.confirms += 1;
   }
@@ -251,6 +255,40 @@ describe("continued messaging over the ratchet", () => {
     // the two /add + /chat commands are not sends and raise none.
     expect(chrome.confirms).toBe(3);
     expect(chrome.rejects).toBe(0);
+  });
+
+  it("/chat <target> <message> switches to the conversation and sends in one line", async () => {
+    const { executor, chrome } = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+
+    await send(executor, `/add ${bob.uid} bob`);
+    // One line: switch to bob AND fire the first message.
+    await send(executor, "/chat bob hey there");
+
+    // The conversation is now the active/focused one...
+    expect(chrome.context).toBe("[chatting with: bob (UNVERIFIED)]");
+    // ...the inline message was echoed as a bright message (not a dim command)...
+    expect(chrome.echoes).toContainEqual({ line: "hey there", kind: "message" });
+    // ...and it was actually delivered (a KX first message Bob decrypts) + ticked.
+    expect(sent.length).toBe(1);
+    expect(bobReceiveKx(bob, sent[0] as Uint8Array)).toBe("hey there");
+    expect(chrome.confirms).toBe(1);
+    expect(chrome.rejects).toBe(0);
+  });
+
+  it("a follow-up /chat <target> <message> rides the ratchet after the handshake", async () => {
+    const { executor } = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+
+    await send(executor, `/add ${bob.uid} bob`);
+    await send(executor, "/chat bob first"); // one-liner: KX handshake
+    await send(executor, "/chat bob second"); // one-liner again: ratchet MSG
+
+    expect(sent.length).toBe(2);
+    expect(bobReceiveKx(bob, sent[0] as Uint8Array)).toBe("first");
+    expect(bobReceive(bob, sent[1] as Uint8Array)).toBe("second");
   });
 
   it("drives the emblem medallion: active after login, idle after /lock", async () => {

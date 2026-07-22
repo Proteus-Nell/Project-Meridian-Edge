@@ -129,26 +129,26 @@ describe("KeyStore", () => {
   it("stores display prefs unencrypted, readable before unlock", async () => {
     const factory = new IDBFactory();
     const first = new KeyStore("meridian-edge-test", factory);
-    // Default before anything is written.
-    expect((await first.getDisplayPrefs()).secretMask).toBe("asterisk");
-    await first.setDisplayPrefs({ ...BASE, secretMask: "hidden", theme: ALL_OFF });
+    // Default before anything is written: hidden (sudo-style, no length leak).
+    expect((await first.getDisplayPrefs()).secretMask).toBe("hidden");
+    await first.setDisplayPrefs({ ...BASE, secretMask: "asterisk", theme: ALL_OFF });
 
     // A fresh instance (reload) reads it back WITHOUT unlocking - the point
     // is the first login prompt honors it.
     const second = new KeyStore("meridian-edge-test", factory);
     expect(second.isUnlocked()).toBe(false);
-    expect((await second.getDisplayPrefs()).secretMask).toBe("hidden");
+    expect((await second.getDisplayPrefs()).secretMask).toBe("asterisk");
   });
 
-  it("round-trips the theme block and defaults it to all-on", async () => {
+  it("round-trips the theme block and defaults it to all-off", async () => {
     const factory = new IDBFactory();
     const store = new KeyStore("meridian-edge-test", factory);
-    // Nothing written yet: every layer defaults on.
+    // Nothing written yet: every layer defaults off (plain terminal).
     expect((await store.getDisplayPrefs()).theme).toEqual({
-      emblem: true,
-      scanlines: true,
-      vignette: true,
-      dock: true,
+      emblem: false,
+      scanlines: false,
+      vignette: false,
+      dock: false,
     });
     await store.setDisplayPrefs({
       ...BASE,
@@ -163,16 +163,16 @@ describe("KeyStore", () => {
     });
   });
 
-  it("legacy prefs without a theme block degrade to all-on defaults", async () => {
+  it("legacy prefs without a theme block degrade to all-off defaults", async () => {
     const factory = new IDBFactory();
     const store = new KeyStore("meridian-edge-test", factory);
     // Simulate a record written by the pre-theme client: mask only.
-    await store.setDisplayPrefs({ secretMask: "hidden" } as unknown as Parameters<
+    await store.setDisplayPrefs({ secretMask: "asterisk" } as unknown as Parameters<
       typeof store.setDisplayPrefs
     >[0]);
     const prefs = await store.getDisplayPrefs();
-    expect(prefs.secretMask).toBe("hidden");
-    expect(prefs.theme).toEqual({ emblem: true, scanlines: true, vignette: true, dock: true });
+    expect(prefs.secretMask).toBe("asterisk");
+    expect(prefs.theme).toEqual({ emblem: false, scanlines: false, vignette: false, dock: false });
   });
 
   it("keeps display prefs out of vault key listings", async () => {
