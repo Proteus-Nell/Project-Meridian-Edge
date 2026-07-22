@@ -18,6 +18,7 @@ from .constants import (
     ARGON2ID_PARALLELISM,
     CROCKFORD_ALPHABET,
     RECOVERY_CODE_BYTES,
+    RECOVERY_CODE_CHARS,
     RECOVERY_CODE_COUNT,
     SESSION_TOKEN_BYTES,
 )
@@ -64,6 +65,20 @@ def generate_recovery_codes() -> list[str]:
 
 def normalize_recovery_code(code: str) -> str:
     return code.upper().replace("-", "")
+
+
+def canonicalize_recovery_code(raw: str) -> str | None:
+    """User-input form of a recovery code: strip dashes, uppercase, and apply
+    the Crockford ambiguity mapping (O to 0, I/L to 1) the generator alphabet
+    excludes. None unless exactly RECOVERY_CODE_CHARS canonical chars remain."""
+    cleaned = (
+        normalize_recovery_code(raw).replace("O", "0").replace("I", "1").replace("L", "1")
+    )
+    if len(cleaned) != RECOVERY_CODE_CHARS:
+        return None
+    if any(ch not in CROCKFORD_ALPHABET for ch in cleaned):
+        return None
+    return cleaned
 
 
 def hash_recovery_code(code: str) -> str:

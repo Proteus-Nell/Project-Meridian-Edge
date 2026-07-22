@@ -30,6 +30,7 @@ def test_no_user_lookup_or_existence_routes(app: FastAPI) -> None:
     api_paths = {p for p in _all_route_paths(app.routes) if p.startswith("/v1")}
     assert api_paths == {
         "/v1/register",
+        "/v1/recover",
         "/v1/login/challenge",
         "/v1/login/verify",
         "/v1/logout",

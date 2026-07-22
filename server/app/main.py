@@ -17,6 +17,8 @@ from .constants import (
     LOGIN_CHALLENGE_RATE_WINDOW_SECONDS,
     MESSAGE_SEND_RATE_CAPACITY,
     MESSAGE_SEND_RATE_WINDOW_SECONDS,
+    RECOVER_RATE_CAPACITY,
+    RECOVER_RATE_WINDOW_SECONDS,
     REGISTER_RATE_CAPACITY,
     REGISTER_RATE_WINDOW_SECONDS,
     WS_IDLE_TIMEOUT_SECONDS,
@@ -30,6 +32,7 @@ from .routes.bundles import router as bundles_router
 from .routes.keys import router as keys_router
 from .routes.login import router as login_router
 from .routes.messages import router as messages_router
+from .routes.recover import router as recover_router
 from .routes.register import router as register_router
 from .ws import WsHub
 from .ws import router as ws_router
@@ -114,10 +117,14 @@ def create_app(
     app.state.message_send_limiter = TokenBucketLimiter(
         MESSAGE_SEND_RATE_CAPACITY, MESSAGE_SEND_RATE_WINDOW_SECONDS
     )
+    app.state.recover_limiter = TokenBucketLimiter(
+        RECOVER_RATE_CAPACITY, RECOVER_RATE_WINDOW_SECONDS
+    )
 
     install_security_headers(app)
     install_error_handlers(app)
     app.include_router(register_router)
+    app.include_router(recover_router)
     app.include_router(login_router)
     app.include_router(keys_router)
     app.include_router(bundles_router)

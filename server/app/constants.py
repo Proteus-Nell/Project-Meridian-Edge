@@ -69,6 +69,12 @@ SESSION_IDLE_SECONDS = 900.0
 # Recovery codes: 10 codes, 80 bits each, shown once, stored as Argon2id hashes.
 RECOVERY_CODE_COUNT = 10
 RECOVERY_CODE_BYTES = 10
+RECOVERY_CODE_CHARS = RECOVERY_CODE_BYTES * 8 // 5  # 16 Crockford chars
+
+# Account recovery (CLAUDE.md section 2.2): redemption is rate-limited far
+# below login since a legitimate user redeems at most a handful per lifetime.
+RECOVER_RATE_CAPACITY = 5
+RECOVER_RATE_WINDOW_SECONDS = 3600.0
 
 # Prekeys (CLAUDE.md section 2.6).
 OPK_BATCH_MAX = 50

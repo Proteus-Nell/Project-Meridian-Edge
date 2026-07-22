@@ -13,6 +13,7 @@ from .constants import (
     NONCE_BYTES,
     OPK_BATCH_MAX,
 )
+from .security import canonicalize_recovery_code
 from .uid import canonicalize_uid
 
 
@@ -101,6 +102,38 @@ class VerifyRequest(_UidRequest):
 
 class TokenResponse(BaseModel):
     token: str
+
+
+class RecoverRequest(_UidRequest):
+    """Redeem a recovery code and enroll a replacement identity key in one
+    step: the code is the credential, so no challenge round-trip is needed."""
+
+    code: str
+    ik_pub: str
+
+    @field_validator("code")
+    @classmethod
+    def _check_code(cls, value: str) -> str:
+        canonical = canonicalize_recovery_code(value)
+        if canonical is None:
+            raise ValueError("invalid code")
+        return canonical
+
+    @field_validator("ik_pub")
+    @classmethod
+    def _check_ik_pub(cls, value: str) -> str:
+        _decode_exact(value, ML_DSA_65_PUBKEY_BYTES)
+        return value
+
+    def decoded_ik_pub(self) -> bytes:
+        return base64.b64decode(self.ik_pub, validate=True)
+
+
+class RecoverResponse(BaseModel):
+    uid: str
+    # The full replacement set, shown once like at registration; every code
+    # issued before the recovery is invalid from this response onward.
+    recovery_codes: list[str]
 
 
 class SpkUploadRequest(BaseModel):
