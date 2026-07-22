@@ -1,0 +1,71 @@
+# Caddy variant of docker-compose.yml (DEPLOY.md Route B). Identical db +
+# server services; the nginx edge is swapped for Caddy, which provisions and
+# renews TLS automatically - no TLS_CERT_DIR / certbot needed. Run with:
+#
+#   docker compose -f docker-compose.caddy.yml up -d --build
+#
+# Requires MERIDIAN_EDGE_DOMAIN (public hostname) in .env alongside the vars
+# from .env.example. Ports 80 + 443 must be reachable for the ACME challenge,
+# and DNS for MERIDIAN_EDGE_DOMAIN must already point at this host.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: meridian_edge
+      POSTGRES_USER: meridian_edge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian_edge -d meridian_edge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MERIDIAN_EDGE_ENV: production
+      MERIDIAN_EDGE_DATABASE_URL: postgresql+psycopg://meridian_edge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/meridian_edge
+      MERIDIAN_EDGE_WS_ORIGINS: ${MERIDIAN_EDGE_WS_ORIGINS:?set MERIDIAN_EDGE_WS_ORIGINS in .env, e.g. https://chat.example.com}
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/caddy.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      MERIDIAN_EDGE_DOMAIN: ${MERIDIAN_EDGE_DOMAIN:?set MERIDIAN_EDGE_DOMAIN in .env, e.g. chat.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - caddy-data:/data      # ACME account + issued certs (must persist)
+      - caddy-config:/config
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

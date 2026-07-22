@@ -61,6 +61,8 @@ inputTerm.loadAddon(inputFit);
 inputTerm.open(mount("command-line"));
 inputFit.fit();
 
+const chrome = new Chrome(transcriptTerm, inputTerm);
+
 // Re-fit both terminals to their containers on any layout change. A
 // ResizeObserver is more reliable than window 'resize' alone (it also catches
 // the mobile keyboard shrinking the dvh viewport and device rotation), and the
@@ -68,13 +70,14 @@ inputFit.fit();
 const refit = (): void => {
   transcriptFit.fit();
   inputFit.fit();
+  // fit() may have changed the transcript's column count; re-pin the delivery
+  // ticks to the new right edge (their decoration x was fixed at the old cols).
+  chrome.reflowTicks();
 };
 const resizeObserver = new ResizeObserver(refit);
 resizeObserver.observe(mount("transcript-pane"));
 resizeObserver.observe(mount("command-line"));
 window.addEventListener("resize", refit);
-
-const chrome = new Chrome(transcriptTerm, inputTerm);
 
 let executor: Executor;
 const shell = new Shell(inputTerm, transcriptTerm, (line) => {
