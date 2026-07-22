@@ -23,6 +23,7 @@ interface Actor {
   keys: { publicKey: Uint8Array; secretKey: Uint8Array };
   uid: string;
   token: string;
+  codes: string[];
   spk: { pub: Uint8Array; sec: Uint8Array; sig: Uint8Array };
   opks: { pub: Uint8Array; sec: Uint8Array }[];
 }
@@ -80,7 +81,7 @@ async function bootstrap(seedByte: number): Promise<Actor> {
     token,
   );
   const opks = batch.pubs.map((pub, i) => ({ pub, sec: batch.secs[i] ?? new Uint8Array() }));
-  return { keys, uid, token, spk, opks };
+  return { keys, uid, token, codes: registered.recovery_codes, spk, opks };
 }
 
 function toLookup(actor: Actor): PrekeyLookup {
@@ -223,4 +224,97 @@ describe.skipIf(process.env["MERIDIAN_EDGE_E2E"] !== "1")("live: offline first m
     const result = respondKx(bob.keys.publicKey, toLookup(bob), tampered);
     expect(result).toEqual({ ok: false, reason: "decrypt-failed" });
   }, 60000);
+
+  // Runs last: it retires Alice's key/token, so nothing may follow it.
+  it("recovers Alice by code: new key takes the UID, old key/token/codes all die", async () => {
+    const oldKeys = alice.keys;
+    const oldCodes = [...alice.codes];
+    const newKeys = ml_dsa65.keygen(new Uint8Array(32).fill(0xa2));
+
+    const recovered = await call<{ uid: string; recovery_codes: string[] }>(
+      "POST",
+      "/v1/recover",
+      // Mangled on purpose: lowercase, dashes stripped, 0 typed as O - the
+      // server's Crockford canonicalization must absorb all of it.
+      {
+        uid: alice.uid,
+        code: (oldCodes[0] ?? "").toLowerCase().replaceAll("-", "").replaceAll("0", "o"),
+        ik_pub: toBase64(newKeys.publicKey),
+      },
+    );
+    expect(recovered.uid.replaceAll("-", "")).toBe(alice.uid);
+    expect(recovered.recovery_codes).toHaveLength(10);
+    expect(recovered.recovery_codes).not.toContain(oldCodes[0]);
+
+    // The pre-recovery session token was revoked in the same transaction.
+    const dead = await fetch(`${BASE}/v1/keys/status`, {
+      headers: { authorization: `Bearer ${alice.token}` },
+    });
+    expect(dead.status).toBe(401);
+
+    // The old identity key can no longer complete the login handshake.
+    const challenge = await call<{ nonce: string; timestamp: number; origin: string }>(
+      "POST",
+      "/v1/login/challenge",
+      { uid: alice.uid },
+    );
+    const staleSig = ml_dsa65.sign(
+      buildLoginMessage(hexToBytes(challenge.nonce), challenge.origin, challenge.timestamp),
+      oldKeys.secretKey,
+    );
+    const refused = await fetch(`${BASE}/v1/login/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        uid: alice.uid,
+        nonce: challenge.nonce,
+        signature: toBase64(staleSig),
+      }),
+    });
+    expect(refused.status).toBe(401);
+
+    // The new key logs in, and every old-key artifact is gone server-side.
+    const newToken = await login(newKeys, alice.uid);
+    const status = await call<{ spk_uploaded_at: number | null; opk_count: number }>(
+      "GET",
+      "/v1/keys/status",
+      undefined,
+      newToken,
+    );
+    expect(status.spk_uploaded_at).toBeNull();
+    expect(status.opk_count).toBe(0);
+
+    // A peer that pinned Alice's old key now sees a different one - the
+    // client-side section 4.6 key-change warning trigger.
+    const wire = await call<{ ik_pub: string }>(
+      "GET",
+      `/v1/bundles/${alice.uid}?opk=0`,
+      undefined,
+      bob.token,
+    ).catch(() => null);
+    if (wire !== null) {
+      expect(fromBase64(wire.ik_pub)).toEqual(newKeys.publicKey);
+      expect(fromBase64(wire.ik_pub)).not.toEqual(oldKeys.publicKey);
+    }
+
+    // Every code from the old set is void; a reissued one redeems.
+    const replay = await fetch(`${BASE}/v1/recover`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        uid: alice.uid,
+        code: oldCodes[1],
+        ik_pub: toBase64(newKeys.publicKey),
+      }),
+    });
+    expect(replay.status).toBe(401);
+    expect(await replay.json()).toEqual({ error: "auth_failed" });
+
+    const again = await call<{ recovery_codes: string[] }>("POST", "/v1/recover", {
+      uid: alice.uid,
+      code: recovered.recovery_codes[0],
+      ik_pub: toBase64(ml_dsa65.keygen(new Uint8Array(32).fill(0xa3)).publicKey),
+    });
+    expect(again.recovery_codes).toHaveLength(10);
+  }, 120000);
 });
