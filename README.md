@@ -62,6 +62,26 @@ rotates the signed prekey if older than 7 days, tops the one-time prekeys
 back up to 50 when they drop below 20, and — on the first unlock on/after
 your configured day (default Friday) — reminds you to rotate the passphrase.
 
+### Lost the passphrase or the device — `/recover`
+
+One recovery code takes the account back (alias: `/restore`):
+
+1. Confirm destruction if this browser already holds a store (the old store
+   is unreadable without its passphrase, so recovery rebuilds from zero).
+2. Enter your **UID** and **one recovery code** (dashes, case, and O/0-style
+   typos are forgiven), then choose a new passphrase.
+3. A **brand-new identity keypair** replaces the old one server-side. The
+   server destroys everything tied to the old key — prekeys, sessions, and
+   any queued ciphertext (unreadable by the new key anyway) — and prints a
+   **fresh set of ten codes**; every old code is void.
+
+Honest costs, by design: message history, contacts, and sessions do not
+survive (they only ever existed inside the old encrypted store), and every
+contact still pins your **old** identity key — your next message triggers
+their `[SECURITY]` identity-key-change warning, exactly as if a MITM had
+swapped your key, and they should re-verify your safety number before
+trusting the new one.
+
 ### Session & lock commands
 
 | Command | What it does |
@@ -142,13 +162,18 @@ not forensic erasure.
 
 ### Guardrails you may run into
 
-- Registration is limited to 3 per hour per IP; login challenges to 10 per
-  minute. You'll see a rate-limit failure line — wait and retry.
-- Wrong passphrase, unknown UID, expired or replayed challenge all produce
-  the same uniform failure — the API leaks nothing about which it was, and
-  there is no way to ask the server whether a UID exists.
+- Registration is limited to 3 per hour per IP, login challenges to 10 per
+  minute, recovery attempts to 5 per hour. You'll see a rate-limit failure
+  line (`E301`) — wait and retry.
+- Wrong passphrase, unknown UID, expired or replayed challenge, and a wrong
+  or spent recovery code all produce the same uniform failure — the API
+  leaks nothing about which it was, and there is no way to ask the server
+  whether a UID exists.
 - One identity per browser profile: `/register` on a device that already has
-  a store points you to `/login` (or `/wipe` first).
+  a store points you to `/login` (or `/wipe` first); `/recover` offers to
+  destroy and rebuild it.
+- Every error line carries a stable code (`[E###]`) — the full table with
+  causes and remedies is [docs/MESSAGES.md](docs/MESSAGES.md).
 
 ### Researcher tools
 
