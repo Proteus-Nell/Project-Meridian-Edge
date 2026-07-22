@@ -1,4 +1,4 @@
-// Identity and session flows (spec 2): registration, recovery, the ML-DSA
+// Identity and session flows (§2): registration, recovery, the ML-DSA
 // login challenge-response, logout/lock, passphrase rotation, prekey
 // maintenance, and /wipe. Everything here follows the same rule: server
 // state first, then local persistence, so a failed network call never
@@ -109,11 +109,11 @@ export async function doRegister(x: ExecutorInternals): Promise<void> {
 }
 
 /** `/recover`: redeem a recovery code to take the UID back with a brand-new
- * identity key (spec 2.2). The server destroys every artifact of the old
+ * identity key (§2.2). The server destroys every artifact of the old
  * identity (prekeys, sessions, queued ciphertext) and reissues the full code
  * set; locally the store is rebuilt from scratch under a new passphrase.
- * Peers still pin the old key, so their next contact with us raises the spec
- * 4.6 identity-key-change warning: that is the designed signal that a
+ * Peers still pin the old key, so their next contact with us raises the
+ * §4.6 identity-key-change warning: that is the designed signal that a
  * recovery (or a MITM) happened. */
 export async function doRecover(x: ExecutorInternals): Promise<void> {
   const hadStore = await x.store.exists();
@@ -166,7 +166,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
     response = await api.recover(uid, code, keys.publicKey);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      // Uniform by design (spec 2.1): the server does not distinguish an
+      // Uniform by design (§2.1): the server does not distinguish an
       // unknown UID from a wrong or already-spent code, and neither do we.
       x.renderer.event("failure", "recovery failed - unknown UID or invalid recovery code");
       return;
@@ -263,7 +263,7 @@ async function rotateSpkInternal(x: ExecutorInternals): Promise<void> {
   await api.uploadSpk(x.token, spk.pub, spk.sig);
   spk.sec.fill(0);
   // Old SPK secrets are kept SPK_ROTATION+RETENTION days for late
-  // handshakes, then deleted (spec 2.6).
+  // handshakes, then deleted (§2.6).
   const cutoff = x.now() - (SPK_ROTATION_DAYS + SPK_RETENTION_DAYS) * DAY_MS;
   for (const key of await x.store.listKeys("spk/")) {
     const ts = Number(key.slice("spk/".length));
@@ -325,10 +325,10 @@ export async function doLogin(x: ExecutorInternals): Promise<void> {
   await loginWithIdentity(x);
   await postLoginMaintenance(x);
   await drainInbox(x);
-  await purgeExpired(x); // evict anything past its timer/cap while offline (spec 5)
+  await purgeExpired(x); // evict anything past its timer/cap while offline (§5)
   x.connectWs();
   await maybeRotationPrompt(x);
-  refreshChatContext(x); // restore the spec 1.5 context line if a chat was active
+  refreshChatContext(x); // restore the §1.5 context line if a chat was active
   await refreshEmblemState(x);
   x.touchAutoLock();
 }
@@ -488,7 +488,7 @@ export async function doWipe(x: ExecutorInternals): Promise<void> {
   x.renderer.event("success", "local store destroyed (browser deletion is not forensic erasure)");
 }
 
-/** `/whoami`: own UID and identity-key fingerprint (spec 6). */
+/** `/whoami`: own UID and identity-key fingerprint (§6). */
 export function doWhoami(x: ExecutorInternals): void {
   if (x.identity === null) {
     x.renderer.event("warning", "locked or not registered - /login or /register");

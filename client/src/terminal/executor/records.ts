@@ -1,7 +1,7 @@
 // Stored record shapes and their (de)serialization: everything the executor
 // persists in the encrypted store, plus the wire-to-crypto bundle adapter.
 // Key material is base64 in these records; the store encrypts the whole
-// serialized value at rest (spec 2.4).
+// serialized value at rest (§2.4).
 
 import { initRatchet } from "../../crypto/ratchet";
 import type { RatchetState } from "../../crypto/ratchet";
@@ -61,12 +61,12 @@ export interface Contact {
   readonly alias: string;
   readonly ik: string | null; // base64, pinned TOFU-style on first contact
   /** Set by /verified after out-of-band safety-number comparison. Reset to
-   * false whenever a key change is detected (spec 4.6). */
+   * false whenever a key change is detected (§4.6). */
   readonly verified: boolean;
   /** True from the moment a key change is detected until /ack. Sending is
-   * refused while this is set (spec 4.6). */
+   * refused while this is set (§4.6). */
   readonly keyChangeBlocked: boolean;
-  /** Mutual disappearing-message timer in seconds; null = off (spec 5.2).
+  /** Mutual disappearing-message timer in seconds; null = off (§5.2).
    * Shared with the peer over the encrypted ratchet payload, last-writer-wins. */
   readonly timerSeconds: number | null;
 }
@@ -93,27 +93,27 @@ export function normalizeContact(c: PartialContact): Contact {
 
 /** A locally stored message record. Written on send and on receive; the live
  * transcript renders as messages arrive, so this is at-rest history for view
- * rebuilds, subject to the disappearing timer and local purge (spec 5.1-5.3). */
+ * rebuilds, subject to the disappearing timer and local purge (§5.1-5.3). */
 export interface StoredMessage {
   readonly dir: "in" | "out";
   readonly text: string;
   readonly ts: number;
-  /** Absolute epoch-ms deletion deadline from the mutual timer, if any (spec 5.2). */
+  /** Absolute epoch-ms deletion deadline from the mutual timer, if any (§5.2). */
   readonly tmrExpiresAt?: number;
   /** Shared per-message id (random 128-bit hex), carried in the encrypted
-   * payload so a cooperative /delete can name it on both sides (spec 5.3a).
+   * payload so a cooperative /delete can name it on both sides (§5.3a).
    * Absent on records that predate /delete: those still delete locally but
    * cannot be signalled to the peer. */
   readonly mid?: string;
 }
 
-/** Local retention cap (spec 5.3): personal, never transmitted, may be
+/** Local retention cap (§5.3): personal, never transmitted, may be
  * stricter than the mutual timer. null = off. */
 export interface PurgeSettings {
   readonly seconds: number | null;
 }
 
-/** Serialized KEM double-ratchet state (spec 4.4). All key material base64;
+/** Serialized KEM double-ratchet state (§4.4). All key material base64;
  * the skipped-key cache is a list of [chainId:n, base64 mk] pairs. */
 export interface StoredRatchet {
   readonly role: "initiator" | "responder";
@@ -147,7 +147,7 @@ export interface PendingRequest {
   readonly session: StoredSession;
   readonly senderIk: string;
   readonly receivedAt: number;
-  /** Shared id of the held first message, if it carried one (spec 5.3a). */
+  /** Shared id of the held first message, if it carried one (§5.3a). */
   readonly mid?: string | null;
 }
 
@@ -197,7 +197,7 @@ export function deserializeRatchet(stored: StoredRatchet): RatchetState {
 
 /** Establish a stored session from a completed handshake: initialise the
  * ratchet from RK0 and wipe the handshake's transient root/transcript copy
- * (spec 4). */
+ * (§4). */
 export function serializeSession(session: KxSession, establishedAt: number): StoredSession {
   const ratchet = serializeRatchet(initRatchet(session.rk, session.role));
   session.rk.fill(0);

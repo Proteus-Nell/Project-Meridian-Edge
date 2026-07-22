@@ -1,5 +1,5 @@
 // The command executor: consumes the parser's typed union in one switch
-// (spec 1.2) and dispatches into the flow modules (identity, contacts,
+// (§1.2) and dispatches into the flow modules (identity, contacts,
 // trust, messaging, lifecycle, settings, views, bench). This class owns the
 // mutable session state and the async plumbing: a command lane, a render
 // lane for cosmetic view rebuilds, the idle auto-lock, and the WS delivery
@@ -239,7 +239,7 @@ export class Executor implements ExecutorInternals {
         }
         this.active = null;
         this.shell.setPrompt("> ");
-        refreshChatContext(this); // clears the spec 1.5 context line
+        refreshChatContext(this); // clears the §1.5 context line
         this.enqueueRender(() => renderHome(this));
         return;
       }
@@ -278,7 +278,7 @@ export class Executor implements ExecutorInternals {
     }
   }
 
-  /** `/chat <target> [message]`: focus a conversation (spec 1.5) and, with
+  /** `/chat <target> [message]`: focus a conversation (§1.5) and, with
    * the inline form, echo and send the trailing message exactly as if it had
    * been typed after switching. */
   private openChat(target: string, message: string | undefined): void {
@@ -433,7 +433,7 @@ export class Executor implements ExecutorInternals {
     this.ws = new WsClient();
     this.ws.connect(this.token ?? "", {
       onToken: (token) => {
-        // Rotation on WS connect (spec 2.3): adopt the fresh token everywhere.
+        // Rotation on WS connect (§2.3): adopt the fresh token everywhere.
         this.token = token;
       },
       onEnvelope: (id, envelope) => {

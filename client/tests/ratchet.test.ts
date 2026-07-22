@@ -112,7 +112,7 @@ describe("post-compromise security (§4.2)", () => {
     // Attacker exfiltrates B's full state here.
     const leaked = snapshot(b);
 
-    // Sanity: at leak time the attacker's copy is as capable as B — it can read
+    // Sanity: at leak time the attacker's copy is as capable as B - it can read
     // the next message A sends (verified on independent clones so the mutation
     // of one does not disturb the other).
     const probe = send(a, "m3");

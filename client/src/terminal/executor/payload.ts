@@ -1,9 +1,9 @@
-// The encrypted ratchet payload (spec 4 body). Carries the message text and
+// The encrypted ratchet payload (§4 body). Carries the message text and
 // the sender's current mutual-timer view so a /timer change propagates and
 // both sides converge last-writer-wins; a pure timer-control message has no
 // text. It can also carry `mid` (this message's shared id) and a cooperative
 // deletion directive: `deletes` names peer-side message ids to remove and
-// `deleteSilent` suppresses the peer-side notice (spec 5.3a).
+// `deleteSilent` suppresses the peer-side notice (§5.3a).
 
 export interface AppPayload {
   readonly text: string | null;

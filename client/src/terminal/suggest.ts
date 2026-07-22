@@ -132,7 +132,7 @@ export function commandSuggestions(input: string): string[] {
       .map((c) => `/${c}`);
   }
   if (!isCommandWord(word)) {
-    return []; // arguments to an unknown command — nothing to offer
+    return []; // arguments to an unknown command - nothing to offer
   }
   // Completing an argument. The partial (if any) is the last token unless the
   // line ends in a space, in which case a fresh argument is beginning.
@@ -144,7 +144,7 @@ export function commandSuggestions(input: string): string[] {
   return options.filter((o) => o.toLowerCase().startsWith(partial)).map((o) => `${base} ${o}`);
 }
 
-/** Longest common prefix of a set of "/word" suggestions — the safe amount to
+/** Longest common prefix of a set of "/word" suggestions - the safe amount to
  * fill on Tab (fish-style): unambiguous characters only, never a guess. */
 export function longestCommonPrefix(words: readonly string[]): string {
   const first = words[0];

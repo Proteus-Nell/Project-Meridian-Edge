@@ -1,5 +1,5 @@
 // Trust: safety numbers, manual verification, and the identity-key-change
-// teardown (spec 4.5, 4.6). handleKeyChange is the single path for every
+// teardown (§4.5, §4.6). handleKeyChange is the single path for every
 // key-change detection site (send, receive, /verify), so the teardown
 // semantics cannot drift between them.
 
@@ -119,7 +119,7 @@ export async function doAck(x: ExecutorInternals, alias: string): Promise<void> 
   );
 }
 
-/** Identity-key change detected for `contact` (spec 4.6): adopt the new key
+/** Identity-key change detected for `contact` (§4.6): adopt the new key
  * so the safety number and future traffic reflect reality, and tear down any
  * established session so old chain keys cannot carry over. Manual trust marks
  * the contact UNVERIFIED and BLOCKED (returns false: the caller must abort

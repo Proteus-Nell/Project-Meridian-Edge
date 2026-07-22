@@ -2,8 +2,8 @@
 // (transient event + persistent chat context), the keyboard-navigable
 // autosuggest dropdown, the right-edge "sent" tick marks, and the toggleable
 // atmosphere layers (/settings theme). This is the only DOM-building module in
-// the client. It never renders untrusted content — message and peer text stay
-// in the xterm transcript via the sanitizing renderer — and it only ever
+// the client. It never renders untrusted content - message and peer text stay
+// in the xterm transcript via the sanitizing renderer - and it only ever
 // assigns through textContent / createElement / classList, never a
 // markup-parsing sink, so the strict CSP and the CI audit (scripts/audit.py)
 // remain satisfied. No new dependency: markers/decorations are xterm's own API.
@@ -62,14 +62,14 @@ export class Chrome implements SuggestionNav {
   private readonly markers: IMarker[] = [];
   // Each delivery tick keeps its anchoring marker + glyph so it can be
   // re-pinned to the new right edge on resize (a decoration's column x is
-  // fixed at creation — see reflowTicks). `decoration` is the live xterm
+  // fixed at creation - see reflowTicks). `decoration` is the live xterm
   // handle, replaced whenever we re-register.
   private readonly ticks: TickSpec[] = [];
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Autosuggest state: the words currently shown, the highlighted row
   // (-1 = none, so Enter still submits the typed line), the input the list was
-  // built for, and — after Esc — the input to stay suppressed for until it changes.
+  // built for, and - after Esc - the input to stay suppressed for until it changes.
   private words: readonly string[] = [];
   private activeIndex = -1;
   private lastInput = "";
@@ -88,10 +88,11 @@ export class Chrome implements SuggestionNav {
 
   // ----- status strip --------------------------------------------------------
 
-  /** Latest transient status: `HH:MM:SS [✓] text`, overwritten in place and
-   * faded to dim after a few seconds so a stale status does not read as
-   * current. Security events never fade. Implements renderer.StatusSink
-   * structurally; only textContent assignment, never markup. */
+  /** Latest transient status: timestamp, level glyph, then the text,
+   * overwritten in place and faded to dim after a few seconds so a stale
+   * status does not read as current. Security events never fade. Implements
+   * renderer.StatusSink structurally; only textContent assignment, never
+   * markup. */
   status(level: EventLevel, text: string): void {
     if (this.staleTimer !== null) {
       clearTimeout(this.staleTimer);
@@ -144,14 +145,14 @@ export class Chrome implements SuggestionNav {
     });
   }
 
-  /** Pin a ✓ at the right edge of the most recently echoed line. */
+  /** Pin a delivered tick at the right edge of the most recently echoed line. */
   confirmSent(): void {
     this.tick("✓", "tick");
   }
 
-  /** Pin a ✗ at the right edge of the most recently echoed line. The reason is
-   * left to the transcript/status the executor already emitted, so this only
-   * marks the row — keeping the UiChrome contract argument-free. */
+  /** Pin a failed tick at the right edge of the most recently echoed line.
+   * The reason is left to the transcript/status the executor already emitted,
+   * so this only marks the row - keeping the UiChrome contract argument-free. */
   rejectSent(): void {
     this.tick("✗", "tick tick-fail");
   }
@@ -184,7 +185,7 @@ export class Chrome implements SuggestionNav {
     spec.decoration = decoration;
     decoration.onRender((el) => {
       // onRender may fire repeatedly (scroll/resize); these ops are idempotent.
-      // ADD our classes rather than replacing className — xterm's own decoration
+      // ADD our classes rather than replacing className - xterm's own decoration
       // class carries `position: absolute`, which anchors the glyph to the cell.
       el.textContent = spec.glyph;
       for (const cls of spec.className.split(" ")) {
@@ -301,7 +302,7 @@ export class Chrome implements SuggestionNav {
   }
 
   /** The highlighted completion (with a trailing space), or null when no row
-   * has been navigated to — Enter then submits the typed line as usual. */
+   * has been navigated to - Enter then submits the typed line as usual. */
   accept(): string | null {
     const word = this.activeIndex === -1 ? undefined : this.words[this.activeIndex];
     if (word === undefined) {
@@ -332,7 +333,7 @@ export class Chrome implements SuggestionNav {
 
   /** Drive the medallion's animation state: paused when idle, a slow 9s spin
    * while a session is live, and the fast spin + pulse ring while something
-   * awaits acknowledgement. The alert state keeps is-playing set — is-tx only
+   * awaits acknowledgement. The alert state keeps is-playing set - is-tx only
    * shortens the animation, so it must also be running. */
   setEmblemState(state: EmblemState): void {
     document.body.classList.toggle("is-playing", state !== "idle");
@@ -341,7 +342,7 @@ export class Chrome implements SuggestionNav {
 
   /** Apply a resolved color scheme: the five slot values become CSS custom
    * properties on :root (everything in style.css derives from them), and both
-   * terminals get matching xterm themes — transparent backgrounds preserved so
+   * terminals get matching xterm themes - transparent backgrounds preserved so
    * the atmosphere layers keep showing through, transcript cursor kept
    * invisible, ANSI overrides applied for light schemes. */
   applyScheme(scheme: ResolvedScheme): void {

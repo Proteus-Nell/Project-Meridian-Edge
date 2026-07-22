@@ -1,6 +1,6 @@
 // Command parser (CLAUDE.md §1.2): a line starting with "/" is tokenized
 // against a static allowlist; anything else is message text for the active
-// conversation. The parser is total — it never throws on any input — and
+// conversation. The parser is total - it never throws on any input - and
 // returns a typed discriminated union consumed by a switch in the executor.
 
 import { CROCKFORD_ALPHABET, RECOVERY_CODE_CHARS, UID_CHARS } from "../crypto/constants";
@@ -94,7 +94,7 @@ export type ParseResult =
     };
 
 // The static allowlist: every slash word the terminal accepts, with usage.
-// No dynamic dispatch happens off this map — it gates membership only.
+// No dynamic dispatch happens off this map - it gates membership only.
 export const COMMAND_USAGE = {
   register: "/register",
   recover: "/recover",
@@ -132,7 +132,7 @@ export function isCommandWord(word: string): word is CommandWord {
 /** Alternate spellings that execute a canonical command (§1). Resolved in
  * parseLine before the allowlist check, so `/text bob` behaves exactly like
  * `/chat bob` (arguments and validation are identical). Kept to non-destructive
- * commands by design — never `/wipe` or `/delete`. The autosuggest dropdown
+ * commands by design - never `/wipe` or `/delete`. The autosuggest dropdown
  * still lists only canonical names; these are simply accepted when typed. */
 export const COMMAND_ALIASES: Record<string, CommandWord> = {
   signup: "register",

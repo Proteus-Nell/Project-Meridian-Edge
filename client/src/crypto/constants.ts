@@ -1,4 +1,4 @@
-// Shared protocol constants (CLAUDE.md §0). Mirrored in server/app/constants.py —
+// Shared protocol constants (CLAUDE.md §0). Mirrored in server/app/constants.py -
 // any change here must be made there in the same commit.
 
 export const PROTOCOL_VERSION = 1;

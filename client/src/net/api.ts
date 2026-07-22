@@ -1,4 +1,4 @@
-// REST client (CLAUDE.md §0): errors are uniform — callers get a status code
+// REST client (CLAUDE.md §0): errors are uniform - callers get a status code
 // and a generic message, never server internals. The session token lives in
 // JS memory only and is attached as a bearer header (§2.3).
 

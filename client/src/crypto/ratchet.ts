@@ -12,8 +12,8 @@
 // and the message key is wiped immediately after use. A dumped chain key cannot
 // recover an earlier message key (HKDF is one-way).
 //
-// Post-compromise security (§4.2): on the first send of a new turn — or every
-// KEM_STEP_INTERVAL messages of an unbroken turn — the sender offers a fresh
+// Post-compromise security (§4.2): on the first send of a new turn - or every
+// KEM_STEP_INTERVAL messages of an unbroken turn - the sender offers a fresh
 // ML-KEM-768 public key in its (encrypted) header. The peer encapsulates to it
 // on its next send; both mix the shared secret into the root:
 //   RK_{i+1} = HKDF(RK_i ‖ ss_new, KDF_INFO_RK)
@@ -23,12 +23,12 @@
 // Header encryption (§4.3): the header (counters + KEM material) is encrypted
 // under HK = HKDF(root, KDF_INFO_HDR). The header key is snapshotted per turn to
 // the root both parties provably share when the turn begins, so a KEM-accept
-// header — which itself carries the ciphertext the peer needs to derive the new
-// root — stays readable by the peer that is exactly one root behind. Concretely
+// header - which itself carries the ciphertext the peer needs to derive the new
+// root - stays readable by the peer that is exactly one root behind. Concretely
 // we keep three header roots, mirroring Signal's HKs/HKr/NHKr:
-//   hks  — root keying the headers of our current sending turn
-//   hkr  — root keying the peer's current turn (what we decrypt with)
-//   nhkr — root keying the peer's *next* turn (set whenever the root rolls)
+//   hks  - root keying the headers of our current sending turn
+//   hkr  - root keying the peer's current turn (what we decrypt with)
+//   nhkr - root keying the peer's *next* turn (set whenever the root rolls)
 // A receiver tries hkr, then nhkr; success under nhkr means a new turn began.
 
 import { ml_kem768 } from "@noble/post-quantum/ml-kem.js";
@@ -100,7 +100,7 @@ function headerKey(root: Uint8Array): Uint8Array {
 
 /** In-memory ratchet state. All key material is raw bytes; the executor's
  * serialize/deserialize handle persistence. Mutated in place by
- * ratchetEncrypt/ratchetDecrypt — never share one object across two peers. */
+ * ratchetEncrypt/ratchetDecrypt - never share one object across two peers. */
 export interface RatchetState {
   role: Role;
   rk: Uint8Array; // current root (governs message *bodies*)
@@ -249,7 +249,7 @@ export function ratchetDecrypt(state: RatchetState, body: Uint8Array): DecryptRe
 
   // A new turn is entered only via its KEM-accept (the first message carries the
   // ciphertext that rolls the root). A *later* message of a new turn arriving
-  // before that accept cannot be advanced to — the transport delivers per-sender
+  // before that accept cannot be advanced to - the transport delivers per-sender
   // roughly in order, so we defer it (§4.3: cross-turn reordering unsupported
   // under header encryption). It stays queued server-side for a re-read.
   if (usedNext && header.kemCt === null) {
@@ -257,7 +257,7 @@ export function ratchetDecrypt(state: RatchetState, body: Uint8Array): DecryptRe
   }
 
   // Served from the skip cache (an out-of-order earlier message of the *current*
-  // receiving chain). A new-chain message (usedNext) can never be a cache hit —
+  // receiving chain). A new-chain message (usedNext) can never be a cache hit -
   // it is the first time we touch that chain.
   if (!usedNext) {
     const cacheKey = `${state.recvChainId}:${header.n}`;

@@ -2,7 +2,7 @@
 // DOM: chrome.ts turns a resolved scheme into CSS custom properties and xterm
 // theme objects; the executor persists the user's choice in the unencrypted
 // display prefs. Each scheme is exactly five slots (accent / background /
-// panel / text / muted) — matching the design references — plus an optional
+// panel / text / muted) - matching the design references - plus an optional
 // ANSI override map so terminal output stays legible on light backgrounds.
 
 export const COLOR_SLOTS = ["accent", "background", "panel", "text", "muted"] as const;

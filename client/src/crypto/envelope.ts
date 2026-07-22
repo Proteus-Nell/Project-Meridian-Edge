@@ -1,7 +1,7 @@
 // KX envelope v1 (CLAUDE.md §3.6): versioned fixed binary layout, no JSON
 // for crypto payloads. The spk/opk hashes are routing hints so the responder
 // finds the right retained secrets in O(1); they are not covered by the
-// transcript — tampering them only makes decryption fail (ADR 0002).
+// transcript - tampering them only makes decryption fail (ADR 0002).
 //
 //   u8 version | u8 type | u8 flags(bit0=hasOpk)
 //   spkHash(64) | [opkHash(64)]

@@ -1,4 +1,4 @@
-// Messaging: the PQ-KX first message (spec 3), ratchet sends (spec 4), and
+// Messaging: the PQ-KX first message (§3), ratchet sends (§4), and
 // the receive pipeline (KX responses, ratchet trial decryption, inbox drain,
 // contact requests). The send side write-aheads ratchet state before any
 // network call so a failed send can never reuse a message key.
@@ -77,7 +77,7 @@ export async function sendActiveMessage(
 }
 
 /** Send to `target`, running the PQ-KX handshake first if no session exists
- * yet (spec 3); an established session rides the ratchet instead. Returns
+ * yet (§3); an established session rides the ratchet instead. Returns
  * true only when an envelope was accepted by the server. */
 export async function sendFirstMessage(
   x: ExecutorInternals,
@@ -168,7 +168,7 @@ function verifyBundleOrWarn(x: ExecutorInternals, target: Contact, bundle: Bundl
   return false;
 }
 
-/** Send a subsequent message through the KEM double-ratchet (spec 4). The
+/** Send a subsequent message through the KEM double-ratchet (§4). The
  * ratchet state is advanced, persisted write-ahead (so a failed send never
  * risks key reuse), and only then transmitted. The MSG envelope is opaque: it
  * carries no sender identity, so the recipient locates the session by trial
@@ -186,11 +186,11 @@ export async function sendRatchetMessage(
   }
   const ratchet = deserializeRatchet(stored.ratchet);
   // A real message gets a fresh shared id so the peer stores it under the
-  // same handle we do and a later /delete can name it on both sides (spec 5.3a).
+  // same handle we do and a later /delete can name it on both sides (§5.3a).
   const mid = text !== null ? newMessageId() : null;
   // The payload carries the message text (if any) and our current mutual-
-  // timer view, so a /timer change propagates over the encrypted body (spec
-  // 5.2); it can also carry a cooperative deletion directive (control).
+  // timer view, so a /timer change propagates over the encrypted body
+  // (§5.2); it can also carry a cooperative deletion directive (control).
   const payload = encodeAppPayload({
     text,
     timerSeconds: target.timerSeconds,
@@ -204,7 +204,7 @@ export async function sendRatchetMessage(
     x.renderer.event("failure", "message too large after encryption - not sent");
     return false;
   }
-  // Write-ahead the advanced ratchet before the send (spec 4.4): the message
+  // Write-ahead the advanced ratchet before the send (§4.4): the message
   // key is already consumed, so persisting first prevents any reuse if the
   // send fails.
   const timestamp = x.now();
@@ -223,8 +223,8 @@ export async function sendRatchetMessage(
   return true;
 }
 
-/** Store a message at rest (spec 5.1), stamping its disappearing-message
- * deadline from the contact's mutual timer if one is set (spec 5.2). */
+/** Store a message at rest (§5.1), stamping its disappearing-message
+ * deadline from the contact's mutual timer if one is set (§5.2). */
 export async function recordMessage(
   x: ExecutorInternals,
   uid: string,
@@ -260,7 +260,7 @@ function newMessageId(): string {
   return bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
 }
 
-/** Render an incoming message according to the focused view (spec 1). When
+/** Render an incoming message according to the focused view (§1). When
  * the sender's conversation is on screen, append it live. Otherwise keep the
  * current view undisturbed: bump the sender's unread mark, post a status-
  * strip notice, and (only when sitting on the home dashboard) refresh it so
@@ -314,7 +314,7 @@ export async function processEnvelope(
   if (x.identity === null || x.token === null || !x.store.isUnlocked()) {
     return "skip";
   }
-  // A ratchet message (spec 4) routes to the trial-decrypt path; only a KX
+  // A ratchet message (§4) routes to the trial-decrypt path; only a KX
   // first message consumes a prekey.
   if (envelopeType(envelopeBytes) === ENVELOPE_TYPE_MSG) {
     return processRatchetMessage(x, envelopeBytes);
@@ -393,7 +393,7 @@ export async function processEnvelope(
   }
 
   // Unknown sender: bind the claimed UID to the envelope's identity key via a
-  // non-consuming bundle fetch before holding it as a request (spec 7.4).
+  // non-consuming bundle fetch before holding it as a request (§7.4).
   try {
     const senderWire = await api.fetchBundle(x.token, senderUid, false);
     if (x.epoch !== epoch) {
@@ -429,7 +429,7 @@ export async function processEnvelope(
   return "ack";
 }
 
-/** Decrypt a ratchet MSG (spec 4). Since the envelope carries no sender
+/** Decrypt a ratchet MSG (§4). Since the envelope carries no sender
  * identity, try each established session; the header AEAD authenticates the
  * match and a non-matching session fails without mutating its state.
  * Delivery is idempotent: a replay of an already-consumed message decrypts to
@@ -470,10 +470,10 @@ export async function processRatchetMessage(
     }
     const contact = findContactByUid(x, uid);
     const label = contact?.alias ?? formatUid(uid);
-    // Adopt a mutual-timer change carried by the peer and announce it (spec 5.2).
+    // Adopt a mutual-timer change carried by the peer and announce it (§5.2).
     await applyIncomingTimer(x, uid, label, payload.timerSeconds);
     // Honor a cooperative deletion the peer requested for messages they sent
-    // us (spec 5.3a).
+    // us (§5.3a).
     if (payload.deletes !== null) {
       await applyIncomingDeletion(x, uid, label, payload.deletes, payload.deleteSilent);
     }

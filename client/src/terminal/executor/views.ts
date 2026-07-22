@@ -1,4 +1,4 @@
-// Transcript views (spec 1.5): the focused conversation view /chat switches
+// Transcript views (§1.5): the focused conversation view /chat switches
 // into, the home dashboard /home returns to, the /return toggle between
 // them, and the /contacts listing. xterm is append-only, so "removing" a
 // line from a view always means clearing the screen and reprinting what

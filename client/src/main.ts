@@ -20,7 +20,7 @@ function mount(id: string): HTMLElement {
 }
 
 // Both terminals run with a TRANSPARENT background (allowTransparency) so the
-// page supplies the backdrop — that is what lets the emblem watermark and the
+// page supplies the backdrop - that is what lets the emblem watermark and the
 // dock's footer panel show through behind the text (style.css atmosphere
 // layers). The page background remains the same #0d1117.
 const TRANSPARENT = "#0d111700";
@@ -38,8 +38,8 @@ const SHARED: ITerminalOptions = {
 
 // Transcript terminal: read-only (disableStdin) so it never competes with the
 // command line for keystrokes; its cursor is hidden by making it transparent.
-// All output — including untrusted peer/message text via the sanitizing
-// renderer — renders here as xterm text cells. allowProposedApi unlocks
+// All output - including untrusted peer/message text via the sanitizing
+// renderer - renders here as xterm text cells. allowProposedApi unlocks
 // registerDecoration (the right-edge delivery ticks).
 const transcriptTerm = new Terminal({
   ...SHARED,

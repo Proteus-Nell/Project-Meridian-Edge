@@ -9,7 +9,7 @@ export const DURATION_UNIT_SECONDS: Record<DurationUnit, number> = {
   w: 7 * 24 * 60 * 60,
 };
 
-/** Parsed duration to seconds; null for "off" (spec 5.2/5.3). */
+/** Parsed duration to seconds; null for "off" (§5.2/5.3). */
 export function durationToSeconds(duration: Duration): number | null {
   return duration.kind === "off" ? null : duration.amount * DURATION_UNIT_SECONDS[duration.unit];
 }
