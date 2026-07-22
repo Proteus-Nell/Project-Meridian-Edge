@@ -85,7 +85,7 @@ export async function sendFirstMessage(
   text: string,
 ): Promise<boolean> {
   if (x.identity === null || x.token === null) {
-    x.renderer.event("failure", "not logged in - /login first");
+    x.renderer.error("E201");
     return false;
   }
   if (target.keyChangeBlocked) {
@@ -105,10 +105,7 @@ export async function sendFirstMessage(
     wire = await api.fetchBundle(x.token, target.uid);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      x.renderer.event(
-        "failure",
-        "recipient keys unavailable - unknown UID or no prekeys published",
-      );
+      x.renderer.error("E304");
       return false;
     }
     throw err;
@@ -181,7 +178,7 @@ export async function sendRatchetMessage(
   control?: { readonly deletes?: readonly string[]; readonly deleteSilent?: boolean },
 ): Promise<boolean> {
   if (x.token === null) {
-    x.renderer.event("failure", "not logged in - /login first");
+    x.renderer.error("E201");
     return false;
   }
   const ratchet = deserializeRatchet(stored.ratchet);
@@ -201,7 +198,7 @@ export async function sendRatchetMessage(
   const body = ratchetEncrypt(ratchet, payload);
   const envelope = encodeMsgEnvelope(body);
   if (envelope.length > MAX_PAYLOAD_BYTES) {
-    x.renderer.event("failure", "message too large after encryption - not sent");
+    x.renderer.error("E504");
     return false;
   }
   // Write-ahead the advanced ratchet before the send (§4.4): the message
@@ -276,7 +273,7 @@ export function deliverIncoming(
     return;
   }
   x.unread.set(uid, (x.unread.get(uid) ?? 0) + 1);
-  x.renderer.status("info", `new message from ${label} — /chat ${label} to read`);
+  x.renderer.status("info", `new message from ${label} - /chat ${label} to read`);
   if (x.active === null) {
     x.enqueueRender(() => renderHome(x));
   }
@@ -332,7 +329,7 @@ export async function processEnvelope(
         "received a message with an INVALID identity signature - discarded",
       );
     } else {
-      x.renderer.event("failure", `discarded undecryptable message (${result.reason})`);
+      x.renderer.error("E505", result.reason);
     }
     return "ack";
   }
@@ -357,7 +354,7 @@ export async function processEnvelope(
     // fall through to the discard below
   }
   if (senderUid === null || text === null) {
-    x.renderer.event("failure", "discarded message with malformed payload");
+    x.renderer.error("E506");
     return "ack";
   }
 
@@ -410,7 +407,7 @@ export async function processEnvelope(
     if (x.epoch !== epoch) {
       return "skip";
     }
-    x.renderer.event("failure", "could not verify sender identity - message discarded");
+    x.renderer.error("E508");
     return "ack";
   }
   const pending: PendingRequest = {
@@ -440,7 +437,7 @@ export async function processRatchetMessage(
 ): Promise<"ack" | "skip"> {
   const body = decodeMsgEnvelope(envelopeBytes);
   if (body === null) {
-    x.renderer.event("failure", "discarded malformed message");
+    x.renderer.error("E507");
     return "ack";
   }
   const epoch = x.epoch;
@@ -465,7 +462,7 @@ export async function processRatchetMessage(
     await x.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
     const payload = decodeAppPayload(result.plaintext);
     if (payload === null) {
-      x.renderer.event("failure", "discarded message with malformed payload");
+      x.renderer.error("E506");
       return "ack";
     }
     const contact = findContactByUid(x, uid);
@@ -484,7 +481,7 @@ export async function processRatchetMessage(
     await purgeExpired(x);
     return "ack";
   }
-  x.renderer.event("failure", "discarded undecryptable message (no matching session)");
+  x.renderer.error("E505", "no matching session");
   return "ack";
 }
 

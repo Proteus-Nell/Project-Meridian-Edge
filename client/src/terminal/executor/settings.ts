@@ -17,7 +17,7 @@ export async function doSettingsRotation(
   setting: { kind: "on" } | { kind: "off" } | { kind: "day"; day: Weekday },
 ): Promise<void> {
   if (!x.store.isUnlocked()) {
-    x.renderer.event("failure", "store is locked - /login first (settings live encrypted)");
+    x.renderer.error("E404");
     return;
   }
   const current =
@@ -63,7 +63,7 @@ export async function doSettingsTrust(
   mode: "auto" | "manual",
 ): Promise<void> {
   if (!x.store.isUnlocked()) {
-    x.renderer.event("failure", "store is locked - /login first (trust setting lives encrypted)");
+    x.renderer.error("E405");
     return;
   }
   x.autoTrust = mode === "auto";

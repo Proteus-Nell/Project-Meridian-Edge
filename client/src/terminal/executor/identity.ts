@@ -43,7 +43,7 @@ export async function promptNewPassphrase(x: ExecutorInternals): Promise<string 
     return null;
   }
   if (first.length < MIN_PASSPHRASE_LENGTH) {
-    x.renderer.event("failure", `passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`);
+    x.renderer.error("E206", MIN_PASSPHRASE_LENGTH);
     return null;
   }
   const second = await x.shell.readSecret("confirm passphrase: ");
@@ -51,7 +51,7 @@ export async function promptNewPassphrase(x: ExecutorInternals): Promise<string 
     return null;
   }
   if (!secretStringsEqual(first, second)) {
-    x.renderer.event("failure", "passphrases do not match");
+    x.renderer.error("E207");
     return null;
   }
   return first;
@@ -135,7 +135,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   }
   const uid = normalizeUid(uidRaw.trim());
   if (uid === null) {
-    x.renderer.event("failure", "invalid UID (26 Crockford Base32 chars, dashes optional)");
+    x.renderer.error("E103");
     return;
   }
   const codeRaw = await x.shell.readSecret("recovery code: ");
@@ -145,10 +145,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   }
   const code = normalizeRecoveryCode(codeRaw);
   if (code === null) {
-    x.renderer.event(
-      "failure",
-      "invalid recovery code (16 Crockford Base32 chars, dashes optional)",
-    );
+    x.renderer.error("E104");
     return;
   }
   const passphrase = await promptNewPassphrase(x);
@@ -168,7 +165,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
     if (err instanceof ApiError && err.status === 401) {
       // Uniform by design (§2.1): the server does not distinguish an
       // unknown UID from a wrong or already-spent code, and neither do we.
-      x.renderer.event("failure", "recovery failed - unknown UID or invalid recovery code");
+      x.renderer.error("E205");
       return;
     }
     throw err; // 429 and network failures take the standard error path
@@ -296,7 +293,7 @@ async function refillOpksInternal(x: ExecutorInternals, count: number): Promise<
 
 export async function doLogin(x: ExecutorInternals): Promise<void> {
   if (!(await x.store.exists())) {
-    x.renderer.event("failure", "no identity on this device - /register first");
+    x.renderer.error("E204");
     return;
   }
   if (!x.store.isUnlocked()) {
@@ -306,13 +303,13 @@ export async function doLogin(x: ExecutorInternals): Promise<void> {
       return;
     }
     if (!(await x.store.unlock(passphrase))) {
-      x.renderer.event("failure", "unlock failed");
+      x.renderer.error("E203");
       return;
     }
   }
   const stored = await x.store.getJson<StoredIdentity>("identity");
   if (stored === null) {
-    x.renderer.event("failure", "store is corrupt: no identity record");
+    x.renderer.error("E402");
     return;
   }
   x.identity = {
@@ -396,7 +393,7 @@ export function doLock(x: ExecutorInternals): void {
 
 export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
   if (!(await x.store.exists())) {
-    x.renderer.event("failure", "no identity on this device - /register first");
+    x.renderer.error("E204");
     return;
   }
   const current = await x.shell.readSecret("current passphrase: ");
@@ -422,7 +419,7 @@ export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
     }
   }
   if (!(await x.store.rotatePassphrase(current, next))) {
-    x.renderer.event("failure", "rotation failed");
+    x.renderer.error("E208");
     return;
   }
   const settings =
@@ -436,7 +433,7 @@ export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
 
 export async function doKeysStatus(x: ExecutorInternals): Promise<void> {
   if (x.token === null) {
-    x.renderer.event("failure", "not logged in - /login first");
+    x.renderer.error("E201");
     return;
   }
   const status = await api.keysStatus(x.token);
@@ -454,7 +451,7 @@ export async function doKeysStatus(x: ExecutorInternals): Promise<void> {
 
 export async function doKeysRefill(x: ExecutorInternals): Promise<void> {
   if (x.token === null || x.identity === null) {
-    x.renderer.event("failure", "not logged in - /login first");
+    x.renderer.error("E201");
     return;
   }
   const status = await api.keysStatus(x.token);

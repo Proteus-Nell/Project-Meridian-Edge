@@ -21,11 +21,13 @@ import type { ThemePrefs } from "../crypto/store";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
 
-/** DOM-side mirror of the renderer's ANSI event prefixes. */
+/** DOM-side mirror of the renderer's ANSI event prefixes. Failures carry
+ * their E-code inside the text itself (Renderer.error), so they get no
+ * glyph here. */
 const GLYPH: Record<EventLevel, string> = {
   success: "[✓]",
   warning: "[!]",
-  failure: "[✗]",
+  failure: "",
   info: "[*]",
   security: "[SECURITY]",
 };
@@ -105,13 +107,17 @@ export class Chrome implements SuggestionNav {
     const time = document.createElement("span");
     time.className = "status-time";
     time.textContent = this.timestamp();
-    const glyph = document.createElement("span");
-    glyph.className = "status-glyph";
-    glyph.textContent = GLYPH[level];
     const body = document.createElement("span");
     body.className = "status-text";
     body.textContent = text;
-    this.statusEventEl.append(time, glyph, body);
+    if (GLYPH[level] === "") {
+      this.statusEventEl.append(time, body);
+    } else {
+      const glyph = document.createElement("span");
+      glyph.className = "status-glyph";
+      glyph.textContent = GLYPH[level];
+      this.statusEventEl.append(time, glyph, body);
+    }
 
     if (level !== "security") {
       this.staleTimer = setTimeout(() => {

@@ -8,7 +8,7 @@ import { findContactByUid, isActiveConversation, refreshChatContext, resolveCont
 import type { ExecutorInternals } from "./context";
 import { durationToSeconds, formatDuration } from "./format";
 import type { DeleteScope, Duration } from "../parser";
-import type { EventLevel } from "../renderer";
+import type { GlyphLevel } from "../renderer";
 import type { PurgeSettings, StoredMessage, StoredSession } from "./records";
 import { saveContacts } from "./context";
 import { sendRatchetMessage } from "./messaging";
@@ -77,12 +77,12 @@ export async function doTimer(
   duration: Duration,
 ): Promise<void> {
   if (x.identity === null || x.token === null) {
-    x.renderer.event("failure", "not logged in - /login first");
+    x.renderer.error("E201");
     return;
   }
   const contact = resolveContact(x, alias);
   if (contact === null) {
-    x.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+    x.renderer.error("E501", alias);
     return;
   }
   const seconds = durationToSeconds(duration);
@@ -144,7 +144,7 @@ export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined
   }
   const contact = resolveContact(x, alias);
   if (contact === null) {
-    x.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+    x.renderer.error("E501", alias);
     return;
   }
   const count = await deleteMessages(x, `msg/${contact.uid}/`);
@@ -164,7 +164,7 @@ export async function doDelete(
   scope: DeleteScope,
   silent: boolean,
 ): Promise<void> {
-  const report = (level: EventLevel, text: string): void => {
+  const report = (level: GlyphLevel, text: string): void => {
     if (!silent) {
       x.renderer.event(level, text);
     }

@@ -21,12 +21,12 @@ import type { Contact } from "./records";
 
 export async function doVerify(x: ExecutorInternals, alias: string): Promise<void> {
   if (x.identity === null || x.token === null) {
-    x.renderer.event("failure", "not logged in - /login first");
+    x.renderer.error("E201");
     return;
   }
   const contact = resolveContact(x, alias);
   if (contact === null) {
-    x.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+    x.renderer.error("E501", alias);
     return;
   }
 
@@ -37,7 +37,7 @@ export async function doVerify(x: ExecutorInternals, alias: string): Promise<voi
     wire = await api.fetchBundle(x.token, contact.uid, false);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      x.renderer.event("failure", "recipient keys unavailable - unknown UID");
+      x.renderer.error("E303");
       return;
     }
     throw err;
@@ -76,18 +76,15 @@ export async function doVerify(x: ExecutorInternals, alias: string): Promise<voi
 export async function doVerified(x: ExecutorInternals, alias: string): Promise<void> {
   const contact = resolveContact(x, alias);
   if (contact === null) {
-    x.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+    x.renderer.error("E501", alias);
     return;
   }
   if (contact.ik === null) {
-    x.renderer.event("failure", `no known identity key for ${contact.alias} yet - /verify first`);
+    x.renderer.error("E502", contact.alias);
     return;
   }
   if (contact.keyChangeBlocked) {
-    x.renderer.event(
-      "failure",
-      `${contact.alias} has an unacknowledged key change - /ack ${contact.alias} first, then /verify again`,
-    );
+    x.renderer.error("E503", contact.alias);
     return;
   }
   x.contacts.set(contact.alias, { ...contact, verified: true });
@@ -102,7 +99,7 @@ export async function doVerified(x: ExecutorInternals, alias: string): Promise<v
 export async function doAck(x: ExecutorInternals, alias: string): Promise<void> {
   const contact = resolveContact(x, alias);
   if (contact === null) {
-    x.renderer.event("failure", `unknown contact: ${alias} - /add <uid> [alias] first`);
+    x.renderer.error("E501", alias);
     return;
   }
   if (!contact.keyChangeBlocked) {

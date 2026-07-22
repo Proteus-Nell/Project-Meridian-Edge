@@ -46,10 +46,29 @@ describe("Renderer", () => {
   it("sanitizes event text but keeps its own styling", () => {
     const sink = new CaptureSink();
     const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0));
-    renderer.event("failure", "bad\x1b[31minput");
+    renderer.event("warning", "bad\x1b[31minput");
     const line = sink.lines[0] ?? "";
-    expect(line).toContain("[✗]"); // renderer's own ANSI prefix intact
+    expect(line).toContain("[!]"); // renderer's own ANSI prefix intact
     expect(line).toContain("bad[31minput"); // user ESC stripped
+  });
+
+  it("renders failures with their catalogued E-code instead of a glyph", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
+    renderer.error("E301");
+    const line = sink.lines[0] ?? "";
+    expect(line).toContain("[E301]");
+    expect(line).toContain("rate limit reached - try again later");
+    expect(line).not.toContain("✗");
+  });
+
+  it("builds parameterized error messages from the catalog", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.error("E501", "mallory");
+    const line = sink.lines[0] ?? "";
+    expect(line).toContain("[E501]");
+    expect(line).toContain("unknown contact: mallory - /add <uid> [alias] first");
   });
 });
 
@@ -71,8 +90,16 @@ describe("Renderer status strip", () => {
     const sink = new CaptureSink();
     const status = new CaptureStatus();
     const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0), status);
-    renderer.event("failure", "bad\x1b[31minput");
-    expect(status.last).toEqual({ level: "failure", text: "bad[31minput" });
+    renderer.event("warning", "bad\x1b[31minput");
+    expect(status.last).toEqual({ level: "warning", text: "bad[31minput" });
+  });
+
+  it("mirrors failures with the E-code embedded in the status text", () => {
+    const sink = new CaptureSink();
+    const status = new CaptureStatus();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0), status);
+    renderer.error("E203");
+    expect(status.last).toEqual({ level: "failure", text: "[E203] unlock failed" });
   });
 
   it("status() updates the strip only, with no transcript line", () => {

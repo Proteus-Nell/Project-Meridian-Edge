@@ -9,7 +9,7 @@ export async function doBench(x: ExecutorInternals, suite: string | undefined): 
   const bench = await import("../../bench/index");
   const parsed = bench.parseSuite(suite);
   if (parsed === null) {
-    x.renderer.event("failure", "unknown suite - use b1, b2, b3, or omit for all");
+    x.renderer.error("E105");
     return;
   }
   x.renderer.event(

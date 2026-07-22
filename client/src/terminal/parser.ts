@@ -86,6 +86,9 @@ export type ParseResult =
   | { readonly kind: "command"; readonly command: Command }
   | {
       readonly kind: "invalid";
+      // E101 = the command word itself is unknown; E102 = a known command
+      // with bad arguments (docs/MESSAGES.md).
+      readonly code: "E101" | "E102";
       readonly error: string;
       readonly usage: string | undefined;
       // A "did you mean /login?" candidate when the head looked like a typo of a
@@ -254,8 +257,13 @@ function parseWeekday(token: string): Weekday | null {
   return (WEEKDAYS as readonly string[]).includes(lower) ? (lower as Weekday) : null;
 }
 
-function invalid(error: string, usage?: string, suggestion?: string): ParseResult {
-  return { kind: "invalid", error, usage, suggestion };
+function invalid(
+  error: string,
+  usage?: string,
+  suggestion?: string,
+  code: "E101" | "E102" = "E102",
+): ParseResult {
+  return { kind: "invalid", code, error, usage, suggestion };
 }
 
 function command(cmd: Command): ParseResult {
@@ -292,6 +300,7 @@ export function parseLine(line: string): ParseResult {
       `unknown command: /${clip(word)}`,
       "type /help for the command list",
       suggestCommand(word) ?? undefined,
+      "E101",
     );
   }
   return parseCommand(resolved, tokens.slice(1), line);
@@ -575,6 +584,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
           `unknown command: /${clip(raw)}`,
           "type /help for the command list",
           suggestCommand(raw) ?? undefined,
+          "E101",
         );
       }
       return command({ name: "help", topic });

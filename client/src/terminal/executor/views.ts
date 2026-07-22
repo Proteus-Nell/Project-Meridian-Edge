@@ -36,9 +36,9 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
   const trust = contact.verified ? "verified" : "UNVERIFIED";
   const timer =
     contact.timerSeconds === null ? "" : ` · timer ${formatDuration(contact.timerSeconds)}`;
-  x.renderer.divider(`—— conversation with ${contact.alias} (${trust})${timer} ——`);
+  x.renderer.divider(`-- conversation with ${contact.alias} (${trust})${timer} --`);
   if (records.length === 0) {
-    x.renderer.plain("  (no messages yet — type to send the first one · /home to go back)");
+    x.renderer.plain("  (no messages yet - type to send the first one · /home to go back)");
   }
   for (const record of records) {
     if (record.dir === "in") {
@@ -50,7 +50,7 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
   if (contact.keyChangeBlocked) {
     x.renderer.event(
       "security",
-      `sending to ${contact.alias} is blocked by an unacknowledged key change — /ack ${contact.alias}, then /verify + /verified to resume`,
+      `sending to ${contact.alias} is blocked by an unacknowledged key change - /ack ${contact.alias}, then /verify + /verified to resume`,
     );
   }
 }
@@ -63,14 +63,14 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
  * only. */
 export async function renderHome(x: ExecutorInternals): Promise<void> {
   x.chrome.clearScreen(false);
-  x.renderer.divider("—— home ——");
+  x.renderer.divider("-- home --");
   if (x.identity === null || !x.store.isUnlocked()) {
-    x.renderer.plain("  locked — /login to unlock, or /register to create an identity");
+    x.renderer.plain("  locked - /login to unlock, or /register to create an identity");
     return;
   }
   const contacts = [...x.contacts.values()].sort((a, b) => a.alias.localeCompare(b.alias));
   if (contacts.length === 0) {
-    x.renderer.plain("  no contacts yet — /add <uid> [alias] to add one");
+    x.renderer.plain("  no contacts yet - /add <uid> [alias] to add one");
   } else {
     x.renderer.plain("  contacts:");
     const width = Math.max(...contacts.map((c) => c.alias.length));
@@ -79,7 +79,7 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
       const flags = [
         contact.verified ? "verified" : "UNVERIFIED",
         unread > 0 ? `${unread} unread` : "",
-        contact.keyChangeBlocked ? "KEY CHANGED — /ack" : "",
+        contact.keyChangeBlocked ? "KEY CHANGED - /ack" : "",
         contact.timerSeconds === null ? "" : `timer ${formatDuration(contact.timerSeconds)}`,
       ]
         .filter((s) => s.length > 0)
@@ -93,7 +93,7 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
     x.renderer.plain("  contact requests:");
     for (const key of pending) {
       const uid = key.slice("pending/".length);
-      x.renderer.plain(`    ${formatUid(uid)}  — /add ${uid} [alias] to accept`);
+      x.renderer.plain(`    ${formatUid(uid)}  - /add ${uid} [alias] to accept`);
     }
   }
   x.renderer.plain("");

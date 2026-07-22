@@ -21,7 +21,7 @@ export async function doAdd(
   alias: string | undefined,
 ): Promise<void> {
   if (!x.store.isUnlocked()) {
-    x.renderer.event("failure", "contacts live in the encrypted store - /login first");
+    x.renderer.error("E403");
     return;
   }
   const name = alias ?? uid;
@@ -82,7 +82,7 @@ export async function doContacts(x: ExecutorInternals): Promise<void> {
     for (const contact of contacts) {
       const flags = [
         contact.verified ? "verified" : "UNVERIFIED",
-        contact.keyChangeBlocked ? "KEY CHANGED — /ack" : "",
+        contact.keyChangeBlocked ? "KEY CHANGED - /ack" : "",
         contact.timerSeconds === null ? "" : `timer ${formatDuration(contact.timerSeconds)}`,
       ]
         .filter((s) => s.length > 0)

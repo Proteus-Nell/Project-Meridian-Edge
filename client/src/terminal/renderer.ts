@@ -6,15 +6,22 @@
 // an abstract StatusSink (the renderer itself touches no DOM); the sink writes
 // it as textContent, so there is still no markup path for any content.
 
+import { ERRORS } from "./messages";
+import type { ErrorCode } from "./messages";
+
 export type EventLevel = "success" | "warning" | "failure" | "info" | "security";
+
+/** Failures are emitted through error() with a catalogued E-code; event()
+ * takes every other level. */
+export type GlyphLevel = Exclude<EventLevel, "failure">;
 
 const RESET = "\x1b[0m";
 const DIM = "\x1b[2m";
+const RED = "\x1b[31m";
 
-const PREFIX: Record<EventLevel, string> = {
+const PREFIX: Record<GlyphLevel, string> = {
   success: "\x1b[32m[✓]" + RESET,
   warning: "\x1b[33m[!]" + RESET,
-  failure: "\x1b[31m[✗]" + RESET,
   info: "\x1b[36m[*]" + RESET,
   security: "\x1b[1;97;41m[SECURITY]" + RESET,
 };
@@ -53,12 +60,23 @@ export class Renderer {
     private readonly statusSink: StatusSink | null = null,
   ) {}
 
-  event(level: EventLevel, text: string): void {
+  event(level: GlyphLevel, text: string): void {
     const clean = sanitizeText(text);
     this.sink.printLine(`${DIM}${this.timestamp()}${RESET} ${PREFIX[level]} ${clean}`);
     // Mirror the latest typed event into the footer status strip so current
     // state is visible at a glance without scanning the transcript.
     this.statusSink?.status(level, clean);
+  }
+
+  /** A user-facing failure: the catalogued E-code replaces the glyph
+   * (`[E301] rate limit reached - ...`), so every error on screen is
+   * reportable and looked up in docs/MESSAGES.md. Text comes from the
+   * ERRORS catalog; args are the builder's parameters. */
+  error<C extends ErrorCode>(code: C, ...args: Parameters<(typeof ERRORS)[C]>): void {
+    const build = ERRORS[code] as (...a: ReadonlyArray<unknown>) => string;
+    const clean = sanitizeText(build(...args));
+    this.sink.printLine(`${DIM}${this.timestamp()}${RESET} ${RED}[${code}]${RESET} ${clean}`);
+    this.statusSink?.status("failure", `[${code}] ${clean}`);
   }
 
   /** Update only the footer status strip - no transcript line. Used where a

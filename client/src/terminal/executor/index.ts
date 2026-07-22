@@ -116,7 +116,7 @@ export class Executor implements ExecutorInternals {
       case "empty":
         return;
       case "invalid": {
-        this.renderer.event("failure", result.error);
+        this.renderer.error(result.code, result.error);
         if (result.usage !== undefined) {
           // A usage string may enumerate several forms joined by "  |  "
           // (e.g. /settings); print one form per line so it stays readable.
@@ -284,10 +284,7 @@ export class Executor implements ExecutorInternals {
   private openChat(target: string, message: string | undefined): void {
     const contact = resolveContact(this, target);
     if (contact === null) {
-      this.renderer.event(
-        "failure",
-        `unknown contact: ${target} - /add <uid> [alias] first (contacts load on /login)`,
-      );
+      this.renderer.error("E501", target);
       return;
     }
     const previousBeforeChat = currentViewRef(this);
@@ -372,22 +369,22 @@ export class Executor implements ExecutorInternals {
   private reportError(err: unknown): void {
     if (err instanceof ApiError) {
       if (err.status === 429) {
-        this.renderer.event("failure", "rate limit reached - try again later");
+        this.renderer.error("E301");
         return;
       }
       if (err.status === 401) {
         this.token = null;
-        this.renderer.event("failure", "session expired or invalid - /login again");
+        this.renderer.error("E202");
         return;
       }
-      this.renderer.event("failure", "request failed - is the server running?");
+      this.renderer.error("E302");
       return;
     }
     if (err instanceof StoreLockedError) {
-      this.renderer.event("failure", "store is locked - /login to unlock");
+      this.renderer.error("E401");
       return;
     }
-    this.renderer.event("failure", "operation failed");
+    this.renderer.error("E599");
   }
 
   touchAutoLock(): void {
@@ -444,7 +441,7 @@ export class Executor implements ExecutorInternals {
             }
           })
           .catch(() => {
-            this.renderer.event("failure", "failed to process an incoming message");
+            this.renderer.error("E509");
           });
       },
       onClose: (intentional) => {

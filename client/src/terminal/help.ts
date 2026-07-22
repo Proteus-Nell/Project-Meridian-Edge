@@ -38,7 +38,7 @@ const SECTIONS: readonly HelpSection[] = [
     entries: [
       { cmd: "/add <uid> [alias]", blurb: "add a contact (alias is local-only)" },
       { cmd: "/contacts", blurb: "list saved contacts with their UIDs and trust state" },
-      { cmd: "/chat <alias|uid>", blurb: "open a conversation (focused view — hides everything else)" },
+      { cmd: "/chat <alias|uid>", blurb: "open a conversation (focused view - hides everything else)" },
       { cmd: "/home", blurb: "back to the home dashboard of all conversations" },
       { cmd: "/return", blurb: "toggle back to the previous screen" },
       { cmd: "/verify <alias>", blurb: "show the safety number to compare out-of-band" },
@@ -89,7 +89,7 @@ export function renderHelp(): string[] {
     ...SECTIONS.flatMap((section) => section.entries.map((entry) => entry.cmd.length)),
   );
   const lines: string[] = [
-    "Meridian Edge commands  —  anything not starting with / is a message to the active chat",
+    "Meridian Edge commands  -  anything not starting with / is a message to the active chat",
   ];
   for (const section of SECTIONS) {
     lines.push("");
