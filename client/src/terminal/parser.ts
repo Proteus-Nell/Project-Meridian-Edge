@@ -49,7 +49,7 @@ export type Command =
   | { readonly name: "lock" }
   | { readonly name: "whoami" }
   | { readonly name: "add"; readonly uid: string; readonly alias: string | undefined }
-  | { readonly name: "chat"; readonly target: string }
+  | { readonly name: "chat"; readonly target: string; readonly message: string | undefined }
   | { readonly name: "home" }
   | { readonly name: "return" }
   | { readonly name: "contacts" }
@@ -102,7 +102,7 @@ export const COMMAND_USAGE = {
   whoami: "/whoami",
   add: "/add <uid> [alias]",
   contacts: "/contacts",
-  chat: "/chat <alias|uid>",
+  chat: "/chat <alias|uid> [message]",
   home: "/home",
   return: "/return",
   verify: "/verify <alias>",
@@ -194,6 +194,22 @@ function parseAlias(token: string): string | null {
   return ALIAS_RE.test(token) ? token : null;
 }
 
+/** The verbatim remainder of `line` after its first `skip` whitespace-delimited
+ * tokens, preserving the message's own internal spacing (the tokenizer collapses
+ * runs of whitespace, which would corrupt message text). Returns undefined when
+ * only whitespace follows. Used to carry the optional `/chat <target> [message]`
+ * message exactly as typed. */
+function rawRemainder(line: string, skip: number): string | undefined {
+  let i = 0;
+  for (let t = 0; t < skip; t += 1) {
+    while (i < line.length && /\s/.test(line[i] ?? "")) i += 1; // leading whitespace
+    while (i < line.length && !/\s/.test(line[i] ?? "")) i += 1; // the token itself
+  }
+  while (i < line.length && /\s/.test(line[i] ?? "")) i += 1; // whitespace before the remainder
+  const rest = line.slice(i);
+  return rest.length === 0 ? undefined : rest;
+}
+
 function parseDuration(token: string): Duration | null {
   if (token === "off") {
     return { kind: "off" };
@@ -254,10 +270,10 @@ export function parseLine(line: string): ParseResult {
       suggestCommand(word) ?? undefined,
     );
   }
-  return parseCommand(resolved, tokens.slice(1));
+  return parseCommand(resolved, tokens.slice(1), line);
 }
 
-function parseCommand(word: CommandWord, args: readonly string[]): ParseResult {
+function parseCommand(word: CommandWord, args: readonly string[], rawLine: string): ParseResult {
   const usage = COMMAND_USAGE[word];
   switch (word) {
     case "register":
@@ -295,18 +311,18 @@ function parseCommand(word: CommandWord, args: readonly string[]): ParseResult {
     }
     case "chat": {
       const token = args[0];
-      if (args.length !== 1 || token === undefined) {
+      if (args.length < 1 || token === undefined) {
         return invalid("expected an alias or UID", usage);
       }
-      const uid = normalizeUid(token);
-      if (uid !== null) {
-        return command({ name: "chat", target: uid });
-      }
-      const alias = parseAlias(token);
-      if (alias === null) {
+      const target = normalizeUid(token) ?? parseAlias(token);
+      if (target === null) {
         return invalid("not a valid alias or UID", usage);
       }
-      return command({ name: "chat", target: alias });
+      // Anything after the target is an optional inline message, taken verbatim
+      // (skip 2 tokens: the command word and the target) so `/chat bob hey there`
+      // switches to bob and sends "hey there" in one line.
+      const message = rawRemainder(rawLine, 2);
+      return command({ name: "chat", target, message });
     }
     case "verify":
     case "verified":

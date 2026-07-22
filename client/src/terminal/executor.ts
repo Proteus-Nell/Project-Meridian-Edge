@@ -274,6 +274,7 @@ export type EmblemState = "idle" | "active" | "alert";
  * keeps the executor fully testable headless (no DOM), so existing tests
  * construct it without a chrome. */
 export interface UiChrome {
+  echoInput(line: string, kind?: "command" | "message"): void;
   confirmSent(): void;
   rejectSent(): void;
   clearScreen(announce?: boolean): void;
@@ -289,6 +290,7 @@ export interface UiChrome {
 type ViewRef = { readonly kind: "home" } | { readonly kind: "chat"; readonly uid: string };
 
 const NULL_CHROME: UiChrome = {
+  echoInput() {},
   confirmSent() {},
   rejectSent() {},
   clearScreen() {},
@@ -399,24 +401,32 @@ export class Executor {
     // /chat time: a key-change teardown (or /verified) mutates the stored
     // Contact, and sending must see that update, not a stale readonly copy.
     const target = this.findContactByUid(this.active.uid) ?? this.active;
-    this.run(async () => {
-      let sent = false;
-      try {
-        sent = await this.sendFirstMessage(target, text);
-      } catch (err) {
-        // A thrown send (e.g. network) still marks the echoed line failed; the
-        // specific reason is logged by reportError in run()'s catch.
-        this.chrome.rejectSent();
-        throw err;
-      }
-      if (sent) {
-        this.chrome.confirmSent();
-        this.renderer.status("success", `sent to ${target.alias}`);
-      } else {
-        // A graceful non-send already explained itself on the transcript/status.
-        this.chrome.rejectSent();
-      }
-    });
+    this.run(() => this.sendActiveMessage(target, text));
+  }
+
+  /** Send one already-echoed outgoing message to `target`, then mark that row
+   * delivered (✓) or failed (✗) with a status line on success. Does NOT wrap
+   * its own run()/echo, so a caller can sequence it after other work inside a
+   * single task — used both by a plain typed message (echoed in main.ts) and by
+   * the `/chat <target> <message>` inline form (which echoes it after the view
+   * switch). */
+  private async sendActiveMessage(target: Contact, text: string): Promise<void> {
+    let sent = false;
+    try {
+      sent = await this.sendFirstMessage(target, text);
+    } catch (err) {
+      // A thrown send (e.g. network) still marks the echoed line failed; the
+      // specific reason is logged by reportError in run()'s catch.
+      this.chrome.rejectSent();
+      throw err;
+    }
+    if (sent) {
+      this.chrome.confirmSent();
+      this.renderer.status("success", `sent to ${target.alias}`);
+    } else {
+      // A graceful non-send already explained itself on the transcript/status.
+      this.chrome.rejectSent();
+    }
   }
 
   private handleCommand(cmd: Command): void {
@@ -519,11 +529,26 @@ export class Executor {
         }
         this.shell.setPrompt(`[${contact.alias}] > `);
         this.refreshChatContext();
-        // Switch the transcript to the focused conversation view: only this
-        // conversation's history, everything else hidden but retained (reachable
-        // via /home). Runs on the render lane so a message typed right after
-        // /chat is not blocked by the redraw.
-        this.enqueueRender(() => this.renderActiveConversation());
+        if (cmd.message === undefined) {
+          // Switch the transcript to the focused conversation view: only this
+          // conversation's history, everything else hidden but retained
+          // (reachable via /home). Runs on the render lane so a message typed
+          // right after /chat is not blocked by the redraw.
+          this.enqueueRender(() => this.renderActiveConversation());
+          return;
+        }
+        // `/chat <target> <message>`: switch to the focused view, then echo and
+        // send the inline message so it lands at the bottom exactly like /chat
+        // followed by a typed message. Sequenced in one task (render → echo →
+        // send) so the ✓/✗ tick pins to the echoed row. The send still flows
+        // through sendFirstMessage, so a key-change block, unverified state,
+        // disappearing timers and the ratchet all behave identically.
+        const inlineMessage = cmd.message;
+        this.run(async () => {
+          await this.renderActiveConversation();
+          this.chrome.echoInput(inlineMessage, "message");
+          await this.sendActiveMessage(contact, inlineMessage);
+        });
         return;
       }
       case "home": {
