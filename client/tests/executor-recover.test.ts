@@ -130,7 +130,7 @@ describe("/recover on a fresh device", () => {
     const store = fastStore("meridian-edge-recover-fresh");
     const { executor, shell, output } = setup(store);
     shell.lines = [` ${formatUid(UID).toLowerCase()} `]; // untrimmed, dashed, lowercase
-    shell.secrets = [CODE_TYPED, "new passphrase!", "new passphrase!"];
+    shell.secrets = [CODE_TYPED, "new passphrase 1!", "new passphrase 1!"];
     await runRecover(executor);
 
     // No destroy prompt on a device with no store.
@@ -155,7 +155,7 @@ describe("/recover on a fresh device", () => {
 
     // The rebuilt store holds the recovered identity under the new passphrase.
     store.lock();
-    expect(await store.unlock("new passphrase!")).toBe(true);
+    expect(await store.unlock("new passphrase 1!")).toBe(true);
     const identity = await store.getJson<{ uid: string }>("identity");
     expect(identity?.uid).toBe(UID);
   });
@@ -218,7 +218,7 @@ describe("/recover over an existing store", () => {
     const store = await storeWithIdentity("meridian-edge-recover-401");
     const { executor, shell, output } = setup(store);
     shell.lines = ["yes", formatUid(UID)];
-    shell.secrets = [CODE_TYPED, "new passphrase!", "new passphrase!"];
+    shell.secrets = [CODE_TYPED, "new passphrase 1!", "new passphrase 1!"];
     await runRecover(executor);
 
     expect(output.text()).toContain("recovery failed - unknown UID or invalid recovery code");
@@ -233,13 +233,13 @@ describe("/recover over an existing store", () => {
     const store = await storeWithIdentity("meridian-edge-recover-replace");
     const { executor, shell, output } = setup(store);
     shell.lines = ["YES", formatUid(UID)]; // case-insensitive confirmation
-    shell.secrets = [CODE_TYPED, "new passphrase!", "new passphrase!"];
+    shell.secrets = [CODE_TYPED, "new passphrase 1!", "new passphrase 1!"];
     await runRecover(executor);
 
     expect(output.text()).toContain("account recovered");
     store.lock();
     expect(await store.unlock("original passphrase")).toBe(false);
-    expect(await store.unlock("new passphrase!")).toBe(true);
+    expect(await store.unlock("new passphrase 1!")).toBe(true);
     expect((await store.getJson<{ uid: string }>("identity"))?.uid).toBe(UID);
   });
 });

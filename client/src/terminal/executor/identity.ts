@@ -33,17 +33,48 @@ import { purgeExpired } from "./lifecycle";
 import { DEFAULT_ROTATION, WEEKDAY_INDEX } from "./records";
 import type { RotationSettings, StoredIdentity, StoredSpk } from "./records";
 
-const MIN_PASSPHRASE_LENGTH = 8;
+const MIN_PASSPHRASE_LENGTH = 12;
 const WIPE_CONFIRM_WINDOW_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export type PassphraseProblem = "short" | "composition";
+
+/** Strength rules for a new passphrase, shared by /register, /recover and
+ * /rotate passphrase.
+ *
+ * This passphrase never leaves the device: it derives the KEK that wraps the
+ * store's DEK through Argon2id, so it is the only thing standing between a
+ * copied IndexedDB directory and its contents. That makes offline guessing the
+ * threat being priced, which is why the length floor carries most of the
+ * weight and the composition rules are a floor rather than the point.
+ *
+ * "Symbol" is anything that is not an ASCII letter or digit, so punctuation,
+ * spaces and non-Latin marks all count - an allowlist would only reject
+ * legitimate characters and push users toward predictable substitutions. */
+export function passphraseProblem(passphrase: string): PassphraseProblem | null {
+  if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
+    return "short";
+  }
+  if (!/[0-9]/.test(passphrase) || !/[^A-Za-z0-9]/.test(passphrase)) {
+    return "composition";
+  }
+  return null;
+}
+
 export async function promptNewPassphrase(x: ExecutorInternals): Promise<string | null> {
-  const first = await x.shell.readSecret("choose a passphrase: ");
+  const first = await x.shell.readSecret(
+    `choose a passphrase (${MIN_PASSPHRASE_LENGTH}+ characters, with a number and a symbol): `,
+  );
   if (first === null) {
     return null;
   }
-  if (first.length < MIN_PASSPHRASE_LENGTH) {
+  const problem = passphraseProblem(first);
+  if (problem === "short") {
     x.renderer.error("E206", MIN_PASSPHRASE_LENGTH);
+    return null;
+  }
+  if (problem === "composition") {
+    x.renderer.error("E209");
     return null;
   }
   const second = await x.shell.readSecret("confirm passphrase: ");

@@ -63,9 +63,11 @@ are missing versus production.
 
 ### Create your identity — `/register`
 
-1. You are asked to choose and confirm a **passphrase** (min 8 characters,
-   input is masked). It encrypts everything stored in this browser — it is
-   never sent anywhere.
+1. You are asked to choose and confirm a **passphrase** — at least 12
+   characters, including a number and a symbol (anything that isn't a letter
+   or digit counts, spaces included), input masked. It encrypts everything
+   stored in this browser — it is never sent anywhere, so its only job is to
+   make an offline attack on a copied database expensive.
 2. An **ML-DSA-65 identity keypair** is generated in the browser. Only the
    public key is uploaded; the server assigns you a random 26-character UID
    like `7Q3K-M2VD-9XWP-4RTB-A6HJ-EZ01-23`. There is no email, phone number,

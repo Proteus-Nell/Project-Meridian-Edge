@@ -33,6 +33,7 @@ export const ERRORS = {
   E206: (min: number) => `passphrase must be at least ${min} characters`,
   E207: () => "passphrases do not match",
   E208: () => "rotation failed",
+  E209: () => "passphrase must include at least one number and one symbol",
 
   // E3xx network / server responses
   E301: () => "rate limit reached - try again later",

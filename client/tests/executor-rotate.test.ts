@@ -47,7 +47,7 @@ async function setup(): Promise<{
   store: KeyStore;
 }> {
   const store = new KeyStore("meridian-edge-exec-test", new IDBFactory());
-  await store.create("original passphrase", FAST);
+  await store.create("original passphrase 1", FAST);
   const output = new CaptureSink();
   const shell = new FakeShell();
   const executor = new Executor(new Renderer(output), shell, store);
@@ -62,7 +62,7 @@ async function rotate(executor: Executor): Promise<void> {
 describe("/rotate passphrase same-passphrase guard", () => {
   it("warns and prompts when the new passphrase equals the current one", async () => {
     const { executor, shell, output, store } = await setup();
-    shell.secrets = ["original passphrase", "original passphrase", "original passphrase"];
+    shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = ["n"];
     await rotate(executor);
 
@@ -72,17 +72,17 @@ describe("/rotate passphrase same-passphrase guard", () => {
     expect(text).toContain("rotation cancelled");
     expect(text).not.toContain("passphrase rotated");
     store.lock();
-    expect(await store.unlock("original passphrase")).toBe(true);
+    expect(await store.unlock("original passphrase 1")).toBe(true);
   });
 
   it("defaults to cancel on Enter or Ctrl+C", async () => {
     const { executor, shell, output } = await setup();
-    shell.secrets = ["original passphrase", "original passphrase", "original passphrase"];
+    shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = [""];
     await rotate(executor);
     expect(output.lines.join("\n")).toContain("rotation cancelled");
 
-    shell.secrets = ["original passphrase", "original passphrase", "original passphrase"];
+    shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = [null]; // Ctrl+C
     await rotate(executor);
     expect(output.lines.join("\n")).toContain("rotation cancelled");
@@ -90,7 +90,7 @@ describe("/rotate passphrase same-passphrase guard", () => {
 
   it("proceeds when the user explicitly confirms", async () => {
     const { executor, shell, output } = await setup();
-    shell.secrets = ["original passphrase", "original passphrase", "original passphrase"];
+    shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = ["y"];
     await rotate(executor);
     expect(output.lines.join("\n")).toContain("passphrase rotated");
@@ -98,43 +98,43 @@ describe("/rotate passphrase same-passphrase guard", () => {
 
   it("does not prompt when the new passphrase differs", async () => {
     const { executor, shell, output, store } = await setup();
-    shell.secrets = ["original passphrase", "different passphrase", "different passphrase"];
+    shell.secrets = ["original passphrase 1", "different passphrase 2", "different passphrase 2"];
     await rotate(executor);
 
     expect(shell.lineQueries).toEqual([]);
     expect(output.lines.join("\n")).toContain("passphrase rotated");
     store.lock();
-    expect(await store.unlock("original passphrase")).toBe(false);
-    expect(await store.unlock("different passphrase")).toBe(true);
+    expect(await store.unlock("original passphrase 1")).toBe(false);
+    expect(await store.unlock("different passphrase 2")).toBe(true);
   });
 
   it("still rejects a wrong current passphrase", async () => {
     const { executor, shell, output, store } = await setup();
-    shell.secrets = ["wrong guess!", "different passphrase", "different passphrase"];
+    shell.secrets = ["wrong guess!", "different passphrase 2", "different passphrase 2"];
     await rotate(executor);
     expect(output.lines.join("\n")).toContain("rotation failed");
     store.lock();
-    expect(await store.unlock("original passphrase")).toBe(true);
+    expect(await store.unlock("original passphrase 1")).toBe(true);
   });
 
   it("rejects a too-short new passphrase without touching the store", async () => {
     const { executor, shell, output, store } = await setup();
-    shell.secrets = ["original passphrase", "short"];
+    shell.secrets = ["original passphrase 1", "short"];
     await rotate(executor);
-    expect(output.lines.join("\n")).toContain("at least 8 characters");
+    expect(output.lines.join("\n")).toContain("at least 12 characters");
     expect(output.lines.join("\n")).not.toContain("passphrase rotated");
     store.lock();
-    expect(await store.unlock("original passphrase")).toBe(true);
+    expect(await store.unlock("original passphrase 1")).toBe(true);
   });
 
   it("rejects a mismatched confirmation without touching the store", async () => {
     const { executor, shell, output, store } = await setup();
-    shell.secrets = ["original passphrase", "brand new passphrase", "different confirmation"];
+    shell.secrets = ["original passphrase 1", "brand new passphrase 3", "different confirmation"];
     await rotate(executor);
     expect(output.lines.join("\n")).toContain("do not match");
     expect(output.lines.join("\n")).not.toContain("passphrase rotated");
     store.lock();
-    expect(await store.unlock("original passphrase")).toBe(true);
+    expect(await store.unlock("original passphrase 1")).toBe(true);
   });
 });
 
