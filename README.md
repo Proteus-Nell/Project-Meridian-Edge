@@ -105,6 +105,8 @@ still there (encrypted) until you `/wipe` it.
 | Command | What it does |
 |---|---|
 | `/add <uid> [alias]` | Save a contact (requires `/login` — contacts live in the encrypted store). The alias is local-only — never transmitted, so it can't impersonate anyone. Also accepts a held contact request |
+| `/remove <alias\|uid> [purge]` | Remove a contact: deletes the contact and tears down the ratchet session (a later message from them returns as a fresh request). Your message history is kept unless you add `purge`. `/remove all` clears every contact and asks to confirm first. Purely local — the other side is never told |
+| `/rename <alias\|uid> <new>` | Give a contact a new local alias. History (keyed by UID) survives; a name another contact already uses is rejected |
 | `/chat <alias\|uid>` | Set the active conversation (prompt changes to `[alias] >`); the status line shows `(verified)` or `(UNVERIFIED)` |
 | `/verify <alias>` | Fetch the contact's current identity key and print a 60-digit safety number — compare it out-of-band (in person, by phone) with what they see on their end |
 | `/verified <alias>` | Mark the contact trusted once the safety numbers match |

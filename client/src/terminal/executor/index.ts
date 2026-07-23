@@ -21,7 +21,7 @@ import { NULL_CHROME, currentViewRef, findContactByUid, refreshChatContext, reso
 import type { ExecutorInternals, UiChrome, ViewRef } from "./context";
 import type { Contact, Identity } from "./records";
 import { doBench } from "./bench";
-import { doAdd, doContacts } from "./contacts";
+import { doAdd, doContacts, doRemove, doRename } from "./contacts";
 import {
   doKeysRefill,
   doKeysStatus,
@@ -219,6 +219,12 @@ export class Executor implements ExecutorInternals {
         return;
       case "add":
         this.run(() => doAdd(this, cmd.uid, cmd.alias));
+        return;
+      case "remove":
+        this.run(() => doRemove(this, cmd.target, cmd.purge));
+        return;
+      case "rename":
+        this.run(() => doRename(this, cmd.target, cmd.alias));
         return;
       case "verify":
         this.run(() => doVerify(this, cmd.alias));

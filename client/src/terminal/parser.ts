@@ -42,6 +42,13 @@ export type DeleteScope =
   | { readonly kind: "all" }
   | { readonly kind: "purge" };
 
+/** Target of a `/remove`: one contact (by alias or UID) or every contact.
+ * `all` is a reserved keyword, so a contact aliased "all" is removable only
+ * by its UID. */
+export type RemoveTarget =
+  | { readonly kind: "one"; readonly value: string }
+  | { readonly kind: "all" };
+
 export type Command =
   | { readonly name: "register" }
   | { readonly name: "recover" }
@@ -50,6 +57,8 @@ export type Command =
   | { readonly name: "lock" }
   | { readonly name: "whoami" }
   | { readonly name: "add"; readonly uid: string; readonly alias: string | undefined }
+  | { readonly name: "remove"; readonly target: RemoveTarget; readonly purge: boolean }
+  | { readonly name: "rename"; readonly target: string; readonly alias: string }
   | { readonly name: "chat"; readonly target: string; readonly message: string | undefined }
   | { readonly name: "home" }
   | { readonly name: "return" }
@@ -106,6 +115,8 @@ export const COMMAND_USAGE = {
   lock: "/lock",
   whoami: "/whoami",
   add: "/add <uid> [alias]",
+  remove: "/remove <alias|uid> [purge]  |  /remove all [purge]  (purge = also delete message history)",
+  rename: "/rename <alias|uid> <new-alias>",
   contacts: "/contacts",
   chat: "/chat <alias|uid> [message]",
   home: "/home",
@@ -342,6 +353,42 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         return invalid("invalid alias (1-32 chars: letters, digits, _ or -)", usage);
       }
       return command({ name: "add", uid, alias });
+    }
+    case "remove": {
+      // /remove <alias|uid|all> [purge]. `all` is a reserved keyword; an
+      // optional trailing `purge` also deletes the local message history.
+      const first = args[0];
+      if (args.length < 1 || args.length > 2 || first === undefined) {
+        return invalid("expected a contact (or 'all') and an optional 'purge'", usage);
+      }
+      const purge = args[1] === "purge";
+      if (args.length === 2 && !purge) {
+        return invalid("the only extra argument is 'purge'", usage);
+      }
+      if (first === "all") {
+        return command({ name: "remove", target: { kind: "all" }, purge });
+      }
+      const value = normalizeUid(first) ?? parseAlias(first);
+      if (value === null) {
+        return invalid("not a valid alias or UID", usage);
+      }
+      return command({ name: "remove", target: { kind: "one", value }, purge });
+    }
+    case "rename": {
+      const targetToken = args[0];
+      const aliasToken = args[1];
+      if (args.length !== 2 || targetToken === undefined || aliasToken === undefined) {
+        return invalid("expected a contact and a new alias", usage);
+      }
+      const target = normalizeUid(targetToken) ?? parseAlias(targetToken);
+      if (target === null) {
+        return invalid("not a valid alias or UID", usage);
+      }
+      const alias = parseAlias(aliasToken);
+      if (alias === null) {
+        return invalid("invalid alias (1-32 chars: letters, digits, _ or -)", usage);
+      }
+      return command({ name: "rename", target, alias });
     }
     case "chat": {
       const token = args[0];

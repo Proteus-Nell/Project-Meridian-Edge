@@ -88,6 +88,12 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           return [];
       }
     }
+    case "remove":
+      // The target (first arg) is a free-form alias/uid, but `all` is a
+      // reserved keyword worth surfacing; `purge` is the only second arg.
+      if (n === 0) return ["all"];
+      if (n === 1) return ["purge"];
+      return [];
     case "keys":
       return n === 0 ? ["status", "refill"] : [];
     case "purge":

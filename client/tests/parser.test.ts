@@ -78,6 +78,63 @@ describe("UID validation (/add)", () => {
   });
 });
 
+describe("/remove", () => {
+  it("removes a single contact by alias or UID", () => {
+    expect(parseLine("/remove bob")).toEqual({
+      kind: "command",
+      command: { name: "remove", target: { kind: "one", value: "bob" }, purge: false },
+    });
+    expect(parseLine(`/remove ${UID_DASHED}`)).toEqual({
+      kind: "command",
+      command: { name: "remove", target: { kind: "one", value: UID }, purge: false },
+    });
+  });
+
+  it("takes an optional trailing 'purge' to also delete history", () => {
+    expect(parseLine("/remove bob purge")).toEqual({
+      kind: "command",
+      command: { name: "remove", target: { kind: "one", value: "bob" }, purge: true },
+    });
+  });
+
+  it("treats 'all' as the reserved every-contact keyword", () => {
+    expect(parseLine("/remove all")).toEqual({
+      kind: "command",
+      command: { name: "remove", target: { kind: "all" }, purge: false },
+    });
+    expect(parseLine("/remove all purge")).toEqual({
+      kind: "command",
+      command: { name: "remove", target: { kind: "all" }, purge: true },
+    });
+  });
+
+  it("rejects a missing target or an unknown trailing word", () => {
+    expect(parseLine("/remove").kind).toBe("invalid");
+    expect(parseLine("/remove bob keep").kind).toBe("invalid");
+    expect(parseLine("/remove bob purge extra").kind).toBe("invalid");
+    expect(parseLine('/remove "bad alias"').kind).toBe("invalid");
+  });
+});
+
+describe("/rename", () => {
+  it("renames a contact by alias or UID", () => {
+    expect(parseLine("/rename bob robert")).toEqual({
+      kind: "command",
+      command: { name: "rename", target: "bob", alias: "robert" },
+    });
+    expect(parseLine(`/rename ${UID} robert`)).toEqual({
+      kind: "command",
+      command: { name: "rename", target: UID, alias: "robert" },
+    });
+  });
+
+  it("rejects a missing new alias or a malformed one", () => {
+    expect(parseLine("/rename bob").kind).toBe("invalid");
+    expect(parseLine("/rename bob a b").kind).toBe("invalid");
+    expect(parseLine(`/rename bob ${"x".repeat(33)}`).kind).toBe("invalid");
+  });
+});
+
 describe("durations (/timer, /purge set)", () => {
   it("parses valid durations", () => {
     expect(parseLine("/timer bob 1d")).toEqual({

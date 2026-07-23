@@ -66,7 +66,7 @@ meridian-edge/
 6. Responsive layout so mobile browsers are usable (terminal fills viewport; software keyboard does not cover the input line).
 7. Optional (Could-have): browser toast notifications for background events, permission requested only on first `/settings notify on`.
 
-**Commands owned by this segment:** `/help [command]`, `/chat <alias|uid>`, `/home`, `/return`, `/contacts`, `/add <uid> [alias]`, `/whoami`, `/ack <alias>`, `/clr`, `/settings notify <on|off>`.
+**Commands owned by this segment:** `/help [command]`, `/chat <alias|uid>`, `/home`, `/return`, `/contacts`, `/add <uid> [alias]`, `/remove <alias|uid> [purge]` (also `/remove all`), `/rename <alias|uid> <new-alias>`, `/whoami`, `/ack <alias>`, `/clr`, `/settings notify <on|off>`.
 
 **Definition of done:** parser has a fuzz test (random bytes + mutated valid commands never throw uncaught, never execute unlisted commands); no `innerHTML`/markup sinks anywhere (CI grep, `scripts/audit.py`); all *content* (messages, peer text, server strings) flows through the sanitizing typed renderer into xterm text cells, and the DOM chrome (status strip, autosuggest, ticks) renders only app-generated text via `textContent`.
 
@@ -176,6 +176,8 @@ meridian-edge/
 | `/lock` | - | 2 | Immediate local lock |
 | `/whoami` | - | 1 | Own UID + identity-key fingerprint |
 | `/add` | `<uid> [alias]` | 1 | Alias is local-only |
+| `/remove` | `<alias\|uid> [purge]` \| `all [purge]` | 1 | Remove a contact locally: deletes the contact entry + ratchet session (a later message from them returns as a fresh request) + any held request. Message history is kept unless `purge`. `all` clears every contact and confirms first. Purely local - the peer is not told |
+| `/rename` | `<alias\|uid> <new-alias>` | 1 | Give a contact a new local alias (never transmitted). Message history is keyed by UID, so it survives the rename; a name already used by another contact is rejected (E510) |
 | `/contacts` | - | 1 | List saved contacts with their UIDs + trust state, and any pending request UIDs |
 | `/chat` | `<alias\|uid> [message]` | 1 | Sets active conversation and switches to its focused view (hides everything else, retained); with a trailing message, also sends it in one line (verbatim after the target — like `/chat bob` then typing the message) |
 | `/home` | - | 1 | Returns to the home dashboard of all conversations (unread marks, requests) |

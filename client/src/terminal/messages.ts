@@ -58,6 +58,8 @@ export const ERRORS = {
   E507: () => "discarded malformed message",
   E508: () => "could not verify sender identity - message discarded",
   E509: () => "failed to process an incoming message",
+  E510: (alias: string) =>
+    `the name '${alias}' is already used by another contact - choose a different alias`,
 
   // E599 the last-resort catch-all for anything unclassified
   E599: () => "operation failed",

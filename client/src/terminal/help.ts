@@ -37,6 +37,8 @@ const SECTIONS: readonly HelpSection[] = [
     title: "Contacts & trust",
     entries: [
       { cmd: "/add <uid> [alias]", blurb: "add a contact (alias is local-only)" },
+      { cmd: "/remove <alias|uid> [purge]", blurb: "remove a contact (purge = also delete history); /remove all clears everyone" },
+      { cmd: "/rename <alias|uid> <new>", blurb: "give a contact a new local alias" },
       { cmd: "/contacts", blurb: "list saved contacts with their UIDs and trust state" },
       { cmd: "/chat <alias|uid>", blurb: "open a conversation (focused view - hides everything else)" },
       { cmd: "/home", blurb: "back to the home dashboard of all conversations" },

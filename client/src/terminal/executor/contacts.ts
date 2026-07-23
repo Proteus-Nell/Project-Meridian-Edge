@@ -3,17 +3,21 @@
 // server never learns them.
 
 import { formatUid } from "../parser";
+import type { RemoveTarget } from "../parser";
 import {
   findContactByUid,
   pinKey,
+  refreshChatContext,
   refreshEmblemState,
+  resolveContact,
   saveContacts,
 } from "./context";
 import type { ExecutorInternals } from "./context";
 import { formatDuration } from "./format";
 import { normalizeContact } from "./records";
-import type { PendingRequest } from "./records";
+import type { Contact, PendingRequest } from "./records";
 import { recordMessage } from "./messaging";
+import { renderHome } from "./views";
 
 export async function doAdd(
   x: ExecutorInternals,
@@ -98,4 +102,137 @@ export async function doContacts(x: ExecutorInternals): Promise<void> {
       x.renderer.plain(`  ${formatUid(uid)}`);
     }
   }
+}
+
+/** `/remove <alias|uid|all> [purge]`: remove a contact locally. Ends the
+ * relationship - deletes the contact entry and tears down the ratchet
+ * session, so a later message from them arrives as a fresh contact request -
+ * and drops any held request and unread mark. Message history is KEPT unless
+ * `purge` is given, which also deletes msg/<uid> (irreversible; browser
+ * deletion is not forensic erasure, §5.4). `all` clears every contact and
+ * confirms first. Nothing is signalled to the peer; removal is purely local. */
+export async function doRemove(
+  x: ExecutorInternals,
+  target: RemoveTarget,
+  purge: boolean,
+): Promise<void> {
+  if (!x.store.isUnlocked()) {
+    x.renderer.error("E403");
+    return;
+  }
+  if (target.kind === "all") {
+    await removeAllContacts(x, purge);
+    return;
+  }
+  const contact = resolveContact(x, target.value);
+  if (contact === null) {
+    x.renderer.error("E501", target.value);
+    return;
+  }
+  x.contacts.delete(contact.alias);
+  await forgetContact(x, contact, purge);
+  await saveContacts(x);
+  if (x.active?.uid === contact.uid) {
+    goHomeAfterRemoval(x);
+  } else if (x.previousView?.kind === "chat" && x.previousView.uid === contact.uid) {
+    x.previousView = null; // the remembered screen is gone
+  }
+  await refreshEmblemState(x);
+  x.renderer.event(
+    "success",
+    purge
+      ? `removed ${contact.alias} (${formatUid(contact.uid)}) and its message history`
+      : `removed ${contact.alias} (${formatUid(contact.uid)}) - message history kept (add 'purge' to delete it too)`,
+  );
+}
+
+async function removeAllContacts(x: ExecutorInternals, purge: boolean): Promise<void> {
+  const count = x.contacts.size;
+  if (count === 0) {
+    x.renderer.event("info", "no contacts to remove");
+    return;
+  }
+  const suffix = purge ? " and their message history" : "";
+  const answer = await x.shell.readLine(`remove ALL ${count} contact(s)${suffix}? (yes/NO): `);
+  if (answer === null || answer.trim().toLowerCase() !== "yes") {
+    x.renderer.event("info", "removal cancelled - nothing was changed");
+    return;
+  }
+  for (const contact of [...x.contacts.values()]) {
+    await forgetContact(x, contact, purge);
+  }
+  x.contacts.clear();
+  x.unread.clear();
+  await saveContacts(x);
+  goHomeAfterRemoval(x);
+  await refreshEmblemState(x);
+  x.renderer.event("success", `removed all ${count} contact(s)${suffix}`);
+}
+
+/** Tear down a single contact's stored side artifacts: the ratchet session,
+ * any held request, its unread mark, and (only when `purge`) its at-rest
+ * message history. Does not touch the contacts map - the caller owns that. */
+async function forgetContact(
+  x: ExecutorInternals,
+  contact: Contact,
+  purge: boolean,
+): Promise<void> {
+  await x.store.deleteKey(`session/${contact.uid}`);
+  await x.store.deleteKey(`pending/${contact.uid}`);
+  x.unread.delete(contact.uid);
+  if (purge) {
+    for (const key of await x.store.listKeys(`msg/${contact.uid}/`)) {
+      await x.store.deleteKey(key);
+    }
+  }
+}
+
+/** Return to the home dashboard after the focused (or every) contact was
+ * removed: the conversation it showed no longer exists. */
+function goHomeAfterRemoval(x: ExecutorInternals): void {
+  x.active = null;
+  x.previousView = null;
+  x.shell.setPrompt("> ");
+  refreshChatContext(x);
+  x.enqueueRender(() => renderHome(x));
+}
+
+/** `/rename <alias|uid> <new-alias>`: give a contact a new local alias.
+ * Aliases never leave the device. Rekeys the contacts map; message history is
+ * stored by UID, so it is unaffected. Rejects a name already used by another
+ * contact. */
+export async function doRename(
+  x: ExecutorInternals,
+  target: string,
+  newAlias: string,
+): Promise<void> {
+  if (!x.store.isUnlocked()) {
+    x.renderer.error("E403");
+    return;
+  }
+  const contact = resolveContact(x, target);
+  if (contact === null) {
+    x.renderer.error("E501", target);
+    return;
+  }
+  if (contact.alias === newAlias) {
+    x.renderer.event("info", `${contact.alias} already goes by that name`);
+    return;
+  }
+  const clash = x.contacts.get(newAlias);
+  if (clash !== undefined && clash.uid !== contact.uid) {
+    x.renderer.error("E510", newAlias);
+    return;
+  }
+  const oldAlias = contact.alias;
+  const renamed: Contact = { ...contact, alias: newAlias };
+  x.contacts.delete(oldAlias);
+  x.contacts.set(newAlias, renamed);
+  await saveContacts(x);
+  if (x.active?.uid === contact.uid) {
+    x.active = renamed;
+    x.shell.setPrompt(`[${newAlias}] > `);
+  }
+  refreshChatContext(x);
+  x.renderer.event("success", `renamed ${oldAlias} to ${newAlias}`);
 }

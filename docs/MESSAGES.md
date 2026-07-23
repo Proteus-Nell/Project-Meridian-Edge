@@ -54,6 +54,7 @@ Code families:
 | E507 | `discarded malformed message` | The envelope framing itself could not be parsed. | None locally; indicates a broken or hostile sender. |
 | E508 | `could not verify sender identity - message discarded` | A first-contact message arrived but the sender's claimed UID could not be bound to its identity key (bundle fetch failed). | Ask the sender to resend once connectivity is back; the check is a spoofing defence, not optional. |
 | E509 | `failed to process an incoming message` | An unexpected error interrupted processing of a live-delivered envelope. | The message stays queued server-side; `/login` again to re-drain the inbox. |
+| E510 | `the name '<alias>' is already used by another contact - choose a different alias` | `/rename` targeted a name already held by a different contact; aliases are unique locally. | Pick an unused alias, or `/rename` the other contact first. |
 | E599 | `operation failed` | The catch-all for an unclassified internal error. | Retry; if it repeats, capture the browser console and file an issue. |
 
 ## Warnings `[!]`
@@ -75,6 +76,10 @@ Code families:
 | `your contacts still pin the OLD identity key: your next message triggers their identity-key-change warning, and they should re-verify your safety number` | After /recover: peers see the key-change warning by design. |
 | `sending to <alias> is blocked by an unacknowledged key change - the peer will get this timer once you /ack and resume` | A `/timer` change is saved locally but cannot reach the peer yet. |
 | `that conversation is no longer available - returned to home` | `/return` pointed at a contact that no longer exists. |
+| `removed <alias> (<uid>) - message history kept (add 'purge' to delete it too)` | `/remove` without `purge`: the contact and session are gone, the transcript stays on disk. |
+| `no contacts to remove` | `/remove all` with an empty contact list. |
+| `removal cancelled - nothing was changed` | The `/remove all` confirmation was declined. |
+| `<alias> already goes by that name` | `/rename` to the alias the contact already has. |
 
 ## Security events `[SECURITY]`
 
