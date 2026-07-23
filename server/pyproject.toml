@@ -3,6 +3,7 @@ name = "meridian-edge-server"
 version = "0.1.0"
 description = "Meridian Edge server: dumb ciphertext router, never sees plaintext or private keys"
 requires-python = ">=3.12"
+license = "AGPL-3.0-only"
 
 [tool.mypy]
 strict = true
