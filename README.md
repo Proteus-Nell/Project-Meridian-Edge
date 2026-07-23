@@ -17,7 +17,7 @@ specification) by section number. Those are internal working documents kept
 outside this repository; the invariants they pin down are restated in the code
 where they are enforced.
 
-Licensed under the [GNU AGPL v3.0](LICENSE.md).
+Licensed under the [GNU AGPL v3.0](LICENSE).
 
 ## Quick start
 
@@ -233,7 +233,7 @@ SECURITY.md      vulnerability disclosure contact
 shared/vectors/  cross-impl test vectors (pyca/OpenSSL ↔ noble)
 bench/           benchmark harness (B1–B5)
 scripts/         CI audit gates + vector generator
-LICENSE.md       GNU AGPL v3.0
+LICENSE          GNU AGPL v3.0
 ```
 
 ## Development checks
