@@ -1,3 +1,20 @@
+"""SQLAlchemy ORM schema - the complete set of things the server persists.
+
+Read this file as the authoritative answer to "what does the server actually
+know?". Every column is one of three things: public key material (identity
+keys, signed and one-time prekeys, and the signatures over them), an opaque
+ciphertext blob the server routes but cannot read, or bookkeeping such as
+hashes, counters and timestamps.
+
+What is absent is as deliberate as what is present. There is no table for
+plaintext, private keys or symmetric keys; no archive of delivered messages;
+and no lookup that would let an unauthenticated caller learn whether a UID
+exists. Secrets that must be retained at all are retained only in hashed form:
+recovery codes as Argon2id hashes, session tokens as SHA-512 digests. Queue
+rows are deleted on ack inside the same transaction as the delivery
+confirmation, so a delivered message leaves no row behind.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

@@ -1,3 +1,24 @@
+"""FastAPI application factory and process-wide wiring.
+
+Everything the server needs is assembled in create_app(): security headers,
+uniform error handlers, one token-bucket limiter per rate-limited surface, the
+WebSocket hub, and the six route modules. Nothing here is a module-level
+singleton - each call builds an isolated app with its own engine, hub and
+limiters, which is what lets the test suite run many independent servers in a
+single process without them sharing rate-limit buckets or sessions.
+
+Two seams exist purely for testability. `clock` makes nonce and session expiry
+deterministic without sleeping. `ws_idle_timeout_seconds` is deliberately real
+wall-clock time (asyncio.wait_for) rather than `clock`, because it guards a
+transport concern rather than business logic, so tests override it directly to
+exercise the idle-kill path in milliseconds.
+
+Deployment safety is asserted at boot: _assert_production_safe refuses to start
+a dev-shaped configuration (API docs enabled, no WebSocket origin allowlist, a
+SQLite database, or drifted Argon2id parameters) whenever the environment
+declares itself production.
+"""
+
 from __future__ import annotations
 
 import os

@@ -1,3 +1,17 @@
+"""Pydantic request and response models - the server's entire input surface.
+
+Every byte a client sends crosses one of these models before a handler sees it,
+and each sets extra="forbid" so an unexpected field is a rejection rather than
+something quietly ignored. Base64 key material is decoded and length-checked
+against the FIPS primitive sizes during validation (_decode_exact), so a
+wrong-sized ML-KEM or ML-DSA key is refused at the edge and never reaches the
+database or a signature check.
+
+These models draw the boundary; they do not explain themselves to the caller. A
+validation failure surfaces as the same uniform error as every other rejection,
+so the shape of a malformed request leaks nothing back to whoever sent it.
+"""
+
 from __future__ import annotations
 
 import base64
