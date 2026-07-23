@@ -131,7 +131,7 @@ export const COMMAND_USAGE = {
   settings:
     "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <dark|parchment|olive>  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
   keys: "/keys status  |  /keys refill",
-  bench: "/bench [suite]",
+  bench: "/bench [b1|b2|b3|b4|all]",
   wipe: "/wipe",
   clr: "/clr",
   help: "/help [command]",

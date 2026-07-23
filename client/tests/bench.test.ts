@@ -8,6 +8,8 @@ import { summarize } from "../src/bench/harness";
 import { benchB3, DEFAULT_CONFIG } from "../src/bench/suites";
 import { formatBytes, formatFactor, formatMs, renderMarkdown } from "../src/bench/report";
 import { parseSuite, runBench } from "../src/bench/index";
+import { ERRORS } from "../src/terminal/messages";
+import { COMMAND_USAGE } from "../src/terminal/parser";
 
 describe("summarize (§8 methodology)", () => {
   it("computes nearest-rank median/p95, mean, and min", () => {
@@ -85,6 +87,19 @@ describe("parseSuite", () => {
     expect(parseSuite("B4")).toBe("b4");
     expect(parseSuite("b9")).toBeNull();
     expect(parseSuite("garbage")).toBeNull();
+  });
+
+  // The usage string and the error text are what a user reads to discover the
+  // options, so neither may drift from what parseSuite actually accepts.
+  it("accepts every suite the /bench usage string and E105 advertise", () => {
+    const advertised = [...COMMAND_USAGE.bench.matchAll(/\b(b\d|all)\b/g)].map((m) => m[1] ?? "");
+    expect(advertised).toEqual(["b1", "b2", "b3", "b4", "all"]);
+    for (const suite of advertised) {
+      expect(parseSuite(suite), `/bench advertises ${suite}`).not.toBeNull();
+    }
+    for (const suite of advertised) {
+      expect(ERRORS.E105(), `E105 should name ${suite}`).toContain(suite);
+    }
   });
 });
 

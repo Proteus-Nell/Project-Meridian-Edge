@@ -79,7 +79,7 @@ const SECTIONS: readonly HelpSection[] = [
   {
     title: "Other",
     entries: [
-      { cmd: "/bench [suite]", blurb: "run the PQC-vs-classical benchmarks" },
+      { cmd: "/bench [b1|b2|b3|b4|all]", blurb: "run the PQC-vs-classical benchmarks (omit = all)" },
       { cmd: "/help [command]", blurb: "this list, or the usage for one command" },
     ],
   },

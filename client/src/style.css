@@ -220,6 +220,9 @@ body.th-vignette #vignette {
    `auto` column is zero-width on a normal session. Everything derives from the
    scheme slots, so /settings scheme and /settings color restyle it too. */
 
+/* The markup carries `hidden` so the labels cannot flash before this sheet
+   loads; these author rules outrank the UA [hidden] rule, so `.open` still
+   governs visibility from here on. */
 #side-panel {
   display: none;
   grid-column: 2;

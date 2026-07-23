@@ -22,7 +22,7 @@ export const ERRORS = {
   E102: (detail: string) => detail, // bad arguments for a known command
   E103: () => "invalid UID (26 Crockford Base32 chars, dashes optional)",
   E104: () => "invalid recovery code (16 Crockford Base32 chars, dashes optional)",
-  E105: () => "unknown suite - use b1, b2, b3, or omit for all",
+  E105: () => "unknown suite - use b1, b2, b3, b4, or all (omit for all)",
 
   // E2xx authentication, session, identity
   E201: () => "not logged in - /login first",

@@ -35,7 +35,7 @@ Code families:
 | E102 | varies: the specific argument problem plus a usage line | A known command was given missing, extra, or malformed arguments; the parser rejects rather than guessing. | Follow the printed usage line. |
 | E103 | `invalid UID (26 Crockford Base32 chars, dashes optional)` | The UID typed at the /recover prompt does not canonicalize to 26 Crockford Base32 characters. | Copy the UID exactly as printed at registration; dashes and case do not matter, O/I/L are auto-corrected. |
 | E104 | `invalid recovery code (16 Crockford Base32 chars, dashes optional)` | The recovery code does not canonicalize to 16 Crockford Base32 characters. | Retype one of your saved codes; dashes, spaces, and case do not matter. |
-| E105 | `unknown suite - use b1, b2, b3, or omit for all` | `/bench` was given a suite name it does not know. | Run `/bench` with b1, b2, b3, or no argument. |
+| E105 | `unknown suite - use b1, b2, b3, b4, or all (omit for all)` | `/bench` was given a suite name it does not know. | Run `/bench` with `b1`, `b2`, `b3`, `b4`, `all`, or no argument (which runs all). |
 | E201 | `not logged in - /login first` | The command needs an authenticated session and there is none (never logged in, or the session dropped). | `/login`, then retry. |
 | E202 | `session expired or invalid - /login again` | The server rejected the session token (15-minute idle expiry, revocation, or a recovery elsewhere). | `/login` to get a fresh session. |
 | E203 | `unlock failed` | The passphrase did not decrypt the local store. | Retry the passphrase; if it is lost, /recover (destroys local history) is the only way back in. |

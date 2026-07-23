@@ -102,6 +102,8 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
       if (n === 0) return ["last", "all", "purge"];
       if (n === 1 && first !== "/s") return ["/s"];
       return [];
+    case "bench":
+      return n === 0 ? ["b1", "b2", "b3", "b4", "all"] : [];
     case "rotate":
       return n === 0 ? ["passphrase"] : [];
     case "help":

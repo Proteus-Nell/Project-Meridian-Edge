@@ -77,8 +77,17 @@
            (no matching session, stale prekeys, damaged envelopes) collect here
            on the right instead of interrupting the transcript. Stays collapsed
            until the first notice; /clr empties it. Rows are app-generated text
-           written via textContent - untrusted content never reaches here. -->
-      <aside id="side-panel" aria-live="polite">
+           written via textContent - untrusted content never reaches here.
+
+           `hidden` keeps its static labels out of the very first paint, the
+           same guard the medallion uses above: the UA stylesheet's
+           [hidden]{display:none} applies before style.css loads (in dev Vite
+           injects the CSS via JS a frame late), which would otherwise flash
+           "undelivered 0 /clr clears this list" as unstyled black-on-white
+           text. Author rules outrank the UA sheet, so once style.css loads
+           `#side-panel.open { display: flex }` shows it normally and the
+           attribute is inert. CSP forbids an inline style. -->
+      <aside id="side-panel" aria-live="polite" hidden>
         <div id="side-panel-head">
           <span id="side-panel-title">undelivered</span>
           <span id="side-panel-count">0</span>
