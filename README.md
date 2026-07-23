@@ -8,8 +8,16 @@ ML-KEM-768 (FIPS 203) for key establishment and ML-DSA-65 (FIPS 204) for
 identity and authentication. No classical public-key crypto exists in the
 application layer, and CI enforces that.
 
-- [MVP_DOC.md](MVP_DOC.md) — the specification (what and why)
-- [CLAUDE.md](CLAUDE.md) — the build guide (how), with the security invariants
+- [MESSAGES.md](MESSAGES.md) — every `[E###]` error code, with its cause and remedy
+- [DEPLOY.md](DEPLOY.md) — deployment, TLS certificates, and PQC/TLS screening
+- [SECURITY.md](SECURITY.md) — vulnerability disclosure contact
+
+Source comments cite `CLAUDE.md` (the build guide) and `MVP_DOC.md` (the
+specification) by section number. Those are internal working documents kept
+outside this repository; the invariants they pin down are restated in the code
+where they are enforced.
+
+Licensed under the [GNU AGPL v3.0](LICENSE.md).
 
 ## Quick start
 
@@ -47,11 +55,9 @@ PORT=5174 npm run dev   # user B → http://localhost:5174
 PORT=5175 npm run dev   # user C → http://localhost:5175
 ```
 
-`.claude/launch.json` already defines `client`, `client2`, `client3`, and
-`server` entries if you drive dev servers through that tooling. `/register` a
-separate identity in each tab, share UIDs with `/add <uid>`, and message across —
-real crypto against the real backend; only TLS and Postgres are missing versus
-production.
+`/register` a separate identity in each tab, share UIDs with `/add <uid>`, and
+message across — real crypto against the real backend; only TLS and Postgres
+are missing versus production.
 
 ## Using Meridian Edge today (W1-W5)
 
@@ -196,7 +202,7 @@ not forensic erasure.
   a store points you to `/login` (or `/wipe` first); `/recover` offers to
   destroy and rebuild it.
 - Every error line carries a stable code (`[E###]`) — the full table with
-  causes and remedies is [docs/MESSAGES.md](docs/MESSAGES.md).
+  causes and remedies is [MESSAGES.md](MESSAGES.md).
 
 ### Researcher tools
 
@@ -206,7 +212,7 @@ not forensic erasure.
   console. The server-side and footprint suites (B5) run via `make bench` — see
   [bench/README.md](bench/README.md).
 
-The MVP build order (W1–W6, CLAUDE.md §8) is complete. Remaining items are
+The MVP build order (W1–W6) is complete. Remaining items are
 documented could-haves (charts, a rehearsed demo script) and the B4/B5
 methodology notes in the bench README.
 
@@ -226,9 +232,8 @@ docker-compose.yml, .env.example   reference production topology
 SECURITY.md      vulnerability disclosure contact
 shared/vectors/  cross-impl test vectors (pyca/OpenSSL ↔ noble)
 bench/           benchmark harness (B1–B5)
-docs/adr/        architecture decision records
-docs/compliance/ OWASP ASVS assessment
 scripts/         CI audit gates + vector generator
+LICENSE.md       GNU AGPL v3.0
 ```
 
 ## Development checks
@@ -271,8 +276,6 @@ All of the above plus `npm audit` / `pip-audit` run blocking in CI.
   and the B5 footprint. Headline finding: the PQC libraries are *smaller* than
   the classical curves baseline — the PQC cost is latency and wire size, not JS
   bundle.
-
-See CLAUDE.md §8 for the full build order.
 
 ## Production deployment
 

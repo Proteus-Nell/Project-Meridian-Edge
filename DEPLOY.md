@@ -2,8 +2,7 @@
 
 The single operator guide for running a Meridian Edge instance: how requests
 route, the three deployment routes, how to obtain TLS certificates, how to
-ship a new version, and how to make the site pass PQC/TLS screenings. Security
-rationale for each choice lives in [CLAUDE.md](CLAUDE.md) section 5.
+ship a new version, and how to make the site pass PQC/TLS screenings.
 
 > **Honest status.** The Docker / Compose / nginx / Caddy artifacts were
 > authored and cross-checked by eye but **not build-tested against a live

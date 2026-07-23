@@ -39,4 +39,10 @@ Thumbs.db
 # graphify knowledge-graph artifacts (machine-local: absolute interpreter
 # paths, extraction cache; regenerate with /graphify)
 graphify-out/
+
+# Internal working notes, kept out of the public repo: the build guide, the
+# ADR / compliance / review set, and local Claude Code tooling config. Rooted
+# with a leading slash so only the top-level copies are ignored.
 /docs
+/CLAUDE.md
+/.claude/
