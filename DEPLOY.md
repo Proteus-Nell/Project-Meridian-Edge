@@ -498,7 +498,7 @@ re-establish automatically. So a routine update is safe and quick.
 ```bash
 cd /opt/meridian-edge
 git pull
-docker compose up -d --build            # Route B: add -f docker-compose.caddy.yml
+docker compose up -d --build            # Route B: docker compose -f docker-compose.caddy.yml up -d --build
 ```
 
 `up -d --build` rebuilds the images and **recreates only the services whose
