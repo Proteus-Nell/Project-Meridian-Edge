@@ -39,4 +39,4 @@ Thumbs.db
 # graphify knowledge-graph artifacts (machine-local: absolute interpreter
 # paths, extraction cache; regenerate with /graphify)
 graphify-out/
-/Documentation
+/docs
