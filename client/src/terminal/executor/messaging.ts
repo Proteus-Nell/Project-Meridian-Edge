@@ -328,8 +328,14 @@ export async function processEnvelope(
         "security",
         "received a message with an INVALID identity signature - discarded",
       );
+    } else if (result.reason === "unknown-spk" || result.reason === "unknown-opk") {
+      // A real contact attempt against prekeys this device no longer holds
+      // (typically after /recover or /wipe replaced them). The sender must
+      // re-fetch our current bundle; nothing here can fix it for them.
+      x.renderer.discarded("E511");
     } else {
-      x.renderer.error("E505", result.reason);
+      // malformed / decrypt-failed: corrupted or tampered, not a contact attempt.
+      x.renderer.discarded("E512");
     }
     return "ack";
   }
@@ -354,7 +360,7 @@ export async function processEnvelope(
     // fall through to the discard below
   }
   if (senderUid === null || text === null) {
-    x.renderer.error("E506");
+    x.renderer.discarded("E506");
     return "ack";
   }
 
@@ -407,7 +413,7 @@ export async function processEnvelope(
     if (x.epoch !== epoch) {
       return "skip";
     }
-    x.renderer.error("E508");
+    x.renderer.discarded("E508");
     return "ack";
   }
   const pending: PendingRequest = {
@@ -437,7 +443,7 @@ export async function processRatchetMessage(
 ): Promise<"ack" | "skip"> {
   const body = decodeMsgEnvelope(envelopeBytes);
   if (body === null) {
-    x.renderer.error("E507");
+    x.renderer.discarded("E507");
     return "ack";
   }
   const epoch = x.epoch;
@@ -462,7 +468,7 @@ export async function processRatchetMessage(
     await x.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
     const payload = decodeAppPayload(result.plaintext);
     if (payload === null) {
-      x.renderer.error("E506");
+      x.renderer.discarded("E506");
       return "ack";
     }
     const contact = findContactByUid(x, uid);
@@ -481,7 +487,7 @@ export async function processRatchetMessage(
     await purgeExpired(x);
     return "ack";
   }
-  x.renderer.error("E505", "no matching session");
+  x.renderer.discarded("E505");
   return "ack";
 }
 

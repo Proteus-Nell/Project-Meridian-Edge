@@ -53,11 +53,21 @@ export interface StatusSink {
   status(level: EventLevel, text: string): void;
 }
 
+/** Destination for inbound-discard notices - the right-side panel. These
+ * describe something that happened TO the user (a message that could not be
+ * read), not a command that failed, so they are collected in their own list
+ * instead of interleaving with the conversation. Rendered as DOM text
+ * (textContent), never markup. */
+export interface NoticeSink {
+  noteDiscarded(code: string, text: string): void;
+}
+
 export class Renderer {
   constructor(
     private readonly sink: LineSink,
     private readonly now: () => Date = () => new Date(),
     private readonly statusSink: StatusSink | null = null,
+    private readonly noticeSink: NoticeSink | null = null,
   ) {}
 
   event(level: GlyphLevel, text: string): void {
@@ -77,6 +87,18 @@ export class Renderer {
     const clean = sanitizeText(build(...args));
     this.sink.printLine(`${DIM}${this.timestamp()}${RESET} ${RED}[${code}]${RESET} ${clean}`);
     this.statusSink?.status("failure", `[${code}] ${clean}`);
+  }
+
+  /** An inbound message that could not be delivered to the user. Deliberately
+   * writes NO transcript line: these arrive unprompted and would otherwise
+   * interrupt the conversation view. The catalogued text goes to the
+   * discarded-notice panel and the status strip, so it is noticed once and
+   * remains reviewable without scrolling the transcript. */
+  discarded<C extends ErrorCode>(code: C, ...args: Parameters<(typeof ERRORS)[C]>): void {
+    const build = ERRORS[code] as (...a: ReadonlyArray<unknown>) => string;
+    const clean = sanitizeText(build(...args));
+    this.noticeSink?.noteDiscarded(code, clean);
+    this.statusSink?.status("warning", `[${code}] ${clean}`);
   }
 
   /** Update only the footer status strip - no transcript line. Used where a

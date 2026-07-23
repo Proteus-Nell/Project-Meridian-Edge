@@ -53,13 +53,22 @@ export const ERRORS = {
   E503: (alias: string) =>
     `${alias} has an unacknowledged key change - /ack ${alias} first, then /verify again`,
   E504: () => "message too large after encryption - not sent",
-  E505: (reason: string) => `discarded undecryptable message (${reason})`,
+  // E505/E511/E512 are the inbound-discard family. They are shown in the
+  // discarded-notice panel rather than inline (chrome.noteDiscarded), because
+  // they describe something that happened TO you, not a command that failed.
+  // A first-time contact never lands here: that handshake succeeds and shows
+  // as a contact request. These mean a session or prekey mismatch instead.
+  E505: () =>
+    "someone sent you a message this device cannot read - the shared session for that conversation is gone here (removed contact, /wipe, or /recover). Message them first with /chat <alias> to set up a fresh handshake",
   E506: () => "discarded message with malformed payload",
   E507: () => "discarded malformed message",
   E508: () => "could not verify sender identity - message discarded",
   E509: () => "failed to process an incoming message",
   E510: (alias: string) =>
     `the name '${alias}' is already used by another contact - choose a different alias`,
+  E511: () =>
+    "someone is trying to start a conversation with you, but used sign-up keys this device no longer has (usually after /recover or /wipe). Ask them to /remove you and message again so their app picks up your current keys",
+  E512: () => "a damaged or tampered incoming message was discarded",
 
   // E599 the last-resort catch-all for anything unclassified
   E599: () => "operation failed",

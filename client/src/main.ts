@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 
+import { bannerLines } from "./terminal/banner";
 import { parseLine } from "./terminal/parser";
 import { Renderer } from "./terminal/renderer";
 import { Shell } from "./terminal/shell";
@@ -91,7 +92,9 @@ const shell = new Shell(inputTerm, transcriptTerm, (line) => {
   }
   executor.handle(result);
 });
-const renderer = new Renderer(shell, undefined, chrome);
+// chrome is both the status strip (StatusSink) and the discarded-notice panel
+// (NoticeSink); the renderer routes to each without knowing about the DOM.
+const renderer = new Renderer(shell, undefined, chrome, chrome);
 executor = new Executor(renderer, shell, undefined, undefined, chrome);
 
 // Autosuggest: live dropdown + Tab completion from the pure suggest module,
@@ -120,21 +123,12 @@ shell.setClearHandler(() => chrome.clearScreen());
 // before the user reaches the first prompt.
 void executor.init();
 
-// Startup banner: a compact boxed wordmark. Widths are derived from the text so
-// the frame always aligns, and it stays ≤ 32 columns for a 38-column mobile
-// viewport ("MERIDIAN EDGE" in block letters would not fit, so it is spaced).
-const DIM_CYAN = "\x1b[2;36m";
-const RESET = "\x1b[0m";
-const WORDMARK = "M E R I D I A N   E D G E";
-const rule = "─".repeat(WORDMARK.length + 2);
-for (const row of [`╭${rule}╮`, `│ ${WORDMARK} │`, `╰${rule}╯`]) {
-  transcriptTerm.writeln(`${DIM_CYAN}${row}${RESET}`);
+// Startup banner: the boxed wordmark plus a plain-language intro and the
+// three-step path to a first conversation (terminal/banner.ts).
+for (const row of bannerLines()) {
+  transcriptTerm.writeln(row);
 }
-transcriptTerm.writeln("");
-transcriptTerm.writeln("pure post-quantum E2EE messenger");
-transcriptTerm.writeln("all asymmetric crypto: ML-KEM-768 / ML-DSA-65. type /help to begin.");
-transcriptTerm.writeln("");
-chrome.status("info", "Session established - type /help to view all commands.");
+chrome.status("info", "Ready - type /register to get started, or /help to see every command.");
 
 shell.attach();
 

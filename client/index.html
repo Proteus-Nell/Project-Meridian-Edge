@@ -73,6 +73,19 @@
         </div>
         <div id="transcript"></div>
       </div>
+      <!-- Discarded-notice panel: inbound messages that could not be read
+           (no matching session, stale prekeys, damaged envelopes) collect here
+           on the right instead of interrupting the transcript. Stays collapsed
+           until the first notice; /clr empties it. Rows are app-generated text
+           written via textContent - untrusted content never reaches here. -->
+      <aside id="side-panel" aria-live="polite">
+        <div id="side-panel-head">
+          <span id="side-panel-title">undelivered</span>
+          <span id="side-panel-count">0</span>
+        </div>
+        <div id="side-panel-list"></div>
+        <div id="side-panel-hint">/clr clears this list</div>
+      </aside>
       <div id="vignette"></div>
       <div id="footer">
         <div id="divider"></div>

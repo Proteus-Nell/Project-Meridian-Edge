@@ -36,10 +36,13 @@ body {
   position: relative; /* anchors the #vignette overlay */
   display: grid;
   grid-template-rows: 1fr auto;
-  /* A single column constrained to the viewport: minmax(0, 1fr) lets it shrink
-     below the terminal's intrinsic (content) width so the xterm can re-fit
-     instead of overflowing on narrow/mobile viewports. */
-  grid-template-columns: minmax(0, 1fr);
+  /* Transcript column + a right-hand notice column. minmax(0, 1fr) lets the
+     transcript shrink below the terminal's intrinsic (content) width so the
+     xterm can re-fit instead of overflowing on narrow/mobile viewports; the
+     second column is `auto` and collapses to zero while the panel is closed
+     (display:none), so the terminal keeps the full width until a notice
+     actually arrives. The footer spans both columns. */
+  grid-template-columns: minmax(0, 1fr) auto;
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
@@ -47,6 +50,8 @@ body {
 
 #transcript-pane {
   position: relative;
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0; /* allow the column to shrink below the terminal's content width */
   min-height: 0; /* let the 1fr row shrink so the transcript can scroll */
   overflow: hidden;
@@ -210,11 +215,106 @@ body.th-vignette #vignette {
   display: block;
 }
 
+/* ----- discarded-notice panel (right column) --------------------------------
+   Collapsed (display:none) until chrome.noteDiscarded opens it, so the grid's
+   `auto` column is zero-width on a normal session. Everything derives from the
+   scheme slots, so /settings scheme and /settings color restyle it too. */
+
+#side-panel {
+  display: none;
+  grid-column: 2;
+  grid-row: 1;
+  flex-direction: column;
+  width: clamp(190px, 22vw, 280px);
+  min-height: 0; /* let the list scroll instead of stretching the row */
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 60%, var(--bg));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+#side-panel.open {
+  display: flex;
+}
+
+#side-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px 5px;
+  border-bottom: 1px solid var(--border);
+  color: #d29922; /* amber: an inbound problem, not a command failure */
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+#side-panel-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#side-panel-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.dropped-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 10px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.dropped-row:last-child {
+  border-bottom: none;
+}
+
+.dropped-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--muted-dim);
+}
+
+.dropped-code {
+  color: #d29922;
+  font-weight: 700;
+}
+
+.dropped-text {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+#side-panel-hint {
+  padding: 5px 10px 7px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-dim);
+  font-size: 11px;
+}
+
+/* Narrow viewports: the terminal needs the whole width, and the status strip
+   already surfaces the newest notice, so the panel stays collapsed. */
+@media (max-width: 640px) {
+  #side-panel.open {
+    display: none;
+  }
+}
+
 /* ----- footer: divider, status strip, command line --------------------------- */
 
 #footer {
   position: relative;
   z-index: 4; /* above the vignette overlay */
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   min-width: 0;

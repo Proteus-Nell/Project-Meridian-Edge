@@ -74,8 +74,12 @@ class FakeChrome {
   context: string | null = null;
   emblem = "unset";
   echoes: Array<{ line: string; kind: string }> = [];
+  discarded: Array<{ code: string; text: string }> = [];
   echoInput(line: string, kind: "command" | "message" = "command"): void {
     this.echoes.push({ line, kind });
+  }
+  noteDiscarded(code: string, text: string): void {
+    this.discarded.push({ code, text });
   }
   confirmSent(): void {
     this.confirms += 1;
@@ -188,7 +192,15 @@ async function bootstrapAlice(): Promise<{
   const output = new CaptureSink();
   const shell = new FakeShell();
   const chrome = new FakeChrome();
-  const executor = new Executor(new Renderer(output), shell, store, undefined, chrome);
+  // chrome doubles as the NoticeSink so inbound-discard notices are asserted
+  // where they actually land (the right-side panel), as main.ts wires it.
+  const executor = new Executor(
+    new Renderer(output, undefined, null, chrome),
+    shell,
+    store,
+    undefined,
+    chrome,
+  );
 
   const uid = nextUid();
   vi.mocked(api.register).mockResolvedValueOnce({ uid, recovery_codes: Array(10).fill("AAAA-AAAA") });
@@ -338,8 +350,8 @@ describe("continued messaging over the ratchet", () => {
     expect(output.text()).toContain("[bob] me too");
   });
 
-  it("drops a MSG that matches no established session", async () => {
-    const { executor, output } = await bootstrapAlice();
+  it("sends a MSG matching no session to the notice panel, not the transcript", async () => {
+    const { executor, output, chrome } = await bootstrapAlice();
     const bob = makeBob();
     vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
     await send(executor, `/add ${bob.uid} bob`);
@@ -352,6 +364,34 @@ describe("continued messaging over the ratchet", () => {
     const strangerRk = new Uint8Array(64).fill(42);
     stranger.ratchet = initRatchet(strangerRk, "initiator");
     await deliverToAlice(executor, bobSend(stranger, "who am i"));
-    expect(output.text()).toContain("no matching session");
+
+    // It lands in the right-side discarded panel with its code...
+    expect(chrome.discarded.map((d) => d.code)).toContain("E505");
+    const notice = chrome.discarded.find((d) => d.code === "E505");
+    expect(notice?.text).toContain("cannot read");
+    expect(notice?.text).toContain("/chat"); // tells the user how to recover
+    // ...and never reaches the transcript, which is the whole point of the
+    // panel: an unreadable inbound message must not interrupt the conversation.
+    expect(output.text()).not.toContain("E505");
+    expect(output.text()).not.toContain("cannot read");
+  });
+
+  it("explains a lost session after the contact is removed", async () => {
+    const { executor, chrome } = await bootstrapAlice();
+    const bob = makeBob();
+    vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);
+    await send(executor, `/add ${bob.uid} bob`);
+    await send(executor, "/chat bob");
+    await send(executor, "hi");
+    bobReceiveKx(bob, sent[0] as Uint8Array);
+
+    // Alice removes bob, which tears down her side of the session; bob's
+    // client does not know and keeps ratcheting.
+    await send(executor, "/remove bob");
+    await deliverToAlice(executor, bobSend(bob, "are you there"));
+
+    const notice = chrome.discarded.find((d) => d.code === "E505");
+    expect(notice, "a removed contact's message should raise E505").toBeDefined();
+    expect(notice?.text).toContain("removed contact");
   });
 });

@@ -31,6 +31,9 @@ export interface UiChrome {
   echoInput(line: string, kind?: "command" | "message"): void;
   confirmSent(): void;
   rejectSent(): void;
+  /** Append an inbound-discard notice to the right-side panel (see
+   * renderer.NoticeSink). Cleared by clearScreen. */
+  noteDiscarded(code: string, text: string): void;
   clearScreen(announce?: boolean): void;
   setChatContext(text: string | null): void;
   applyTheme(theme: ThemePrefs): void;
@@ -43,6 +46,7 @@ export const NULL_CHROME: UiChrome = {
   echoInput() {},
   confirmSent() {},
   rejectSent() {},
+  noteDiscarded() {},
   clearScreen() {},
   setChatContext() {},
   applyTheme() {},

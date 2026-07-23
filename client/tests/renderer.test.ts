@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Renderer, sanitizeText } from "../src/terminal/renderer";
-import type { EventLevel, LineSink, StatusSink } from "../src/terminal/renderer";
+import type { EventLevel, LineSink, NoticeSink, StatusSink } from "../src/terminal/renderer";
 
 class CaptureSink implements LineSink {
   lines: string[] = [];
@@ -14,6 +14,13 @@ class CaptureStatus implements StatusSink {
   last: { level: EventLevel; text: string } | null = null;
   status(level: EventLevel, text: string): void {
     this.last = { level, text };
+  }
+}
+
+class CaptureNotices implements NoticeSink {
+  notices: { code: string; text: string }[] = [];
+  noteDiscarded(code: string, text: string): void {
+    this.notices.push({ code, text });
   }
 }
 
@@ -115,6 +122,50 @@ describe("Renderer status strip", () => {
     const sink = new CaptureSink();
     const renderer = new Renderer(sink);
     expect(() => renderer.status("info", "noop")).not.toThrow();
+    expect(sink.lines).toEqual([]);
+  });
+});
+
+describe("Renderer discarded-message notices", () => {
+  it("routes to the notice panel and status strip, never the transcript", () => {
+    const sink = new CaptureSink();
+    const status = new CaptureStatus();
+    const notices = new CaptureNotices();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0), status, notices);
+
+    renderer.discarded("E505");
+
+    // The whole point: an inbound discard must not interrupt the transcript.
+    expect(sink.lines).toEqual([]);
+    expect(notices.notices).toHaveLength(1);
+    expect(notices.notices[0]?.code).toBe("E505");
+    expect(notices.notices[0]?.text).toContain("cannot read");
+    expect(notices.notices[0]?.text).toContain("/chat");
+    // Surfaced once on the strip so it is noticed, as a warning not a failure.
+    expect(status.last?.level).toBe("warning");
+    expect(status.last?.text).toContain("[E505]");
+  });
+
+  it("explains a stale-prekey contact attempt as someone trying to reach you", () => {
+    const notices = new CaptureNotices();
+    const renderer = new Renderer(new CaptureSink(), undefined, null, notices);
+    renderer.discarded("E511");
+    expect(notices.notices[0]?.text).toContain("trying to start a conversation");
+    expect(notices.notices[0]?.text).toContain("/remove");
+  });
+
+  it("does not claim a contact attempt for damaged envelopes", () => {
+    const notices = new CaptureNotices();
+    const renderer = new Renderer(new CaptureSink(), undefined, null, notices);
+    renderer.discarded("E512");
+    expect(notices.notices[0]?.text).toContain("damaged or tampered");
+    expect(notices.notices[0]?.text).not.toContain("trying to start");
+  });
+
+  it("is a no-op without a notice sink (headless default)", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    expect(() => renderer.discarded("E507")).not.toThrow();
     expect(sink.lines).toEqual([]);
   });
 });

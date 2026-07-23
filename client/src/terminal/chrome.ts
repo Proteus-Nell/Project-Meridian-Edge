@@ -35,6 +35,10 @@ const GLYPH: Record<EventLevel, string> = {
 /** How long the transient status stays at full brightness before dimming. */
 const STATUS_STALE_MS = 6000;
 
+/** Rows kept in the discarded-notice panel. Oldest are evicted past this so a
+ * flood of undecryptable envelopes cannot grow the DOM without bound. */
+const MAX_DISCARDED_ROWS = 50;
+
 /** How a submitted line is echoed: commands stay dim log-furniture, message
  * text renders at full brightness so conversations stand out. */
 export type EchoKind = "command" | "message";
@@ -60,6 +64,11 @@ export class Chrome implements SuggestionNav {
   private readonly statusEventEl: HTMLElement;
   private readonly statusContextEl: HTMLElement;
   private readonly suggestEl: HTMLElement;
+  private readonly sidePanelEl: HTMLElement;
+  private readonly discardedListEl: HTMLElement;
+  private readonly discardedCountEl: HTMLElement;
+  /** Total notices this session, including rows already evicted by the cap. */
+  private discardedTotal = 0;
   private lastSentMarker: IMarker | null = null;
   private readonly markers: IMarker[] = [];
   // Each delivery tick keeps its anchoring marker + glyph so it can be
@@ -86,6 +95,47 @@ export class Chrome implements SuggestionNav {
     this.statusEventEl = requireEl("status-event");
     this.statusContextEl = requireEl("status-context");
     this.suggestEl = requireEl("autosuggest");
+    this.sidePanelEl = requireEl("side-panel");
+    this.discardedListEl = requireEl("side-panel-list");
+    this.discardedCountEl = requireEl("side-panel-count");
+  }
+
+  // ----- discarded-notice panel ----------------------------------------------
+
+  /** Record an inbound message that could not be delivered (renderer.NoticeSink).
+   * Opens the right-hand panel on the first notice and appends a row; the list
+   * is capped, and the count reflects every notice this session. App-generated
+   * text only, assigned through textContent. */
+  noteDiscarded(code: string, text: string): void {
+    this.discardedTotal += 1;
+
+    const row = document.createElement("div");
+    row.className = "dropped-row";
+    const head = document.createElement("div");
+    head.className = "dropped-head";
+    const codeEl = document.createElement("span");
+    codeEl.className = "dropped-code";
+    codeEl.textContent = code;
+    const time = document.createElement("span");
+    time.textContent = this.timestamp();
+    head.append(codeEl, time);
+    const body = document.createElement("span");
+    body.className = "dropped-text";
+    body.textContent = text;
+    row.append(head, body);
+    this.discardedListEl.appendChild(row);
+
+    while (this.discardedListEl.childElementCount > MAX_DISCARDED_ROWS) {
+      const oldest = this.discardedListEl.firstChild;
+      if (oldest === null) {
+        break;
+      }
+      this.discardedListEl.removeChild(oldest);
+    }
+
+    this.discardedCountEl.textContent = String(this.discardedTotal);
+    this.sidePanelEl.classList.add("open");
+    this.discardedListEl.scrollTop = this.discardedListEl.scrollHeight;
   }
 
   // ----- status strip --------------------------------------------------------
@@ -381,7 +431,9 @@ export class Chrome implements SuggestionNav {
 
   // ----- screen clear ---------------------------------------------------------
 
-  /** /clr and Ctrl+L: wipe the transcript, its tick decorations, and the strip.
+  /** /clr and Ctrl+L: wipe the transcript, its tick decorations, the strip, and
+   * the discarded-notice panel (the only way to dismiss it, so a screen clear
+   * genuinely resets what is on screen).
    * `announce` (default true) posts a "screen cleared" status; the conversation
    * redraw after a /delete passes false so the wipe is silent before it reprints. */
   clearScreen(announce = true): void {
@@ -395,6 +447,10 @@ export class Chrome implements SuggestionNav {
     this.markers.length = 0;
     this.lastSentMarker = null;
     this.transcript.clear();
+    this.clearChildren(this.discardedListEl);
+    this.discardedTotal = 0;
+    this.discardedCountEl.textContent = "0";
+    this.sidePanelEl.classList.remove("open");
     if (announce) {
       this.status("info", "screen cleared");
     }

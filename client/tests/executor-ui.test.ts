@@ -40,9 +40,13 @@ class FakeChrome {
   themes: ThemePrefs[] = [];
   context: string | null = null;
   emblem = "unset";
+  discarded: Array<{ code: string; text: string }> = [];
   echoInput(): void {}
   confirmSent(): void {}
   rejectSent(): void {}
+  noteDiscarded(code: string, text: string): void {
+    this.discarded.push({ code, text });
+  }
   clearScreen(): void {
     this.clears += 1;
   }

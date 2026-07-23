@@ -8,6 +8,14 @@ a drift test (`client/tests/messages.test.ts`) fails CI when this table and
 the catalog disagree. Codes are append-only: a shipped code is never
 renumbered, only retired.
 
+**Where errors appear.** Most errors print inline in the transcript. The
+inbound-discard family (**E505, E506, E507, E508, E511, E512**) is the
+exception: those describe a message that arrived and could not be read, not a
+command you ran, so they collect in the **discarded-notice panel on the right**
+of the screen (and the status strip) instead of interrupting the conversation.
+`/clr` empties that panel. On narrow/mobile viewports the panel stays collapsed
+and the status strip carries the newest notice.
+
 Code families:
 
 | Family | Domain |
@@ -49,12 +57,14 @@ Code families:
 | E502 | `no known identity key for <alias> yet - /verify first` | `/verified` ran before any key was pinned for that contact. | `/verify <alias>` to fetch and compare the safety number first. |
 | E503 | `<alias> has an unacknowledged key change - /ack <alias> first, then /verify again` | The contact's identity key changed and manual trust mode blocks everything until acknowledged. | `/ack <alias>`, then `/verify` + `/verified` against the new key. |
 | E504 | `message too large after encryption - not sent` | The encrypted envelope exceeds the 64 KiB server cap. | Send a shorter message. |
-| E505 | `discarded undecryptable message (<reason>)` | An incoming envelope failed decryption: no matching session, a consumed prekey, or ciphertext damage. The message is dropped and acked so it cannot wedge the queue. | Usually a stale envelope from before a session reset; ask the peer to resend. Recurring instances suggest key-state divergence: re-establish the conversation. |
+| E505 | `someone sent you a message this device cannot read - the shared session for that conversation is gone here (removed contact, /wipe, or /recover). Message them first with /chat <alias> to set up a fresh handshake` | A ratchet message arrived that no stored session could decrypt. Someone you had an established conversation with is still messaging you, but this device lost the matching session (you `/remove`d them, wiped, or recovered). Also covers replays and corrupted ciphertext. The envelope carries no sender identity by design, so **who** it came from cannot be shown. | Send that contact a message yourself: with no session locally, that runs a fresh PQ-KX handshake and re-syncs both sides. |
 | E506 | `discarded message with malformed payload` | The envelope decrypted but its inner payload was not valid. | None locally; the sender's client produced an invalid payload. |
 | E507 | `discarded malformed message` | The envelope framing itself could not be parsed. | None locally; indicates a broken or hostile sender. |
 | E508 | `could not verify sender identity - message discarded` | A first-contact message arrived but the sender's claimed UID could not be bound to its identity key (bundle fetch failed). | Ask the sender to resend once connectivity is back; the check is a spoofing defence, not optional. |
 | E509 | `failed to process an incoming message` | An unexpected error interrupted processing of a live-delivered envelope. | The message stays queued server-side; `/login` again to re-drain the inbox. |
 | E510 | `the name '<alias>' is already used by another contact - choose a different alias` | `/rename` targeted a name already held by a different contact; aliases are unique locally. | Pick an unused alias, or `/rename` the other contact first. |
+| E511 | `someone is trying to start a conversation with you, but used sign-up keys this device no longer has (usually after /recover or /wipe). Ask them to /remove you and message again so their app picks up your current keys` | A handshake arrived encapsulated to a signed prekey or one-time prekey this device no longer holds. Almost always because `/recover` or `/wipe` replaced your published prekeys while the sender still had the old bundle cached. | Nothing on this side can decrypt it. The sender must re-fetch your current bundle: ask them to `/remove` you and message again. `/keys status` confirms your current prekeys are published. |
+| E512 | `a damaged or tampered incoming message was discarded` | A handshake envelope was malformed or failed its AEAD check: corruption in transit, or a deliberately tampered envelope. Not a legitimate contact attempt. | None. Isolated occurrences are noise; a steady stream is worth reporting, since the server should not be able to alter envelopes undetected. |
 | E599 | `operation failed` | The catch-all for an unclassified internal error. | Retry; if it repeats, capture the browser console and file an issue. |
 
 ## Warnings `[!]`
