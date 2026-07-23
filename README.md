@@ -32,6 +32,27 @@ Everything happens inside the terminal that loads: commands start with `/`,
 anything else is (eventually) message text. `/help` lists every command;
 `/help <command>` shows its usage.
 
+The dev backend uses SQLite automatically — no database to install. Add
+`MERIDIAN_EDGE_DEV=1` before `uvicorn` if you want the `/docs` page.
+
+### Testing with multiple users
+
+Each browser origin has its own encrypted IndexedDB store, so "two users" means
+two origins. Run extra client instances on different ports (each still proxies to
+the same backend):
+
+```
+cd client
+PORT=5174 npm run dev   # user B → http://localhost:5174
+PORT=5175 npm run dev   # user C → http://localhost:5175
+```
+
+`.claude/launch.json` already defines `client`, `client2`, `client3`, and
+`server` entries if you drive dev servers through that tooling. `/register` a
+separate identity in each tab, share UIDs with `/add <uid>`, and message across —
+real crypto against the real backend; only TLS and Postgres are missing versus
+production.
+
 ## Using Meridian Edge today (W1-W5)
 
 ### Create your identity — `/register`
@@ -265,11 +286,11 @@ docker compose build
 docker compose up -d
 ```
 
-**Full instructions — TLS certificates, the `X25519MLKEM768` hybrid-group
-caveat, verification, operations, scaling limits, and troubleshooting — are in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).** That guide also covers running the
-dev servers and multi-user local testing. See [SECURITY.md](SECURITY.md) for the
-disclosure contact.
+**Full instructions — the three deployment routes, TLS certificates, shipping
+updates, passing PQC/TLS screenings, operations, scaling limits, and
+troubleshooting — are in [DEPLOY.md](DEPLOY.md).** Running the dev servers and
+multi-user local testing is covered in [Testing with multiple users](#testing-with-multiple-users)
+above. See [SECURITY.md](SECURITY.md) for the disclosure contact.
 
 > This config has not been build-tested against a live Docker daemon — review it
 > before a real deploy.
