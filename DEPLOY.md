@@ -134,20 +134,29 @@ sudo ufw allow 443/udp        # only if you use Caddy/HTTP-3
 sudo ufw enable
 ```
 
-### 2.3 The one routing gotcha: WebSocket `Origin`
+### 2.3 The one routing gotcha: the `Origin` header
 
-The server checks the WS upgrade's `Origin` header against
-`MERIDIAN_EDGE_WS_ORIGINS` and **rejects a mismatch**. Two things must line up
-exactly (scheme + host, no trailing slash):
+The server checks `Origin` against its allowlist on **two** paths - the
+WebSocket upgrade and login (`/v1/login/challenge` and `/v1/login/verify`) - and
+**rejects a mismatch**. Two things must line up exactly (scheme + host, no
+trailing slash):
 
 - `MERIDIAN_EDGE_WS_ORIGINS=https://chat.example.com` (the value the browser
   actually sends), and
 - the edge must **forward** the `Origin` header. nginx does this explicitly
   (`proxy_set_header Origin $http_origin`); Caddy preserves it by default.
 
-If WebSocket connects but immediately drops, this is almost always the cause.
-Messages still deliver on reconnect (the recipient drains the queue on next
-connect); only the live push is affected.
+Get it wrong and the two paths fail very differently:
+
+| Symptom | Cause and blast radius |
+|---|---|
+| WebSocket connects, then drops immediately | Mismatch on the upgrade. Degrades gracefully: only live push is lost, and messages still arrive when the recipient reconnects and drains the queue. |
+| Sign-in fails with a generic request failure (HTTP 403) | Mismatch on login. **Fails closed - nobody can sign in at all** until it is fixed. |
+
+Login fails hard here, so re-check sign-in after any change to the edge
+configuration, the public hostname, or the allowlist. Leaving the allowlist
+unset disables both checks; that is the local-development shape and the boot
+guard refuses it in production.
 
 ---
 
@@ -166,7 +175,7 @@ The server **refuses to boot** in production if any of these is wrong
 | Var | Required in prod | Purpose |
 |---|---|---|
 | `MERIDIAN_EDGE_ENV=production` | yes | turns on the boot guard, disables `/docs` |
-| `MERIDIAN_EDGE_WS_ORIGINS` | yes | exact WS `Origin` allowlist, comma-separated (e.g. `https://chat.example.com`) - **must not be empty** |
+| `MERIDIAN_EDGE_ALLOWED_ORIGINS` | yes | exact `Origin` allowlist, comma-separated (e.g. `https://chat.example.com`) - **must not be empty**. Governs both the WebSocket upgrade **and** `/v1/login/challenge` + `/v1/login/verify`. `MERIDIAN_EDGE_WS_ORIGINS` is the former name and still works; set either one |
 | `MERIDIAN_EDGE_DATABASE_URL` | yes | Postgres DSN - a `sqlite://` URL is **rejected** |
 | `MERIDIAN_EDGE_DEV` | must be unset / not `1` | `=1` enables `/docs`; refused alongside production |
 
@@ -183,7 +192,7 @@ server vars above from them and **refuses to start** if one is missing.
 | Var | Used by | Notes |
 |---|---|---|
 | `POSTGRES_PASSWORD` | db + server DSN | any long random secret |
-| `MERIDIAN_EDGE_WS_ORIGINS` | server | your exact public origin(s) |
+| `MERIDIAN_EDGE_WS_ORIGINS` | server | your exact public origin(s); gates the WebSocket upgrade and login (newer alias: `MERIDIAN_EDGE_ALLOWED_ORIGINS`) |
 | `TLS_CERT_DIR` | proxy (Route A) | host dir holding `fullchain.pem` + `privkey.pem`; unused for Caddy |
 | `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Route B) | public hostname + ACME contact |
 
@@ -775,7 +784,8 @@ circle comfortably.
 | API deny-all CSP + `nosniff` / `Referrer-Policy` / COOP / CORP / Permissions-Policy | `server/app/headers.py` |
 | Same-origin bundle, zero CDN assets | edge serves `dist/` |
 | No CORS (no wildcard, no credentials) | server installs no CORS middleware |
-| WS origin allowlist, auth-before-subscribe, frame cap, idle-kill, rate cap | `server/app/ws.py` + `MERIDIAN_EDGE_WS_ORIGINS` |
+| WS origin allowlist, auth-before-subscribe, frame cap, idle-kill, rate cap | `server/app/ws.py` + the `Origin` allowlist |
+| Login origin allowlist (challenge and verify) and nonce origin binding | `server/app/routes/login.py` + the `Origin` allowlist |
 | Rate limits (register / login / bundle / message / recover) | `server/app/rate_limit.py` |
 | Non-root, read-only fs, no shell, secrets via env | Dockerfiles + compose `read_only` / `tmpfs` |
 | Dev config refused at boot | `_assert_production_safe` |
@@ -793,6 +803,7 @@ circle comfortably.
 | Browser `ERR_CERT_AUTHORITY_INVALID` | self-signed, or `fullchain.pem` missing the intermediate | use 4.2/4.3; leaf **then** intermediate order |
 | `curl .../v1/...` returns `502` | proxy cannot reach the server | `docker compose ps` (is `server` up?) + `docker compose logs server` |
 | WebSocket connects then drops | `Origin` mismatch or not forwarded | make `MERIDIAN_EDGE_WS_ORIGINS` exactly match the browser origin (section 2.3) |
+| Nobody can `/login`; it fails with a generic error (403) | same `Origin` mismatch, but on the login path, which fails closed | same fix as above; confirm the edge forwards `Origin` (section 2.3) |
 | Screener shows classical-only TLS | edge OpenSSL < 3.5, or a terminating proxy in front | section 10.4 / 10.5 |
 | Caddy: repeated cert issuance / rate-limited | `caddy-data` volume deleted between restarts | keep the volume; do not prune it |
 | `docker compose up` errors on an unset variable | a required `.env` value is missing | the message names it (`POSTGRES_PASSWORD`, `MERIDIAN_EDGE_WS_ORIGINS`, `TLS_CERT_DIR`) |

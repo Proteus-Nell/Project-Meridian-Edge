@@ -5,6 +5,19 @@ endpoint is useless as an existence oracle. All verification failures
 (unknown UID, expired/replayed nonce, origin mismatch, bad signature)
 return the identical uniform 401, with verification time burned on the
 not-found path.
+
+Two distinct origin controls apply, and they do different jobs:
+
+  1. Binding. The origin is recorded with the nonce and signed by the client,
+     so a signature produced for one origin cannot be replayed against another.
+     This is enforced regardless of configuration.
+  2. Allowlist. When app.state.allowed_origins is set (shared with the
+     WebSocket upgrade), challenges are only issued to, and only accepted
+     from, an approved origin. Unset leaves it open for local development.
+
+The allowlist constrains browsers only - a direct HTTP client can send any
+Origin header - so it is defence in depth against a hostile page, not an
+authentication control. The ML-DSA signature is what actually authenticates.
 """
 
 from __future__ import annotations
@@ -37,6 +50,18 @@ def _origin(request: Request) -> str:
     return request.headers.get("origin", "")
 
 
+def _require_allowed_origin(request: Request) -> None:
+    """Reject the request unless its Origin is on the configured allowlist.
+
+    None means unconfigured, which leaves the check open so local development
+    and the test suite work without ceremony; production is required to set it
+    (asserted at boot by _assert_production_safe).
+    """
+    allowed: list[str] | None = request.app.state.allowed_origins
+    if allowed is not None and _origin(request) not in allowed:
+        raise HTTPException(status_code=403, detail="forbidden_origin")
+
+
 def login_message(nonce: bytes, origin: str, timestamp: int) -> bytes:
     """The exact bytes the client signs: nonce || origin || ts_be8."""
     return nonce + origin.encode("utf-8") + timestamp.to_bytes(8, "big")
@@ -48,6 +73,10 @@ def challenge(
     request: Request,
     session: Annotated[Session, Depends(get_session)],
 ) -> ChallengeResponse:
+    # Cheapest rejection first: a disallowed origin never reaches the rate
+    # limiter (so it cannot burn a legitimate client's budget) and never
+    # writes a nonce row.
+    _require_allowed_origin(request)
     limiter: TokenBucketLimiter = request.app.state.login_challenge_limiter
     if not limiter.allow(_client_key(request)):
         raise HTTPException(status_code=429, detail="rate_limited")
@@ -74,6 +103,9 @@ def verify(
     request: Request,
     session: Annotated[Session, Depends(get_session)],
 ) -> TokenResponse:
+    # Checked here too, not just at /challenge: a nonce obtained elsewhere must
+    # not be redeemable from an origin the deployment does not serve.
+    _require_allowed_origin(request)
     now: float = request.app.state.clock()
     origin = _origin(request)
     signature = payload.decoded_signature()

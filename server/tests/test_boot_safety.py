@@ -35,7 +35,7 @@ def real_hasher(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_passes_with_a_fully_production_shaped_config(real_hasher: None) -> None:
     _assert_production_safe(
         dev=False,
-        ws_origins=["https://meridian-edge.example"],
+        allowed_origins=["https://meridian-edge.example"],
         database_url="postgresql://user:pass@db/meridian_edge",
     )
 
@@ -43,7 +43,7 @@ def test_passes_with_a_fully_production_shaped_config(real_hasher: None) -> None
 def test_noop_when_prod_env_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MERIDIAN_EDGE_ENV", raising=False)
     # Every input here is dev-shaped; if the gate ran, it would raise.
-    _assert_production_safe(dev=True, ws_origins=None, database_url="sqlite://")
+    _assert_production_safe(dev=True, allowed_origins=None, database_url="sqlite://")
 
 
 def test_refuses_when_dev_docs_enabled(monkeypatch: pytest.MonkeyPatch, real_hasher: None) -> None:
@@ -51,17 +51,37 @@ def test_refuses_when_dev_docs_enabled(monkeypatch: pytest.MonkeyPatch, real_has
     with pytest.raises(RuntimeError, match="MERIDIAN_EDGE_DEV"):
         _assert_production_safe(
             dev=True,
-            ws_origins=["https://meridian-edge.example"],
+            allowed_origins=["https://meridian-edge.example"],
             database_url="postgresql://user:pass@db/meridian_edge",
         )
 
 
-def test_refuses_when_ws_origins_unset(monkeypatch: pytest.MonkeyPatch, real_hasher: None) -> None:
+def test_refuses_when_origin_allowlist_unset(
+    monkeypatch: pytest.MonkeyPatch, real_hasher: None
+) -> None:
     monkeypatch.setenv("MERIDIAN_EDGE_ENV", "production")
-    with pytest.raises(RuntimeError, match="MERIDIAN_EDGE_WS_ORIGINS"):
+    with pytest.raises(RuntimeError, match="MERIDIAN_EDGE_ALLOWED_ORIGINS"):
         _assert_production_safe(
-            dev=False, ws_origins=None, database_url="postgresql://user:pass@db/meridian_edge"
+            dev=False, allowed_origins=None, database_url="postgresql://user:pass@db/meridian_edge"
         )
+
+
+def test_legacy_ws_origins_env_var_still_configures_the_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Deployments predating the login allowlist set MERIDIAN_EDGE_WS_ORIGINS;
+    # they must keep working without an env-var rename.
+    monkeypatch.delenv("MERIDIAN_EDGE_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setenv("MERIDIAN_EDGE_WS_ORIGINS", "https://legacy.example")
+    app = create_app("sqlite://")
+    assert app.state.allowed_origins == ["https://legacy.example"]
+
+
+def test_allowed_origins_env_var_takes_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MERIDIAN_EDGE_ALLOWED_ORIGINS", "https://new.example")
+    monkeypatch.setenv("MERIDIAN_EDGE_WS_ORIGINS", "https://legacy.example")
+    app = create_app("sqlite://")
+    assert app.state.allowed_origins == ["https://new.example"]
 
 
 def test_refuses_when_database_is_sqlite(
@@ -70,7 +90,7 @@ def test_refuses_when_database_is_sqlite(
     monkeypatch.setenv("MERIDIAN_EDGE_ENV", "production")
     with pytest.raises(RuntimeError, match="SQLite"):
         _assert_production_safe(
-            dev=False, ws_origins=["https://meridian-edge.example"], database_url="sqlite:///./x.db"
+            dev=False, allowed_origins=["https://meridian-edge.example"], database_url="sqlite:///./x.db"
         )
 
 
@@ -81,7 +101,7 @@ def test_refuses_when_argon2_params_are_weak(monkeypatch: pytest.MonkeyPatch) ->
     with pytest.raises(RuntimeError, match="Argon2id"):
         _assert_production_safe(
             dev=False,
-            ws_origins=["https://meridian-edge.example"],
+            allowed_origins=["https://meridian-edge.example"],
             database_url="postgresql://user:pass@db/meridian_edge",
         )
 

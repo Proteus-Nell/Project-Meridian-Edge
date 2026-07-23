@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.constants import LOGIN_CHALLENGE_RATE_CAPACITY
+from app.main import create_app
 
 from .conftest import FakeClock
 from .helpers import Account, auth, login, register, sign_challenge
@@ -133,3 +136,84 @@ def test_challenge_rate_limited(client: TestClient) -> None:
     res = client.post("/v1/login/challenge", json={"uid": account.uid})
     assert res.status_code == 429
     assert res.json() == {"error": "rate_limited"}
+
+
+# --- Origin allowlist -------------------------------------------------------
+#
+# Distinct from the origin *binding* above: binding stops a signature made for
+# one origin being replayed at another and always applies, whereas the
+# allowlist restricts which origins the deployment serves at all. The default
+# `client` fixture leaves the allowlist unset (the local-development shape), so
+# these use their own app.
+
+ALLOWED_ORIGIN = "https://meridian-edge.example"
+
+
+@pytest.fixture()
+def restricted_client(clock: FakeClock) -> Iterator[TestClient]:
+    app = create_app("sqlite://", clock=clock, allowed_origins=[ALLOWED_ORIGIN])
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_challenge_allowed_from_listed_origin(restricted_client: TestClient) -> None:
+    account = Account()
+    register(restricted_client, account)
+    res = restricted_client.post(
+        "/v1/login/challenge", json={"uid": account.uid}, headers={"origin": ALLOWED_ORIGIN}
+    )
+    assert res.status_code == 200
+
+
+def test_challenge_refused_from_unlisted_origin(restricted_client: TestClient) -> None:
+    account = Account()
+    register(restricted_client, account)
+    res = restricted_client.post(
+        "/v1/login/challenge",
+        json={"uid": account.uid},
+        headers={"origin": "https://evil.example"},
+    )
+    assert res.status_code == 403
+    # Collapses to the generic body: the allowlist is not an oracle either.
+    assert res.json() == {"error": "request_failed"}
+
+
+def test_challenge_refused_without_an_origin_header(restricted_client: TestClient) -> None:
+    account = Account()
+    register(restricted_client, account)
+    assert restricted_client.post("/v1/login/challenge", json={"uid": account.uid}).status_code == 403
+
+
+def test_verify_refused_from_unlisted_origin(restricted_client: TestClient) -> None:
+    # A nonce legitimately issued to the served origin must not be redeemable
+    # from anywhere else, so the check is repeated at verify.
+    account = Account()
+    register(restricted_client, account)
+    challenge = restricted_client.post(
+        "/v1/login/challenge", json={"uid": account.uid}, headers={"origin": ALLOWED_ORIGIN}
+    ).json()
+    signature = sign_challenge(account, challenge["nonce"], ALLOWED_ORIGIN, challenge["timestamp"])
+    body = {"uid": account.uid, "nonce": challenge["nonce"], "signature": signature}
+    res = restricted_client.post(
+        "/v1/login/verify", json=body, headers={"origin": "https://evil.example"}
+    )
+    assert res.status_code == 403
+
+
+def test_full_login_succeeds_through_the_allowlist(restricted_client: TestClient) -> None:
+    account = Account()
+    register(restricted_client, account)
+    token = login(restricted_client, account, origin=ALLOWED_ORIGIN)
+    assert len(token) == 64
+
+
+def test_allowlist_unset_leaves_any_origin_usable(client: TestClient) -> None:
+    # Local development must keep working with no configuration at all.
+    account = Account()
+    register(client, account)
+    res = client.post(
+        "/v1/login/challenge",
+        json={"uid": account.uid},
+        headers={"origin": "http://localhost:5174"},
+    )
+    assert res.status_code == 200

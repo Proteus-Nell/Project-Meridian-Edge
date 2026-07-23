@@ -60,7 +60,7 @@ from .ws import router as ws_router
 
 
 def _assert_production_safe(
-    *, dev: bool, ws_origins: list[str] | None, database_url: str
+    *, dev: bool, allowed_origins: list[str] | None, database_url: str
 ) -> None:
     """Refuse to boot with a dev-shaped config in production (CLAUDE.md §5
     checklist: "DEBUG=0 asserted at startup"). Only runs when MERIDIAN_EDGE_ENV=
@@ -71,8 +71,11 @@ def _assert_production_safe(
     problems: list[str] = []
     if dev:
         problems.append("MERIDIAN_EDGE_DEV=1 is set (enables /docs) alongside MERIDIAN_EDGE_ENV=production")
-    if not ws_origins:
-        problems.append("MERIDIAN_EDGE_WS_ORIGINS is unset - WS origin checking would be disabled")
+    if not allowed_origins:
+        problems.append(
+            "no Origin allowlist is set (MERIDIAN_EDGE_ALLOWED_ORIGINS or the legacy "
+            "MERIDIAN_EDGE_WS_ORIGINS) - WebSocket and login origin checking would be disabled"
+        )
     if database_url.startswith("sqlite"):
         problems.append("MERIDIAN_EDGE_DATABASE_URL is a SQLite dev artifact - never deploy it (§7.5)")
     time_cost, memory_cost, parallelism = security.hasher_params()
@@ -91,25 +94,35 @@ def _assert_production_safe(
 def create_app(
     database_url: str | None = None,
     clock: Callable[[], float] = time.time,
-    ws_origins: list[str] | None = None,
+    allowed_origins: list[str] | None = None,
     ws_idle_timeout_seconds: float = WS_IDLE_TIMEOUT_SECONDS,
 ) -> FastAPI:
     """App factory. Run with: uvicorn app.main:create_app --factory --reload
 
     API docs are off unless MERIDIAN_EDGE_DEV=1 (CLAUDE.md section 7.5). `clock` is
     injectable so nonce/session expiry is testable without sleeping.
-    `ws_origins` is the exact WS Origin allowlist (or MERIDIAN_EDGE_WS_ORIGINS as a
-    comma list); None leaves it open for local development - production must
-    set it (asserted at boot, see _assert_production_safe). `ws_idle_timeout_
-    seconds` is real wall-clock time (asyncio.wait_for, not `clock`) - tests
-    override it directly to exercise the idle-kill path without sleeping.
+    `allowed_origins` is the exact Origin allowlist governing BOTH the WebSocket
+    upgrade and the login challenge/verify pair (or MERIDIAN_EDGE_ALLOWED_ORIGINS
+    as a comma list, falling back to the legacy MERIDIAN_EDGE_WS_ORIGINS). None
+    leaves both open for local development - production must set it (asserted at
+    boot, see _assert_production_safe). Note an Origin header only constrains
+    browsers; it is defence in depth against a hostile page, not against a
+    direct HTTP client that can send any header it likes.
+
+    `ws_idle_timeout_seconds` is real wall-clock time (asyncio.wait_for, not
+    `clock`) - tests override it directly to exercise the idle-kill path without
+    sleeping.
     """
     url = database_url or os.environ.get("MERIDIAN_EDGE_DATABASE_URL", "sqlite:///./meridian_edge_dev.db")
     dev = os.environ.get("MERIDIAN_EDGE_DEV") == "1"
-    if ws_origins is None:
-        env_origins = os.environ.get("MERIDIAN_EDGE_WS_ORIGINS", "")
-        ws_origins = [o.strip() for o in env_origins.split(",") if o.strip()] or None
-    _assert_production_safe(dev=dev, ws_origins=ws_origins, database_url=url)
+    if allowed_origins is None:
+        # MERIDIAN_EDGE_WS_ORIGINS predates the allowlist covering login as well;
+        # it stays supported so existing deployments keep working unchanged.
+        env_origins = os.environ.get("MERIDIAN_EDGE_ALLOWED_ORIGINS") or os.environ.get(
+            "MERIDIAN_EDGE_WS_ORIGINS", ""
+        )
+        allowed_origins = [o.strip() for o in env_origins.split(",") if o.strip()] or None
+    _assert_production_safe(dev=dev, allowed_origins=allowed_origins, database_url=url)
 
     app = FastAPI(
         title="Meridian Edge",
@@ -124,7 +137,7 @@ def create_app(
     app.state.sessionmaker = sessionmaker(engine)
     app.state.clock = clock
     app.state.ws_hub = WsHub()
-    app.state.ws_origins = ws_origins
+    app.state.allowed_origins = allowed_origins
     app.state.ws_idle_timeout_seconds = ws_idle_timeout_seconds
     app.state.register_limiter = TokenBucketLimiter(
         REGISTER_RATE_CAPACITY, REGISTER_RATE_WINDOW_SECONDS

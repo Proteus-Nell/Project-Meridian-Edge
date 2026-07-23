@@ -106,7 +106,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     # Nothing is attached to any queue until origin AND auth both pass.
     await websocket.accept()
     idle_timeout: float = websocket.app.state.ws_idle_timeout_seconds
-    allowed_origins: list[str] | None = websocket.app.state.ws_origins
+    allowed_origins: list[str] | None = websocket.app.state.allowed_origins
     if allowed_origins is not None:
         origin = websocket.headers.get("origin", "")
         if origin not in allowed_origins:
