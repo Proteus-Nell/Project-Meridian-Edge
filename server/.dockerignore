@@ -1,7 +1,19 @@
+# Build context for server/Dockerfile. Both compose files build with
+# context: ./server, and Docker reads .dockerignore only from the build-context
+# root, so the repo-root .dockerignore does not apply here.
+
 __pycache__
 *.pyc
 .pytest_cache
 .mypy_cache
+.coverage
+htmlcov
 tests
-*.db
 .venv
+venv
+
+# SQLite dev artifacts must never be deployed; same set the root .gitignore
+# refuses to track.
+*.db
+*.sqlite
+*.sqlite3

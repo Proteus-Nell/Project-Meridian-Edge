@@ -201,6 +201,26 @@ Never commit `.env`, `./tls/`, or any private key - all are git-ignored.
 The proxy listens on non-privileged 8080/8443 so it can run as a non-root user
 with no added capabilities; Compose maps the host's 80/443 onto them.
 
+### 3.4 Where the deployment files live
+
+Deployment artifacts are split between the repo root and `deploy/`. The split
+is not arbitrary - Docker's own lookup rules decide it, so resist the urge to
+tidy these into one folder:
+
+| File | Location | Why it sits there |
+|---|---|---|
+| `docker-compose.yml`, `docker-compose.caddy.yml` | root | Compose resolves relative paths from the compose file's own directory. Both use `context: .` (the proxy image builds the client and copies `deploy/nginx.conf`) plus `context: ./server`. |
+| `.dockerignore` | root | Docker reads it **only from the build-context root**, and the proxy/caddy builds use `context: .`. Moved elsewhere it silently stops applying. |
+| `.dockerignore` | `server/` | Same rule, different context: the server image builds with `context: ./server`, so it needs its own copy. |
+| `.env.example` | root | Compose loads `.env` from the project directory, which is the directory holding the compose file. |
+| `Caddyfile`, `nginx.conf`, `proxy.Dockerfile`, `caddy.Dockerfile` | `deploy/` | Referenced by **explicit path** from the compose files, so they are free to be grouped. |
+
+Rule of thumb: whatever Docker or Compose finds **by convention** has to sit at
+the root; whatever is referenced **by explicit path** can live in `deploy/`.
+
+Practically, this means you deploy the repository rather than a subfolder:
+clone it, `cd` into it, write `.env`, and run `docker compose` from the root.
+
 ---
 
 ## 4. Getting your TLS certificate (Route A)
