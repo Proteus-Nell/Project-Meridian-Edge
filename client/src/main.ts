@@ -5,12 +5,19 @@ import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 
 import { bannerLines } from "./terminal/banner";
+import { preloadDisplayStyle } from "./terminal/paint";
 import { parseLine } from "./terminal/parser";
 import { Renderer } from "./terminal/renderer";
 import { Shell } from "./terminal/shell";
 import { Executor } from "./terminal/executor";
 import { Chrome } from "./terminal/chrome";
 import { commandSuggestions, longestCommonPrefix } from "./terminal/suggest";
+
+// FIRST statement of the app: start reading the saved colour scheme before
+// anything else, so the IndexedDB round-trip overlaps xterm's construction and
+// mount rather than following it. #app is hidden (style.css) until this
+// resolves, so no content is ever painted in the default scheme first.
+const displayStyleReady = preloadDisplayStyle();
 
 function mount(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -119,9 +126,11 @@ chrome.setOnPick((text) => {
 });
 shell.setClearHandler(() => chrome.clearScreen());
 
-// Apply persisted display preferences (passphrase-mask style + theme layers)
-// before the user reaches the first prompt.
-void executor.init();
+// Re-apply the persisted display preferences through the executor once the
+// terminals exist: same prefs as the preload above (idempotent), but this pass
+// also themes the two xterm instances and sets the passphrase mask. Sequenced
+// after the preload so the two cannot race on the CSS variables.
+void displayStyleReady.then(() => executor.init());
 
 // Startup banner: the boxed wordmark plus a plain-language intro and the
 // three-step path to a first conversation (terminal/banner.ts).

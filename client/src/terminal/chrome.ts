@@ -14,7 +14,7 @@ import { COMMAND_USAGE, isCommandWord } from "./parser";
 import type { EventLevel } from "./renderer";
 import type { SuggestionNav } from "./shell";
 import type { EmblemState } from "./executor";
-import { EMBLEM_NAMES } from "./theme";
+import { applyEmblemClass, applySchemeVars, applyThemeClasses } from "./paint";
 import type { EmblemName, ResolvedScheme } from "./theme";
 import type { ThemePrefs } from "../crypto/store";
 
@@ -380,11 +380,7 @@ export class Chrome implements SuggestionNav {
    * vignette, footer dock) via body classes. Persisted by the executor in the
    * unencrypted display prefs so the choice applies before unlock too. */
   applyTheme(theme: ThemePrefs): void {
-    const body = document.body;
-    body.classList.toggle("th-emblem", theme.emblem);
-    body.classList.toggle("th-scanlines", theme.scanlines);
-    body.classList.toggle("th-vignette", theme.vignette);
-    body.classList.toggle("th-dock", theme.dock);
+    applyThemeClasses(theme);
   }
 
   /** Drive the medallion's animation state: paused when idle, a slow 9s spin
@@ -402,12 +398,7 @@ export class Chrome implements SuggestionNav {
    * the atmosphere layers keep showing through, transcript cursor kept
    * invisible, ANSI overrides applied for light schemes. */
   applyScheme(scheme: ResolvedScheme): void {
-    const root = document.documentElement.style;
-    root.setProperty("--accent", scheme.accent);
-    root.setProperty("--bg", scheme.background);
-    root.setProperty("--panel", scheme.panel);
-    root.setProperty("--text", scheme.text);
-    root.setProperty("--muted", scheme.muted);
+    applySchemeVars(scheme);
 
     const shared = {
       background: `${scheme.background}00`, // fully transparent, page paints it
@@ -424,9 +415,7 @@ export class Chrome implements SuggestionNav {
 
   /** Select which glyph the medallion shows (the ring framing is shared). */
   applyEmblem(name: EmblemName): void {
-    for (const emblem of EMBLEM_NAMES) {
-      document.body.classList.toggle(`em-${emblem}`, emblem === name);
-    }
+    applyEmblemClass(name);
   }
 
   // ----- screen clear ---------------------------------------------------------

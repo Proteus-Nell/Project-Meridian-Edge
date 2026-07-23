@@ -32,6 +32,16 @@ body {
 /* App shell: the transcript fills the space above a fixed footer that holds the
    status strip and the bottom-pinned command line. 100dvh keeps the command line
    above the mobile software keyboard (CLAUDE.md §1.6). */
+/* The saved colour scheme lives in IndexedDB and can only be read
+   asynchronously, so the app stays hidden until paint.ts has applied it
+   (body.theme-ready). Without this, everything painted in the default scheme
+   first and then snapped to the user's, which read as a flash. Only the page
+   backdrop is visible in the meantime. markThemeReady() runs in a `finally`,
+   so a storage error still reveals the app. */
+body:not(.theme-ready) #app {
+  visibility: hidden;
+}
+
 #app {
   position: relative; /* anchors the #vignette overlay */
   display: grid;
