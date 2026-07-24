@@ -55,6 +55,7 @@ from .routes.login import router as login_router
 from .routes.messages import router as messages_router
 from .routes.recover import router as recover_router
 from .routes.register import router as register_router
+from .routes.sessions import router as sessions_router
 from .ws import WsHub
 from .ws import router as ws_router
 
@@ -160,6 +161,7 @@ def create_app(
     app.include_router(register_router)
     app.include_router(recover_router)
     app.include_router(login_router)
+    app.include_router(sessions_router)
     app.include_router(keys_router)
     app.include_router(bundles_router)
     app.include_router(messages_router)

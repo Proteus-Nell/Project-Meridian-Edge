@@ -71,6 +71,9 @@ class SessionToken(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    # App-clock seconds at issue; powers the age shown by GET /v1/sessions. A
+    # default keeps rows created before this column was added readable.
+    created_at: Mapped[float] = mapped_column(default=0.0)
     last_used: Mapped[float] = mapped_column()
     revoked: Mapped[bool] = mapped_column(default=False)
 

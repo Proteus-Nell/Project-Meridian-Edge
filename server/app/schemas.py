@@ -118,6 +118,25 @@ class TokenResponse(BaseModel):
     token: str
 
 
+class SessionInfo(BaseModel):
+    """One live session, described only by relative timing (no device label or
+    user agent is stored) plus a flag for the one making the request. Ages are
+    server-computed seconds so the client needs no server clock and no absolute
+    timestamp is exposed."""
+
+    age_seconds: int  # since the session was created
+    idle_seconds: int  # since it was last used
+    current: bool
+
+
+class SessionsResponse(BaseModel):
+    sessions: list[SessionInfo]
+
+
+class LogoutOthersResponse(BaseModel):
+    revoked: int  # how many other sessions were signed out
+
+
 class RecoverRequest(_UidRequest):
     """Redeem a recovery code and enroll a replacement identity key in one
     step: the code is the credential, so no challenge round-trip is needed."""

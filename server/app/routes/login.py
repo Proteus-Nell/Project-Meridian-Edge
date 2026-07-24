@@ -161,7 +161,11 @@ def verify(
         raise HTTPException(status_code=401, detail="auth_failed")
 
     token = new_session_token()
-    session.add(SessionToken(token_hash=hash_token(token), user_id=user.id, last_used=now))
+    session.add(
+        SessionToken(
+            token_hash=hash_token(token), user_id=user.id, created_at=now, last_used=now
+        )
+    )
     session.commit()
     return TokenResponse(token=token)
 
