@@ -19,7 +19,7 @@ jobs:
         run: python scripts/audit.py
 
   client:
-    name: client (typecheck, tests, npm audit)
+    name: client (lint, typecheck, tests, npm audit)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,12 +32,13 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm audit --audit-level=high
 
   server:
-    name: server (mypy --strict, tests, pip-audit)
+    name: server (ruff, mypy --strict, tests, pip-audit)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,6 +53,7 @@ jobs:
             server/requirements.txt
             server/requirements-dev.txt
       - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check .
       - run: mypy --strict app
       - run: pytest -q
       - run: pip install pip-audit && pip-audit -r requirements.txt -r requirements-dev.txt

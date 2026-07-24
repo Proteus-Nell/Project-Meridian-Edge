@@ -130,7 +130,8 @@ describe("PQ-KX", () => {
       reason: "unknown-spk",
     });
     const spkOnly: PrekeyLookup = {
-      spkByHash: side.lookup.spkByHash,
+      // Wrapped rather than passed by reference so `this` cannot be rebound.
+      spkByHash: (hash) => side.lookup.spkByHash(hash),
       opkByHash: () => null,
     };
     expect(respondKx(bob.publicKey, spkOnly, envelope)).toEqual({

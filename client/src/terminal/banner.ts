@@ -22,6 +22,9 @@ const WORDMARK = "M E R I D I A N   E D G E";
 
 /** Strip ANSI SGR sequences so a line's printed width can be measured. */
 export function visibleWidth(line: string): number {
+  // The escape character is the point: this matches ANSI colour sequences in
+  // order to discount them from the width.
+  // eslint-disable-next-line no-control-regex
   return line.replace(/\x1b\[[0-9;]*m/g, "").length;
 }
 

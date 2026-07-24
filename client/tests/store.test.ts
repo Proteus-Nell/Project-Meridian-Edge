@@ -83,9 +83,9 @@ describe("KeyStore", () => {
         const db = open.result;
         const req = db.transaction("vault", "readonly").objectStore("vault").get("identity");
         req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        req.onerror = () => reject(req.error ?? new Error("indexeddb read failed"));
       };
-      open.onerror = () => reject(open.error);
+      open.onerror = () => reject(open.error ?? new Error("indexeddb open failed"));
     });
     const record = raw as { ct: Uint8Array };
     const ctText = new TextDecoder("utf-8", { fatal: false }).decode(record.ct);

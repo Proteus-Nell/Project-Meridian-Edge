@@ -9,6 +9,34 @@ license = "AGPL-3.0-only"
 strict = true
 warn_unreachable = true
 
+# Ruff covers what mypy does not: dead code, shadowed builtins, mutable default
+# arguments, and the bandit (S) security checks. S is the reason this is worth
+# running on a server that handles key material - it flags weak randomness,
+# hardcoded secrets, and unsafe subprocess/eval use, several of which
+# scripts/audit.py greps for by hand.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes: unused imports/variables, undefined names
+    "B",    # bugbear: mutable defaults, shadowed loop vars, silent except
+    "S",    # bandit security checks
+    "UP",   # pyupgrade: modern syntax for the pinned Python
+    "SIM",  # simplify
+    "I",    # import ordering
+]
+ignore = [
+    "E501",  # line length is enforced by the formatter's judgement, not a hard cut
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert with `assert` (S101), use fixed fake secrets (S105/S106), and
+# bind to all interfaces in fixtures (S104). None of that is a finding here.
+"tests/**" = ["S101", "S105", "S106", "S104"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

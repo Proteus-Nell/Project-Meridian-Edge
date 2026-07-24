@@ -12,13 +12,11 @@ import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-function loadVectors(name: string): { seed: string; pk: string; [key: string]: string }[] {
+type Vector = { seed: string; pk: string; [key: string]: string };
+
+function loadVectors(name: string): Vector[] {
   const raw = readFileSync(path.join(here, "..", "..", "shared", "vectors", name), "utf8");
-  return (JSON.parse(raw) as { vectors: { seed: string; pk: string }[] }).vectors as {
-    seed: string;
-    pk: string;
-    [key: string]: string;
-  }[];
+  return (JSON.parse(raw) as { vectors: Vector[] }).vectors;
 }
 
 function b64(value: string): Uint8Array {

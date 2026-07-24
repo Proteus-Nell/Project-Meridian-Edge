@@ -51,7 +51,7 @@ describe.skipIf(found === null)("MESSAGES.md drift", () => {
 
   it("quotes every fixed (zero-argument) message verbatim", () => {
     for (const code of ERROR_CODES) {
-      const build = ERRORS[code] as (...args: never[]) => string;
+      const build: (...args: never[]) => string = ERRORS[code];
       if (build.length === 0) {
         expect(doc, `stale text for ${code}`).toContain(build());
       }

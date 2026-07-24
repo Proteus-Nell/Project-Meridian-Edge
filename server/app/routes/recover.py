@@ -32,6 +32,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .. import uid as uid_module
+from ..constants import RECOVERY_CODE_COUNT
 from ..deps import get_session
 from ..models import (
     OneTimePrekey,
@@ -50,7 +51,6 @@ from ..security import (
     verify_recovery_code,
 )
 from ..security_log import record_security_event
-from ..constants import RECOVERY_CODE_COUNT
 
 router = APIRouter(prefix="/v1")
 

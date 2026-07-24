@@ -58,7 +58,9 @@ export async function sendActiveMessage(
   target: Contact,
   text: string,
 ): Promise<void> {
-  let sent = false;
+  // Declared without a value: the catch below always rethrows, so control only
+  // reaches the read when the try assigned it.
+  let sent: boolean;
   try {
     sent = await sendFirstMessage(x, target, text);
   } catch (err) {

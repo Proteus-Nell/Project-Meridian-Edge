@@ -8,6 +8,7 @@ import { BANNER_MAX_COLUMNS, bannerLines, visibleWidth } from "../src/terminal/b
 import { COMMAND_USAGE, isCommandWord } from "../src/terminal/parser";
 
 const lines = bannerLines();
+// eslint-disable-next-line no-control-regex -- matching ANSI colour sequences
 const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
 
 describe("startup banner", () => {

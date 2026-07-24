@@ -8,6 +8,7 @@ ML-KEM-768 (FIPS 203) for key establishment and ML-DSA-65 (FIPS 204) for
 identity and authentication. No classical public-key crypto exists in the
 application layer, and CI enforces that.
 
+- [CODING_GUIDELINES.md](CODING_GUIDELINES.md) — the crypto and code invariants, and which of them CI enforces
 - [MESSAGES.md](MESSAGES.md) — every `[E###]` error code, with its cause and remedy
 - [DEPLOY.md](DEPLOY.md) — deployment, TLS certificates, and PQC/TLS screening
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure contact
@@ -238,9 +239,9 @@ LICENSE          GNU AGPL v3.0
 ## Development checks
 
 ```
-cd server && mypy --strict app && pytest     # server gates
-cd client && npm run typecheck && npm test   # client gates
-python scripts/audit.py                      # classical-crypto / injection greps
+cd server && ruff check . && mypy --strict app && pytest      # server gates
+cd client && npm run lint && npm run typecheck && npm test    # client gates
+python scripts/audit.py                                       # classical-crypto / injection greps
 ```
 
 All of the above plus `npm audit` / `pip-audit` run blocking in CI.

@@ -28,6 +28,7 @@ from collections.abc import Callable
 from fastapi import FastAPI
 from sqlalchemy.orm import sessionmaker
 
+from . import security
 from .constants import (
     ARGON2ID_ITERATIONS,
     ARGON2ID_MEM_KIB,
@@ -46,7 +47,6 @@ from .constants import (
     REGISTER_RATE_WINDOW_SECONDS,
     WS_IDLE_TIMEOUT_SECONDS,
 )
-from . import security
 from .db import Base, make_engine
 from .errors import install_error_handlers
 from .headers import install_security_headers

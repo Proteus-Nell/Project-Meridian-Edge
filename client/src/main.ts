@@ -87,6 +87,11 @@ resizeObserver.observe(mount("transcript-pane"));
 resizeObserver.observe(mount("command-line"));
 window.addEventListener("resize", refit);
 
+// Declared before the shell and assigned after it: the shell's submit callback
+// closes over the executor, and the executor needs the shell, so one of the two
+// has to be filled in second. The callback only runs on user input, long after
+// the assignment below.
+// eslint-disable-next-line prefer-const
 let executor: Executor;
 const shell = new Shell(inputTerm, transcriptTerm, (line) => {
   // Parse once: the result styles the echo (messages bright, commands dim) and

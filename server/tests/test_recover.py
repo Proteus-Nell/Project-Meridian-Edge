@@ -16,8 +16,8 @@ from httpx import Response
 from app.constants import (
     ML_DSA_65_SIG_BYTES,
     ML_KEM_768_PUBKEY_BYTES,
-    RECOVERY_CODE_COUNT,
     RECOVER_RATE_CAPACITY,
+    RECOVERY_CODE_COUNT,
 )
 
 from .helpers import Account, auth, login, register_and_login, sign_challenge

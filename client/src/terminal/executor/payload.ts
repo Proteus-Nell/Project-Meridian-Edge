@@ -48,7 +48,7 @@ export function decodeAppPayload(bytes: Uint8Array): AppPayload | null {
   const mid = typeof record.id === "string" ? record.id : null;
   const deletes =
     Array.isArray(record.del) && record.del.every((x) => typeof x === "string")
-      ? (record.del as string[])
+      ? record.del
       : null;
   return { text, timerSeconds: tmr, mid, deletes, deleteSilent: record.ds === true };
 }
