@@ -53,7 +53,8 @@ export type Command =
   | { readonly name: "register" }
   | { readonly name: "recover" }
   | { readonly name: "login" }
-  | { readonly name: "logout" }
+  | { readonly name: "logout"; readonly all: boolean }
+  | { readonly name: "sessions" }
   | { readonly name: "lock" }
   | { readonly name: "whoami" }
   | { readonly name: "add"; readonly uid: string; readonly alias: string | undefined }
@@ -111,7 +112,8 @@ export const COMMAND_USAGE = {
   register: "/register",
   recover: "/recover",
   login: "/login",
-  logout: "/logout",
+  logout: "/logout [all]  (all = sign out every other device, keep this one)",
+  sessions: "/sessions",
   lock: "/lock",
   whoami: "/whoami",
   add: "/add <uid> [alias]",
@@ -323,7 +325,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
     case "register":
     case "recover":
     case "login":
-    case "logout":
+    case "sessions":
     case "lock":
     case "whoami":
     case "home":
@@ -335,6 +337,16 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         return invalid(`/${word} takes no arguments`, usage);
       }
       return command({ name: word });
+    }
+    case "logout": {
+      // Optional single argument "all": sign out every other session.
+      if (args.length === 0) {
+        return command({ name: "logout", all: false });
+      }
+      if (args.length === 1 && (args[0] ?? "").toLowerCase() === "all") {
+        return command({ name: "logout", all: true });
+      }
+      return invalid("/logout takes an optional 'all' (sign out other devices)", usage);
     }
     case "add": {
       if (args.length < 1 || args.length > 2) {

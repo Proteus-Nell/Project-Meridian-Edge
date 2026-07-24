@@ -92,6 +92,22 @@ export function logout(token: string): Promise<void> {
   return requestJson<void>("POST", "/v1/logout", undefined, token);
 }
 
+export interface SessionInfo {
+  readonly age_seconds: number; // since the session started
+  readonly idle_seconds: number; // since it was last used
+  readonly current: boolean; // the session making this request
+}
+
+export function sessions(token: string): Promise<{ sessions: SessionInfo[] }> {
+  return requestJson<{ sessions: SessionInfo[] }>("GET", "/v1/sessions", undefined, token);
+}
+
+/** Sign out every OTHER session, keeping this one; returns how many were
+ * revoked. Signing out this device is what logout() does. */
+export function logoutAll(token: string): Promise<{ revoked: number }> {
+  return requestJson<{ revoked: number }>("POST", "/v1/logout/all", undefined, token);
+}
+
 export function uploadSpk(token: string, pub: Uint8Array, sig: Uint8Array): Promise<void> {
   return requestJson<void>(
     "POST",

@@ -28,9 +28,11 @@ import {
   doLock,
   doLogin,
   doLogout,
+  doLogoutOthers,
   doRecover,
   doRegister,
   doRotatePassphrase,
+  doSessions,
   doWhoami,
   doWipe,
 } from "./identity";
@@ -176,7 +178,10 @@ export class Executor implements ExecutorInternals {
         this.run(() => doLogin(this));
         return;
       case "logout":
-        this.run(() => doLogout(this));
+        this.run(() => (cmd.all ? doLogoutOthers(this) : doLogout(this)));
+        return;
+      case "sessions":
+        this.run(() => doSessions(this));
         return;
       case "lock":
         doLock(this);

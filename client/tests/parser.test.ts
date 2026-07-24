@@ -32,7 +32,7 @@ describe("message vs command discrimination", () => {
 
 describe("zero-arg commands", () => {
   it.each(
-    ["register", "login", "logout", "lock", "whoami", "home", "return", "contacts", "wipe"] as const,
+    ["register", "login", "sessions", "lock", "whoami", "home", "return", "contacts", "wipe"] as const,
   )(
     "parses /%s",
     (name) => {
@@ -43,10 +43,39 @@ describe("zero-arg commands", () => {
   it("rejects extra arguments instead of guessing", () => {
     expect(parseLine("/register please").kind).toBe("invalid");
     expect(parseLine("/home now").kind).toBe("invalid");
+    expect(parseLine("/sessions now").kind).toBe("invalid");
   });
 
   it("is case-insensitive on the command word", () => {
     expect(parseLine("/REGISTER")).toEqual({ kind: "command", command: { name: "register" } });
+  });
+});
+
+describe("/logout [all]", () => {
+  it("parses bare /logout as this-device sign-out", () => {
+    expect(parseLine("/logout")).toEqual({
+      kind: "command",
+      command: { name: "logout", all: false },
+    });
+  });
+
+  it("parses /logout all as sign-out-everywhere-else", () => {
+    expect(parseLine("/logout all")).toEqual({
+      kind: "command",
+      command: { name: "logout", all: true },
+    });
+  });
+
+  it("is case-insensitive on the argument", () => {
+    expect(parseLine("/logout ALL")).toEqual({
+      kind: "command",
+      command: { name: "logout", all: true },
+    });
+  });
+
+  it("rejects any other argument rather than guessing", () => {
+    expect(parseLine("/logout everywhere").kind).toBe("invalid");
+    expect(parseLine("/logout all now").kind).toBe("invalid");
   });
 });
 
@@ -382,7 +411,10 @@ describe("command aliases (execute the canonical command)", () => {
     expect(parseLine("/logon")).toEqual({ kind: "command", command: { name: "login" } });
     expect(parseLine("/signup")).toEqual({ kind: "command", command: { name: "register" } });
     expect(parseLine("/sign-up")).toEqual({ kind: "command", command: { name: "register" } });
-    expect(parseLine("/signout")).toEqual({ kind: "command", command: { name: "logout" } });
+    expect(parseLine("/signout")).toEqual({
+      kind: "command",
+      command: { name: "logout", all: false },
+    });
     expect(parseLine("/clear")).toEqual({ kind: "command", command: { name: "clr" } });
     expect(parseLine("/cls")).toEqual({ kind: "command", command: { name: "clr" } });
     expect(parseLine("/back")).toEqual({ kind: "command", command: { name: "return" } });

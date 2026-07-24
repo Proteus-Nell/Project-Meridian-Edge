@@ -94,6 +94,9 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
       if (n === 0) return ["all"];
       if (n === 1) return ["purge"];
       return [];
+    case "logout":
+      // Optional "all": sign out every other device.
+      return n === 0 ? ["all"] : [];
     case "keys":
       return n === 0 ? ["status", "refill"] : [];
     case "purge":

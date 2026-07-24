@@ -117,7 +117,9 @@ trusting the new one.
 |---|---|
 | `/whoami` | Your UID and identity-key fingerprint (needs an unlocked store) |
 | `/lock` | Locks the store immediately and wipes key material from memory; happens automatically after 10 min idle |
-| `/logout` | Revokes the session server-side, then locks |
+| `/logout` | Revokes this session server-side, then locks |
+| `/sessions` | Lists where this account is signed in — one line per live session with how long ago it started and was last active, and which one is this device. Sessions are anonymous by design: no device name or user agent is stored |
+| `/logout all` | Signs out every **other** session and keeps this one (the "I left myself logged in on another device" control). Reports how many were signed out |
 | `/rotate passphrase` | Re-wraps the store key under a new passphrase — local only, instant, crash-safe. Warns and asks for confirmation if the new passphrase is identical to the current one |
 | `/settings rotation on\|off\|day <weekday>` | Configure the weekly rotation reminder |
 | `/settings mask asterisk\|hidden` | Passphrase echo: `asterisk` shows `*` per character (default); `hidden` shows nothing at all (sudo-style — no length leak to a shoulder-surfer). Persists across reloads and applies from the first login prompt |

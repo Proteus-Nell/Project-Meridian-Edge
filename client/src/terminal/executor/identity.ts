@@ -30,6 +30,7 @@ import {
 import type { ExecutorInternals } from "./context";
 import { drainInbox } from "./messaging";
 import { purgeExpired } from "./lifecycle";
+import { formatDuration } from "./format";
 import { DEFAULT_ROTATION, WEEKDAY_INDEX } from "./records";
 import type { RotationSettings, StoredIdentity, StoredSpk } from "./records";
 
@@ -415,6 +416,54 @@ export async function doLogout(x: ExecutorInternals): Promise<void> {
   }
   x.lockLocal();
   x.renderer.event("success", "logged out - session revoked server-side, store locked");
+}
+
+/** Elapsed time as a short phrase, coarse for readability. */
+function agoPhrase(seconds: number): string {
+  return seconds < 60 ? "moments ago" : `${formatDuration(seconds)} ago`;
+}
+
+/** /sessions: list this account's live sessions on this server. Sessions are
+ * anonymous (no device label is stored), so each is shown only by when it
+ * started and how recently it was active, with the current one marked. */
+export async function doSessions(x: ExecutorInternals): Promise<void> {
+  if (x.token === null) {
+    x.renderer.error("E201");
+    return;
+  }
+  const { sessions } = await api.sessions(x.token);
+  const count = sessions.length;
+  x.renderer.event("info", `${count} active session${count === 1 ? "" : "s"} on this account:`);
+  for (const s of sessions) {
+    const label = s.current ? "this device" : "another device";
+    const activity = s.current
+      ? "active now"
+      : s.idle_seconds < 60
+        ? "active moments ago"
+        : `idle ${formatDuration(s.idle_seconds)}`;
+    x.renderer.event("info", `  - ${label}: started ${agoPhrase(s.age_seconds)}, ${activity}`);
+  }
+  if (count > 1) {
+    x.renderer.event("info", "sign out the others with /logout all (this device stays logged in)");
+  }
+}
+
+/** /logout all: sign out every OTHER session, keeping this one. Signing out
+ * this device is what /logout does. */
+export async function doLogoutOthers(x: ExecutorInternals): Promise<void> {
+  if (x.token === null) {
+    x.renderer.error("E201");
+    return;
+  }
+  const { revoked } = await api.logoutAll(x.token);
+  if (revoked === 0) {
+    x.renderer.event("info", "no other sessions to sign out - this is your only active device");
+    return;
+  }
+  x.renderer.event(
+    "success",
+    `signed out ${revoked} other session${revoked === 1 ? "" : "s"} - this device stays logged in`,
+  );
 }
 
 export function doLock(x: ExecutorInternals): void {
