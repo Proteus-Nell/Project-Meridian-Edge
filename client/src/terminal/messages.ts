@@ -34,6 +34,11 @@ export const ERRORS = {
   E207: () => "passphrases do not match",
   E208: () => "rotation failed",
   E209: () => "passphrase must include at least one number and one symbol",
+  // The server's 401 is deliberately uniform (unknown UID, wrong key, and a
+  // stale nonce are indistinguishable), so this names the likely cause without
+  // claiming the server said which.
+  E210: () =>
+    "login rejected - the server does not recognise this device's identity key. If you ran /recover on another device, that replaced the account's key: run /recover here with one of the new codes. Otherwise retry, in case the login challenge expired",
 
   // E3xx network / server responses
   E301: () => "rate limit reached - try again later",

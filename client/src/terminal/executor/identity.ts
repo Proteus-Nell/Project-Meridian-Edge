@@ -152,7 +152,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   if (hadStore) {
     x.renderer.event(
       "security",
-      "an identity store exists on this device - recovery DESTROYS it (identity, keys, contacts, message history) and replaces it with the recovered account",
+      "recovery will REPLACE the identity store on this device - the identity, keys, contacts and message history held here are destroyed and rebuilt from the recovered account. This is a confirmation, not a refusal: answer yes below to go ahead",
     );
     const answer = await x.shell.readLine("destroy the local store and recover? (yes/NO): ");
     if (answer === null || answer.trim().toLowerCase() !== "yes") {
@@ -351,7 +351,19 @@ export async function doLogin(x: ExecutorInternals): Promise<void> {
   };
   await loadContacts(x);
   await loadTrustMode(x);
-  await loginWithIdentity(x);
+  try {
+    await loginWithIdentity(x);
+  } catch (err) {
+    // A 401 here is not a lapsed session (there is none yet) - the server
+    // refused this device's identity key. The usual cause is a /recover run on
+    // another device, which enrolls a new key and orphans this one, so say that
+    // rather than inheriting the generic session-expired message.
+    if (err instanceof ApiError && err.status === 401) {
+      x.renderer.error("E210");
+      return;
+    }
+    throw err; // 429 and network failures take the standard error path
+  }
   await postLoginMaintenance(x);
   await drainInbox(x);
   await purgeExpired(x); // evict anything past its timer/cap while offline

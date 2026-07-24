@@ -175,6 +175,9 @@ describe("/recover over an existing store", () => {
     await runRecover(executor);
 
     expect(shell.lineQueries).toEqual(["destroy the local store and recover? (yes/NO): "]);
+    // The gate must read as a question, not a refusal: an earlier wording was
+    // mistaken for /register's "a store already exists" rejection.
+    expect(output.text()).toContain("confirmation, not a refusal");
     expect(output.text()).toContain("recovery cancelled - nothing was changed");
     expect(api.recover).not.toHaveBeenCalled();
     store.lock();
@@ -212,5 +215,39 @@ describe("/recover over an existing store", () => {
     expect(await store.unlock("original passphrase")).toBe(false);
     expect(await store.unlock("new passphrase 1!")).toBe(true);
     expect((await store.getJson<{ uid: string }>("identity"))?.uid).toBe(UID);
+  });
+});
+
+describe("/login after the account was recovered on another device", () => {
+  it("reports the replaced key (E210), not a lapsed session", async () => {
+    vi.clearAllMocks();
+    mockServerFlows();
+    vi.mocked(api.register).mockResolvedValue({
+      uid: formatUid(UID),
+      recovery_codes: FRESH_CODES,
+    });
+    const store = fastStore("meridian-edge-login-after-recovery");
+    const { executor, shell, output } = setup(store);
+
+    // This device registers normally, so it holds a real identity keypair.
+    shell.secrets = ["original passphrase 1!", "original passphrase 1!"];
+    executor.handle(parseLine("/register"));
+    await executor.idle();
+    expect(output.text()).toContain("logged in");
+
+    // The account is then recovered elsewhere: the server enrolls a new
+    // identity key, so the signature this device produces stops verifying.
+    vi.mocked(api.loginVerify).mockRejectedValue(new api.ApiError(401));
+    output.lines.length = 0;
+    executor.handle(parseLine("/login"));
+    await executor.idle();
+
+    const text = output.text();
+    expect(text).toContain("[E210]");
+    expect(text).toContain("run /recover here");
+    // The bug this replaced: every 401 fell through to the session-expired
+    // message, telling the user to /login right after they had.
+    expect(text).not.toContain("[E202]");
+    expect(text).not.toContain("session expired");
   });
 });

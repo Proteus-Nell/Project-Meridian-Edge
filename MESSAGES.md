@@ -45,6 +45,7 @@ Code families:
 | E207 | `passphrases do not match` | The confirmation entry differed from the first entry. | Run the command again and type the same passphrase twice. |
 | E208 | `rotation failed` | The current passphrase typed at `/rotate passphrase` did not unlock the store, so the DEK was not re-wrapped. | Retry with the correct current passphrase. |
 | E209 | `passphrase must include at least one number and one symbol` | The passphrase is long enough but lacks a digit or a symbol. Symbol means anything that is not a letter or digit, so punctuation and spaces both count. | Add a digit and a punctuation mark or space anywhere in the phrase. |
+| E210 | `login rejected - the server does not recognise this device's identity key. If you ran /recover on another device, that replaced the account's key: run /recover here with one of the new codes. Otherwise retry, in case the login challenge expired` | `/login` completed the challenge but the server refused the signature. Almost always because the account was recovered on another device, which enrolls a new identity key and orphans the one held here. The server's 401 is uniform, so an unknown UID or an expired challenge look identical. | Run `/recover` on this device with one of the codes reissued by that recovery. If you did not recover anywhere, retry once in case the challenge expired. |
 | E301 | `rate limit reached - try again later` | The server returned 429: too many requests from this client for that endpoint's budget. | Wait and retry; limits refill within minutes (registration and recovery within the hour). |
 | E302 | `request failed - is the server running?` | A request failed for a reason other than 401/429: server down, network unreachable, or an unexpected status. | Check connectivity and that the server is up, then retry. |
 | E303 | `recipient keys unavailable - unknown UID` | `/verify` asked the server for a bundle and got a uniform 404. | Confirm the contact's UID; they may not exist on this server. |
@@ -106,7 +107,7 @@ Code families:
 | `identity key for <alias> changed and is UNACKNOWLEDGED - sending is blocked. ...` | Shown when focusing a blocked conversation. |
 | `recovery codes - shown ONCE, never recoverable. write them down now:` | Registration: the one-time display of the recovery code set. |
 | `NEW recovery codes - the old set is now void. shown ONCE, never recoverable. write them down now:` | Recovery: the reissued set; every older code is dead. |
-| `an identity store exists on this device - recovery DESTROYS it (identity, keys, contacts, message history) and replaces it with the recovered account` | `/recover` confirmation gate before touching anything. |
+| `recovery will REPLACE the identity store on this device - the identity, keys, contacts and message history held here are destroyed and rebuilt from the recovered account. This is a confirmation, not a refusal: answer yes below to go ahead` | `/recover` confirmation gate before touching anything. Answer `yes` to continue; anything else cancels without changing a thing. |
 | `/wipe destroys the local store: identity, keys, history. IRREVERSIBLE without recovery codes. repeat /wipe within 30s to confirm.` | First `/wipe` confirmation gate. |
 
 ## Server wire errors
