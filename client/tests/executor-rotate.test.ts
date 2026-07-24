@@ -4,41 +4,11 @@ import { IDBFactory } from "fake-indexeddb";
 import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
 import { KeyStore } from "../src/crypto/store";
 import type { Argon2Params } from "../src/crypto/store";
+import { CaptureSink, FakeShell } from "./helpers/executor-harness";
 
 const FAST: Argon2Params = { mKib: 64, t: 1, p: 1 };
-
-class FakeShell implements ShellIO {
-  secrets: (string | null)[] = [];
-  lines: (string | null)[] = [];
-  lineQueries: string[] = [];
-  masks: string[] = [];
-
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(this.secrets.shift() ?? null);
-  }
-
-  readLine(promptText: string): Promise<string | null> {
-    this.lineQueries.push(promptText);
-    return Promise.resolve(this.lines.shift() ?? null);
-  }
-
-  setPrompt(): void {}
-
-  setSecretMask(mask: string): void {
-    this.masks.push(mask);
-  }
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-}
 
 async function setup(): Promise<{
   executor: Executor;

@@ -12,9 +12,8 @@ import { KeyStore } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
 import { toBase64 } from "../src/util/base64";
+import { CaptureSink, FakeShell } from "./helpers/executor-harness";
 
 vi.mock("../src/net/api", async () => {
   const actual = await vi.importActual<typeof import("../src/net/api")>("../src/net/api");
@@ -34,29 +33,6 @@ vi.mock("../src/net/api", async () => {
   };
 });
 
-class FakeShell implements ShellIO {
-  secrets: (string | null)[] = [];
-  lines: (string | null)[] = [];
-
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(this.secrets.shift() ?? null);
-  }
-  readLine(): Promise<string | null> {
-    return Promise.resolve(this.lines.shift() ?? null);
-  }
-  setPrompt(): void {}
-  setSecretMask(): void {}
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-  text(): string {
-    return this.lines.join("\n");
-  }
-}
 
 // Crockford Base32 excludes I, L, O, U - must build synthetic UIDs from its
 // actual alphabet or normalizeUid() rejects them.

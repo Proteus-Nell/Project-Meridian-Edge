@@ -21,9 +21,8 @@ import { KeyStore } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
 import { toBase64 } from "../src/util/base64";
+import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
 
 vi.mock("../src/net/api", async () => {
   const actual = await vi.importActual<typeof import("../src/net/api")>("../src/net/api");
@@ -42,64 +41,6 @@ vi.mock("../src/net/api", async () => {
     ackMessages: vi.fn(),
   };
 });
-
-class FakeShell implements ShellIO {
-  secrets: (string | null)[] = [];
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(this.secrets.shift() ?? null);
-  }
-  readLine(): Promise<string | null> {
-    return Promise.resolve(null);
-  }
-  setPrompt(): void {}
-  setSecretMask(): void {}
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-  /** Joined output with ANSI styling stripped, so assertions read plainly
-   * (peerMessage colors the alias label). */
-  text(): string {
-    return this.lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "");
-  }
-}
-
-class FakeChrome {
-  confirms = 0;
-  rejects = 0;
-  clears = 0;
-  context: string | null = null;
-  emblem = "unset";
-  echoes: Array<{ line: string; kind: string }> = [];
-  discarded: Array<{ code: string; text: string }> = [];
-  echoInput(line: string, kind: "command" | "message" = "command"): void {
-    this.echoes.push({ line, kind });
-  }
-  noteDiscarded(code: string, text: string): void {
-    this.discarded.push({ code, text });
-  }
-  confirmSent(): void {
-    this.confirms += 1;
-  }
-  rejectSent(): void {
-    this.rejects += 1;
-  }
-  clearScreen(): void {
-    this.clears += 1;
-  }
-  setChatContext(text: string | null): void {
-    this.context = text;
-  }
-  applyTheme(): void {}
-  setEmblemState(state: string): void {
-    this.emblem = state;
-  }
-  applyScheme(): void {}
-  applyEmblem(): void {}
-}
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let uidCounter = 0;

@@ -10,8 +10,7 @@ import type { Argon2Params } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
+import { CaptureSink, FakeShell } from "./helpers/executor-harness";
 
 vi.mock("../src/net/api", async () => {
   const actual = await vi.importActual<typeof import("../src/net/api")>("../src/net/api");
@@ -21,31 +20,6 @@ vi.mock("../src/net/api", async () => {
 const FAST: Argon2Params = { mKib: 64, t: 1, p: 1 };
 const UID_A = "A".repeat(26);
 const UID_B = "B".repeat(26);
-
-class FakeShell implements ShellIO {
-  lines: (string | null)[] = [];
-  prompts: string[] = [];
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(null);
-  }
-  readLine(): Promise<string | null> {
-    return Promise.resolve(this.lines.shift() ?? null);
-  }
-  setPrompt(p: string): void {
-    this.prompts.push(p);
-  }
-  setSecretMask(): void {}
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-  text(): string {
-    return this.lines.join("\n");
-  }
-}
 
 interface Harness {
   executor: Executor;

@@ -8,66 +8,8 @@ import { IDBFactory } from "fake-indexeddb";
 import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
 import { KeyStore } from "../src/crypto/store";
-import type { ThemePrefs } from "../src/crypto/store";
-import type { EmblemName, ResolvedScheme } from "../src/terminal/theme";
-
-class FakeShell implements ShellIO {
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(null);
-  }
-  readLine(): Promise<string | null> {
-    return Promise.resolve(null);
-  }
-  setPrompt(): void {}
-  setSecretMask(): void {}
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-  text(): string {
-    return this.lines.join("\n");
-  }
-}
-
-class FakeChrome {
-  clears = 0;
-  themes: ThemePrefs[] = [];
-  context: string | null = null;
-  emblem = "unset";
-  discarded: Array<{ code: string; text: string }> = [];
-  echoInput(): void {}
-  confirmSent(): void {}
-  rejectSent(): void {}
-  noteDiscarded(code: string, text: string): void {
-    this.discarded.push({ code, text });
-  }
-  clearScreen(): void {
-    this.clears += 1;
-  }
-  setChatContext(text: string | null): void {
-    this.context = text;
-  }
-  applyTheme(theme: ThemePrefs): void {
-    this.themes.push(theme);
-  }
-  setEmblemState(state: string): void {
-    this.emblem = state;
-  }
-  schemes: ResolvedScheme[] = [];
-  glyphs: EmblemName[] = [];
-  applyScheme(scheme: ResolvedScheme): void {
-    this.schemes.push(scheme);
-  }
-  applyEmblem(name: EmblemName): void {
-    this.glyphs.push(name);
-  }
-}
+import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
 
 function makeExecutor(): {
   executor: Executor;

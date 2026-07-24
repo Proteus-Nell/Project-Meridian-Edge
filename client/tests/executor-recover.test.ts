@@ -12,8 +12,7 @@ import type { Argon2Params } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
 import { formatUid, normalizeRecoveryCode, parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
+import { CaptureSink, FakeShell } from "./helpers/executor-harness";
 
 vi.mock("../src/net/api", async () => {
   const actual = await vi.importActual<typeof import("../src/net/api")>("../src/net/api");
@@ -38,34 +37,6 @@ const FAST: Argon2Params = { mKib: 64, t: 1, p: 1 };
 const UID = "A".repeat(26);
 const CODE_TYPED = "7777-7777-7777-7777";
 const FRESH_CODES = Array.from({ length: 10 }, (_, i) => `NEW${i}-NEW${i}-NEW${i}-NEW${i}`);
-
-class FakeShell implements ShellIO {
-  secrets: (string | null)[] = [];
-  lines: (string | null)[] = [];
-  lineQueries: string[] = [];
-
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(this.secrets.shift() ?? null);
-  }
-
-  readLine(promptText: string): Promise<string | null> {
-    this.lineQueries.push(promptText);
-    return Promise.resolve(this.lines.shift() ?? null);
-  }
-
-  setPrompt(): void {}
-  setSecretMask(): void {}
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-  text(): string {
-    return this.lines.join("\n");
-  }
-}
 
 function mockServerFlows(): void {
   vi.mocked(api.recover).mockResolvedValue({

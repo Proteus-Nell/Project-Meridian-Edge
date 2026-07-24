@@ -22,9 +22,8 @@ import { KeyStore } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
 import { formatUid, parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
-import type { LineSink } from "../src/terminal/renderer";
-import type { ShellIO } from "../src/terminal/shell";
 import { toBase64 } from "../src/util/base64";
+import { CaptureSink, FakeShell } from "./helpers/executor-harness";
 
 vi.mock("../src/net/api", async () => {
   const actual = await vi.importActual<typeof import("../src/net/api")>("../src/net/api");
@@ -44,27 +43,6 @@ vi.mock("../src/net/api", async () => {
   };
 });
 
-class FakeShell implements ShellIO {
-  secrets: (string | null)[] = [];
-  readSecret(): Promise<string | null> {
-    return Promise.resolve(this.secrets.shift() ?? null);
-  }
-  readLine(): Promise<string | null> {
-    return Promise.resolve(null);
-  }
-  setPrompt(): void {}
-  setSecretMask(): void {}
-}
-
-class CaptureSink implements LineSink {
-  lines: string[] = [];
-  printLine(line: string): void {
-    this.lines.push(line);
-  }
-  text(): string {
-    return this.lines.join("\n");
-  }
-}
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let uidCounter = 0;
