@@ -763,7 +763,11 @@ in-process per server container, so naively running replicas breaks them:
 
 - **Rate limiters** (`rate_limit.py`) are in-memory token buckets - N replicas
   behind a load balancer each enforce the limit independently (effective limit
-  ~N x).
+  ~N x), and even a single instance resets its buckets on restart and sees the
+  proxy's IP rather than the client's. Put a durable limit at the edge:
+  **[deploy/rate-limiting.md](deploy/rate-limiting.md)** gives the nginx
+  `limit_req` config and the honest Caddy caveat (no built-in limiter; needs a
+  module).
 - **The WebSocket hub** (`WsHub` in `ws.py`) tracks live connections in memory -
   a message for a user connected to a different replica is not live-pushed from
   this one (it still delivers on the recipient's next connect).
@@ -786,7 +790,7 @@ circle comfortably.
 | No CORS (no wildcard, no credentials) | server installs no CORS middleware |
 | WS origin allowlist, auth-before-subscribe, frame cap, idle-kill, rate cap | `server/app/ws.py` + the `Origin` allowlist |
 | Login origin allowlist (challenge and verify) and nonce origin binding | `server/app/routes/login.py` + the `Origin` allowlist |
-| Rate limits (register / login / bundle / message / recover) | `server/app/rate_limit.py` |
+| Rate limits (register / login / bundle / message / recover) | `server/app/rate_limit.py` (app, in-memory); edge limits in [deploy/rate-limiting.md](deploy/rate-limiting.md) |
 | Non-root, read-only fs, no shell, secrets via env | Dockerfiles + compose `read_only` / `tmpfs` |
 | Dev config refused at boot | `_assert_production_safe` |
 | Docs / openapi disabled in prod | `MERIDIAN_EDGE_DEV` unset -> `docs_url=None` |
