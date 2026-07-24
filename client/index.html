@@ -2,9 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- Production CSP is set by the reverse proxy; no inline
-         script/style may ever be added to this file. Only structural elements
-         and class names live here — all behaviour is in the bundled module. -->
+    <!-- The reverse proxy sets the production CSP; never add inline script or
+         style to this file. This file holds structural elements and class names
+         only: all behaviour lives in the bundled module. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <title>Meridian Edge</title>
   </head>
@@ -16,11 +16,12 @@
     <div id="app">
       <div id="transcript-pane">
         <!-- Background emblem medallion: decorative, spins around its vertical
-             axis via CSS (rotateY + perspective). Static app-generated markup —
-             never touched by untrusted content. States: paused when idle,
-             slow spin while a session is live (body.is-playing), fast spin +
-             pulse ring while a security event or contact request awaits
-             acknowledgement (body.is-tx). Toggled by /settings theme emblem. -->
+             axis via CSS (rotateY + perspective). The markup is static and
+             app-generated; untrusted content never touches it. States: paused
+             when idle, slow spin while a session is live (body.is-playing),
+             fast spin plus pulse ring while a security event or contact request
+             awaits acknowledgement (body.is-tx). Toggled by
+             /settings theme emblem. -->
         <!-- `hidden` keeps the raw SVG out of the very first paint: the UA
              stylesheet's [hidden]{display:none} applies before our style.css
              loads (in dev, Vite injects the CSS via JS a frame late), so the

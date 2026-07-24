@@ -1,5 +1,5 @@
-# Caddy edge config (alternative to deploy/nginx.conf) — automatic HTTPS via
-# Let's Encrypt/ZeroSSL, no certbot. Caddy 2.9+ (Go 1.24) negotiates the
+# Caddy edge config (alternative to deploy/nginx.conf): automatic HTTPS via
+# Let's Encrypt or ZeroSSL, no certbot. Caddy 2.9+ (Go 1.24) negotiates the
 # X25519MLKEM768 hybrid TLS group by default, so the PQ transport handshake
 # comes for free with no OpenSSL wrangling.
 #

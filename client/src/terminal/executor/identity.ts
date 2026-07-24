@@ -291,8 +291,8 @@ async function rotateSpkInternal(x: ExecutorInternals): Promise<void> {
   await x.store.putJson(`spk/${createdAt}`, record);
   await api.uploadSpk(x.token, spk.pub, spk.sig);
   spk.sec.fill(0);
-  // Old SPK secrets are kept SPK_ROTATION+RETENTION days for late
-  // handshakes, then deleted.
+  // Keep old SPK secrets for SPK_ROTATION+RETENTION days so late handshakes
+  // still resolve, then delete them.
   const cutoff = x.now() - (SPK_ROTATION_DAYS + SPK_RETENTION_DAYS) * DAY_MS;
   for (const key of await x.store.listKeys("spk/")) {
     const ts = Number(key.slice("spk/".length));
@@ -435,9 +435,9 @@ function agoPhrase(seconds: number): string {
   return seconds < 60 ? "moments ago" : `${formatDuration(seconds)} ago`;
 }
 
-/** /sessions: list this account's live sessions on this server. Sessions are
- * anonymous (no device label is stored), so each is shown only by when it
- * started and how recently it was active, with the current one marked. */
+/** /sessions: list this account's live sessions on this server. Sessions stay
+ * anonymous, since the server stores no device label, so each line shows only
+ * when it started and how recently it was active, marking the current one. */
 export async function doSessions(x: ExecutorInternals): Promise<void> {
   if (x.token === null) {
     x.renderer.error("E201");

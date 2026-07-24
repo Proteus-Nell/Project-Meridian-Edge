@@ -4,12 +4,12 @@ JSON test vectors validating the client's `@noble/post-quantum` primitives
 against an independent implementation (pyca `cryptography` / OpenSSL, which
 stands in for liboqs).
 
-- `ml-kem-768.json` — FIPS 203 seeds (d‖z), public keys, ciphertexts, shared
-  secrets: noble must reproduce the keypair from the seed and decapsulate to
+- `ml-kem-768.json`: FIPS 203 seeds (d‖z), public keys, ciphertexts, shared
+  secrets. noble must reproduce the keypair from the seed and decapsulate to
   the same secret.
-- `ml-dsa-65.json` — FIPS 204 seeds (ξ), public keys, messages, signatures:
+- `ml-dsa-65.json`: FIPS 204 seeds (ξ), public keys, messages, signatures.
   noble must reproduce the keypair and verify the signatures.
 
-Regenerate with `server/.venv/Scripts/python scripts/gen_vectors.py`;
-consumed by `client/tests/vectors.test.ts`. Committed so client CI needs no
-Python.
+Regenerate them with `server/.venv/Scripts/python scripts/gen_vectors.py`;
+`client/tests/vectors.test.ts` consumes them. They are committed so client CI
+needs no Python.

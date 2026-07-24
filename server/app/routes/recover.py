@@ -101,8 +101,8 @@ def recover(
         )
     )
 
-    # Constant-work verification: every real row is checked even after a
-    # match, then dummy rows pad the count up to RECOVERY_CODE_COUNT.
+    # Constant-work verification: check every real row even after a match, then
+    # pad the count up to RECOVERY_CODE_COUNT with dummy rows.
     matched: RecoveryCode | None = None
     for row in rows:
         if verify_recovery_code(row.code_hash, payload.code) and matched is None:

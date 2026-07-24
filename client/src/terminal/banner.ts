@@ -5,7 +5,7 @@
 // the opening pitch.
 //
 // Pure and total: returns ANSI-styled lines that main.ts writes into the
-// transcript. Widths are kept within BANNER_MAX_COLUMNS so the text does not
+// transcript. Every line stays within BANNER_MAX_COLUMNS so the text does not
 // wrap awkwardly on a narrow phone viewport.
 
 /** Visible-width budget for every banner line, chosen so the block survives a

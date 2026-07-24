@@ -1,8 +1,8 @@
 :root {
-  /* The five scheme slots (accent / background / panel / text / muted) — the
-     defaults are the 'dark' scheme; chrome.applyScheme overwrites these from
-     the persisted prefs (scheme preset + per-slot HEX overrides). Everything
-     below derives from these five, so /settings scheme + /settings color
+  /* The five scheme slots (accent, background, panel, text, muted). These
+     defaults are the 'dark' scheme; chrome.applyScheme overwrites them from the
+     persisted prefs (scheme preset plus per-slot HEX overrides). Everything
+     below derives from these five, so /settings scheme and /settings color
      restyle the whole app. */
   --accent: #58a6ff;
   --bg: #0d1117;
@@ -95,8 +95,8 @@ body:not(.theme-ready) #app {
    States (classes on <body>, wired by chrome.setEmblemState):
    - idle:        animation paused, frozen face-on
    - .is-playing: full rotation every 9s (session live)
-   - .is-tx:      3.2s rotation + pulse ring (unacknowledged security event or
-                  contact request — an unread notification) */
+   - .is-tx:      3.2s rotation plus pulse ring (an unread notification: an
+                  unacknowledged security event or contact request) */
 .medallion {
   display: none;
   position: absolute;
@@ -210,8 +210,8 @@ body.th-scanlines #transcript-pane::after {
 }
 
 /* Vignette: darkens the edges of the whole app; the footer sits above it.
-   Black-based on purpose — a photographic vignette reads correctly on both
-   dark and light schemes. */
+   Black-based on purpose: a photographic vignette reads correctly on both dark
+   and light schemes. */
 #vignette {
   display: none;
   position: absolute;
@@ -417,10 +417,10 @@ body.th-dock #divider {
 }
 
 /* Autosuggest: floats directly above the command line, tall enough to overlap
-   the bottom of the transcript pane; hidden unless .open. None of its ancestors
-   (#footer, #app) establish a stacking context, so this z-index is compared
-   directly against xterm's own layers at the document root — @xterm/xterm
-   6.0.0's delivery-tick decorations (.xterm-decoration) sit at z-index: 6 (see
+   the bottom of the transcript pane; hidden unless .open. Neither ancestor
+   (#footer, #app) establishes a stacking context, so the browser compares this
+   z-index directly against xterm's own layers at the document root. @xterm/xterm
+   6.0.0 puts its delivery-tick decorations (.xterm-decoration) at z-index 6 (see
    node_modules/@xterm/xterm/css/xterm.css), which would otherwise paint through
    the dropdown wherever a ticked line falls behind it. 20 clears every z-index
    xterm.js ships (max observed: 11, its own scrollbar), with headroom to spare. */
@@ -476,9 +476,9 @@ body.th-dock #divider {
   text-overflow: ellipsis;
 }
 
-/* Right-edge delivery ticks — xterm decorations pinned to a message row. These
-   classes only colour the glyph (semantic green/red on every scheme); xterm
-   owns the element's position/size. */
+/* Right-edge delivery ticks: xterm decorations pinned to a message row. These
+   classes colour the glyph only (semantic green or red on every scheme); xterm
+   owns the element's position and size. */
 .tick {
   color: #3fb950;
   font-weight: 700;

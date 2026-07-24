@@ -1,8 +1,8 @@
 // /settings subcommands. Two storage classes, deliberately distinct: the
-// rotation prompt and trust mode live ENCRYPTED (they describe security
-// posture), while display preferences (mask, theme, scheme, emblem, colors)
-// are stored unencrypted so they can apply before the store is unlocked,
-// e.g. to the very first passphrase prompt.
+// rotation prompt and trust mode live ENCRYPTED, because they describe security
+// posture. Display preferences (mask, theme, scheme, emblem, colors) live
+// unencrypted so they can apply before anyone unlocks the store, for example to
+// the very first passphrase prompt.
 
 import type { ThemePrefs } from "../../crypto/store";
 import { resolveScheme } from "../theme";
@@ -82,7 +82,7 @@ export async function doSettingsTrust(
 }
 
 /** `/settings theme <element|all> <on|off>`: toggle an atmosphere layer.
- * Purely cosmetic; works while locked for the same reason it is stored
+ * Purely cosmetic; works while locked for the same reason it lives
  * unencrypted. */
 export async function doSettingsTheme(
   x: ExecutorInternals,

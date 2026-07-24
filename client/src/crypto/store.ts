@@ -2,9 +2,9 @@
 //
 // Everything in IndexedDB is ciphertext: a random 256-bit DEK encrypts every
 // record with XChaCha20-Poly1305 (random 24-byte nonce per write, record key
-// as associated data); the DEK itself is wrapped by a KEK derived from the
-// unlock passphrase via Argon2id. Changing the passphrase re-wraps only the
-// DEK. Locking zeroizes the DEK - best effort, as JS allows.
+// as associated data). A KEK, which Argon2id derives from the unlock
+// passphrase, then wraps the DEK. Changing the passphrase re-wraps only the
+// DEK. Locking zeroizes the DEK, best effort, as JS allows.
 
 import { argon2id } from "@noble/hashes/argon2.js";
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";

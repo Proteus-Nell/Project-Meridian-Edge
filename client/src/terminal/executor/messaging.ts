@@ -65,7 +65,7 @@ export async function sendActiveMessage(
     sent = await sendFirstMessage(x, target, text);
   } catch (err) {
     // A thrown send (e.g. network) still marks the echoed line failed; the
-    // specific reason is logged by the run() error path.
+    // run() error path logs the specific reason.
     x.chrome.rejectSent();
     throw err;
   }
@@ -342,7 +342,7 @@ export async function processEnvelope(
     return "ack";
   }
 
-  // Spec 3.7: the consumed OPK secret is deleted immediately.
+  // Spec 3.7: delete the consumed OPK secret immediately.
   if (result.consumedOpkStoreKey !== null) {
     await x.store.deleteKey(result.consumedOpkStoreKey);
   }
@@ -438,7 +438,7 @@ export async function processEnvelope(
  * identity, try each established session; the header AEAD authenticates the
  * match and a non-matching session fails without mutating its state.
  * Delivery is idempotent: a replay of an already-consumed message decrypts to
- * nothing and is dropped. */
+ * nothing, so we drop it. */
 export async function processRatchetMessage(
   x: ExecutorInternals,
   envelopeBytes: Uint8Array,

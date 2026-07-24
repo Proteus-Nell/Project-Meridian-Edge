@@ -23,8 +23,8 @@ import { KeyStore } from "../crypto/store";
 import type { ThemePrefs } from "../crypto/store";
 
 /** Push a resolved scheme's five slots into the CSS custom properties every
- * other rule derives from. Terminal (xterm) themes are applied separately by
- * chrome, which owns the terminal instances. */
+ * other rule derives from. Chrome applies the terminal (xterm) themes
+ * separately, since it owns the terminal instances. */
 export function applySchemeVars(scheme: ResolvedScheme): void {
   const root = document.documentElement.style;
   root.setProperty("--accent", scheme.accent);
