@@ -13,7 +13,7 @@ import base64
 import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,17 +21,42 @@ from ..auth import AuthContext, require_auth
 from ..constants import OPK_UNCONSUMED_CAP
 from ..deps import get_session
 from ..models import OneTimePrekey, OpkBatch, SignedPrekey
+from ..rate_limit import TokenBucketLimiter
 from ..schemas import KeysStatusResponse, OpkUploadRequest, SpkUploadRequest
+from ..security_log import record_security_event
 
 router = APIRouter(prefix="/v1/keys")
+
+
+def _client_ip(request: Request) -> str:
+    client = request.client
+    return client.host if client is not None else "unknown"
+
+
+def _check_upload_budget(request: Request, uid: str) -> None:
+    """Bound prekey uploads per account.
+
+    Both upload endpoints append rows, and the signed-prekey table has no other
+    cap, so without this an authenticated client could grow it without limit.
+    Keyed on the UID (the account doing the writing); the log records only the
+    endpoint and source IP, never the key the limiter buckets on.
+    """
+    limiter: TokenBucketLimiter = request.app.state.keys_upload_limiter
+    if not limiter.allow(uid):
+        record_security_event(
+            "rate_limit_exceeded", endpoint=request.url.path, client_ip=_client_ip(request)
+        )
+        raise HTTPException(status_code=429, detail="rate_limited")
 
 
 @router.post("/spk", status_code=204)
 def upload_spk(
     payload: SpkUploadRequest,
+    request: Request,
     session: Annotated[Session, Depends(get_session)],
     ctx: Annotated[AuthContext, Depends(require_auth)],
 ) -> None:
+    _check_upload_budget(request, ctx.user.uid)
     session.add(
         SignedPrekey(
             user_id=ctx.user.id,
@@ -46,9 +71,11 @@ def upload_spk(
 @router.post("/opks", status_code=204)
 def upload_opks(
     payload: OpkUploadRequest,
+    request: Request,
     session: Annotated[Session, Depends(get_session)],
     ctx: Annotated[AuthContext, Depends(require_auth)],
 ) -> None:
+    _check_upload_budget(request, ctx.user.uid)
     unconsumed = session.execute(
         select(func.count())
         .select_from(OneTimePrekey)

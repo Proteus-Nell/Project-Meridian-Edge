@@ -17,12 +17,18 @@ consequences:
 - Every restart resets the buckets to full, so an attacker gets a fresh budget
   each time the process bounces.
 
-**2. Behind the proxy, the app does not see the real client IP.** The per-IP
-limiters (register, login-challenge, recover) and the security log key on
-`request.client.host`, which is the **socket peer**. With nginx or Caddy in
-front, that peer is the proxy, not the browser - so unless the app is explicitly
-told to trust forwarded headers (see the last section), every request appears to
-come from one address and the per-IP limits collapse into a single shared bucket.
+**2. The app must be told which proxy to trust before it sees real client IPs.**
+The per-IP limiters (register, login-challenge, recover) and the security log key
+on `request.client.host`, which is the **socket peer** - with nginx or Caddy in
+front, that is the proxy, not the browser. uvicorn reads `X-Forwarded-For` only
+from peers listed in `FORWARDED_ALLOW_IPS`, which defaults to `127.0.0.1`.
+
+The shipped compose files set that variable to the proxy's network, so this is
+handled on Routes A and B; Route C is unaffected because uvicorn binds to
+localhost and Caddy connects from `127.0.0.1`, already the default. If you build
+your own topology, set it yourself - otherwise every request looks like it came
+from one address and the per-IP limits collapse into a single shared bucket. See
+the last section for the exact knob.
 
 The edge is the right place to fix both: it is one durable component that sees
 the genuine client address before the request is multiplexed to any worker.
@@ -41,10 +47,12 @@ there is no proxy.
 | `POST /v1/recover` | client IP | 5 / hour |
 | `GET /v1/bundles/{uid}` | UID | 30 / min |
 | `POST /v1/messages` | UID | 60 / min |
+| `POST /v1/keys/spk` and `POST /v1/keys/opks` (shared bucket) | UID | 10 / hour |
 
-`login/verify`, `logout`, `logout/all`, `sessions`, `keys/*`, and `messages/ack`
-have no dedicated app limiter - they either require a valid single-use nonce or an
-authenticated session first. A blanket edge limit on `/v1/` covers them.
+`login/verify`, `logout`, `logout/all`, `sessions`, `keys/status`, and
+`messages/ack` have no dedicated app limiter - they either require a valid
+single-use nonce or an authenticated session first, and none of them writes an
+unbounded row. A blanket edge limit on `/v1/` covers them.
 
 ## nginx (Route A)
 
@@ -148,22 +156,34 @@ options:
 For the single-box Route C, option 1 (a custom Caddy build) is the most
 self-contained.
 
-## Optional: let the app's own limits see the real client IP
+## Trusting the proxy: `FORWARDED_ALLOW_IPS`
 
-If you want the in-app per-IP limits and the security log to reflect the genuine
-client rather than the proxy - useful even with an edge limiter, for attribution
-in `meridian_edge.security` log lines - run uvicorn so it trusts the proxy's
-`X-Forwarded-For` (nginx already sets it; Caddy sets it by default):
+This is what makes the in-app per-IP limits and the `meridian_edge.security` log
+lines refer to the real client rather than the proxy. It is already wired up on
+the shipped routes; this section is for changing it or building your own
+topology.
 
-```
-uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 \
-        --proxy-headers --forwarded-allow-ips="<proxy container IP/CIDR>"
-```
+The server image runs uvicorn with `--proxy-headers`, so it reads
+`X-Forwarded-For` (nginx sets it in `nginx.conf`; Caddy sets it by default). It
+honours that header **only** from peers listed in `FORWARDED_ALLOW_IPS`, which
+uvicorn reads straight from the environment and defaults to `127.0.0.1`:
 
-Set `--forwarded-allow-ips` to the **proxy's** address only - never `*`, which
-would let any client spoof its IP by sending the header directly. This is a
-deploy-time change to the run command, not a code change, and it is optional: the
-edge limiter above does not depend on it.
+| Route | Trusted peers | Set where |
+|---|---|---|
+| A (nginx) and B (Caddy), containers | the Compose network's private ranges | `FORWARDED_ALLOW_IPS` in the compose file, overridable with `MERIDIAN_EDGE_TRUSTED_PROXY_IPS` in `.env` |
+| C (single box) | `127.0.0.1` | nothing to do - uvicorn binds to localhost and Caddy connects from there, which is already the default |
+
+Narrow it to your actual subnet if you know it; both exact addresses and CIDR
+ranges are accepted, comma-separated.
+
+**Never set it to `*`.** That trusts every peer, so any client can send its own
+`X-Forwarded-For` and be believed - which would let one attacker spend an
+unlimited number of per-IP budgets and write false addresses into the security
+log. The production boot guard refuses to start with `FORWARDED_ALLOW_IPS="*"`
+rather than let that ship silently.
+
+To confirm the wiring end to end, make a request that trips a limit from a known
+address and check the logged `client_ip` is the browser's, not the proxy's.
 
 ## Verifying
 

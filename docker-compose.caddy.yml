@@ -40,6 +40,13 @@ services:
       MERIDIAN_EDGE_ENV: production
       MERIDIAN_EDGE_DATABASE_URL: postgresql+psycopg://meridian_edge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db/meridian_edge
       MERIDIAN_EDGE_WS_ORIGINS: ${MERIDIAN_EDGE_WS_ORIGINS:?set MERIDIAN_EDGE_WS_ORIGINS in .env, e.g. https://chat.example.com}
+      # Peers trusted to set X-Forwarded-For, so the server sees real client
+      # addresses instead of Caddy's. Defaults to the private ranges a Compose
+      # network draws from; this service publishes no ports, so only Caddy can
+      # reach it. Narrow it to your actual subnet if you prefer. Never "*" -
+      # that would let any client forge its address (the boot guard refuses it
+      # in production).
+      FORWARDED_ALLOW_IPS: ${MERIDIAN_EDGE_TRUSTED_PROXY_IPS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     read_only: true
     tmpfs:
       - /tmp

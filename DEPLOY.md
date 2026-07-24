@@ -178,6 +178,7 @@ The server **refuses to boot** in production if any of these is wrong
 | `MERIDIAN_EDGE_ALLOWED_ORIGINS` | yes | exact `Origin` allowlist, comma-separated (e.g. `https://chat.example.com`) - **must not be empty**. Governs both the WebSocket upgrade **and** `/v1/login/challenge` + `/v1/login/verify`. `MERIDIAN_EDGE_WS_ORIGINS` is the former name and still works; set either one |
 | `MERIDIAN_EDGE_DATABASE_URL` | yes | Postgres DSN - a `sqlite://` URL is **rejected** |
 | `MERIDIAN_EDGE_DEV` | must be unset / not `1` | `=1` enables `/docs`; refused alongside production |
+| `FORWARDED_ALLOW_IPS` | must not be `*` | peers trusted to set `X-Forwarded-For`, so per-IP limits and the security log see real clients. Compose sets it to the proxy's network; `*` is **refused** because it would let any client forge its address. See [deploy/rate-limiting.md](deploy/rate-limiting.md) |
 
 The gate also refuses to boot if the live Argon2id parameters have drifted from
 the expected Argon2id constants (m = 64 MiB, t = 3, p = 1). If the server container exits
@@ -194,6 +195,7 @@ server vars above from them and **refuses to start** if one is missing.
 | `POSTGRES_PASSWORD` | db + server DSN | any long random secret |
 | `MERIDIAN_EDGE_WS_ORIGINS` | server | your exact public origin(s); gates the WebSocket upgrade and login (newer alias: `MERIDIAN_EDGE_ALLOWED_ORIGINS`) |
 | `TLS_CERT_DIR` | proxy (Route A) | host dir holding `fullchain.pem` + `privkey.pem`; unused for Caddy |
+| `MERIDIAN_EDGE_TRUSTED_PROXY_IPS` | server | optional. Narrows which peers may set `X-Forwarded-For`; defaults to the private ranges a Compose network draws from |
 | `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Route B) | public hostname + ACME contact |
 
 Never commit `.env`, `./tls/`, or any private key - all are git-ignored.
@@ -790,7 +792,8 @@ circle comfortably.
 | No CORS (no wildcard, no credentials) | server installs no CORS middleware |
 | WS origin allowlist, auth-before-subscribe, frame cap, idle-kill, rate cap | `server/app/ws.py` + the `Origin` allowlist |
 | Login origin allowlist (challenge and verify) and nonce origin binding | `server/app/routes/login.py` + the `Origin` allowlist |
-| Rate limits (register / login / bundle / message / recover) | `server/app/rate_limit.py` (app, in-memory); edge limits in [deploy/rate-limiting.md](deploy/rate-limiting.md) |
+| Rate limits (register / login / bundle / message / recover / prekey upload) | `server/app/rate_limit.py` (app, in-memory); edge limits in [deploy/rate-limiting.md](deploy/rate-limiting.md) |
+| Real client IP behind the proxy (per-IP limits, security log) | uvicorn `--proxy-headers` + `FORWARDED_ALLOW_IPS` (compose); `*` refused at boot |
 | Non-root, read-only fs, no shell, secrets via env | Dockerfiles + compose `read_only` / `tmpfs` |
 | Dev config refused at boot | `_assert_production_safe` |
 | Docs / openapi disabled in prod | `MERIDIAN_EDGE_DEV` unset -> `docs_url=None` |

@@ -84,6 +84,33 @@ def test_allowed_origins_env_var_takes_precedence(monkeypatch: pytest.MonkeyPatc
     assert app.state.allowed_origins == ["https://new.example"]
 
 
+def test_refuses_a_wildcard_forwarded_allow_ips(
+    monkeypatch: pytest.MonkeyPatch, real_hasher: None
+) -> None:
+    # "*" trusts every peer to set X-Forwarded-For, so any client could name its
+    # own address and walk past the per-IP limits.
+    monkeypatch.setenv("MERIDIAN_EDGE_ENV", "production")
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "*")
+    with pytest.raises(RuntimeError, match="FORWARDED_ALLOW_IPS"):
+        _assert_production_safe(
+            dev=False,
+            allowed_origins=["https://meridian-edge.example"],
+            database_url="postgresql://user:pass@db/meridian_edge",
+        )
+
+
+def test_accepts_a_named_proxy_network(
+    monkeypatch: pytest.MonkeyPatch, real_hasher: None
+) -> None:
+    monkeypatch.setenv("MERIDIAN_EDGE_ENV", "production")
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "172.16.0.0/12")
+    _assert_production_safe(
+        dev=False,
+        allowed_origins=["https://meridian-edge.example"],
+        database_url="postgresql://user:pass@db/meridian_edge",
+    )
+
+
 def test_refuses_when_database_is_sqlite(
     monkeypatch: pytest.MonkeyPatch, real_hasher: None
 ) -> None:

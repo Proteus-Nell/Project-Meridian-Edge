@@ -58,6 +58,14 @@ BUNDLE_FETCH_RATE_WINDOW_SECONDS = 60.0
 MESSAGE_SEND_RATE_CAPACITY = 60
 MESSAGE_SEND_RATE_WINDOW_SECONDS = 60.0
 
+# Prekey uploads, 10/hour/UID. These endpoints append rows, and the signed-prekey
+# table has no other bound, so an authenticated client could otherwise grow it
+# without limit. Legitimate traffic is far below this: one signed prekey plus one
+# one-time-prekey batch at registration, a weekly signed-prekey rotation, and a
+# refill only when the pool runs low.
+KEYS_UPLOAD_RATE_CAPACITY = 10
+KEYS_UPLOAD_RATE_WINDOW_SECONDS = 3600.0
+
 # Login nonces: single-use, 60 s expiry, origin-bound.
 NONCE_BYTES = 32
 NONCE_TTL_SECONDS = 60.0

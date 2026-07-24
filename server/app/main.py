@@ -34,6 +34,8 @@ from .constants import (
     ARGON2ID_PARALLELISM,
     BUNDLE_FETCH_RATE_CAPACITY,
     BUNDLE_FETCH_RATE_WINDOW_SECONDS,
+    KEYS_UPLOAD_RATE_CAPACITY,
+    KEYS_UPLOAD_RATE_WINDOW_SECONDS,
     LOGIN_CHALLENGE_RATE_CAPACITY,
     LOGIN_CHALLENGE_RATE_WINDOW_SECONDS,
     MESSAGE_SEND_RATE_CAPACITY,
@@ -63,10 +65,10 @@ from .ws import router as ws_router
 def _assert_production_safe(
     *, dev: bool, allowed_origins: list[str] | None, database_url: str
 ) -> None:
-    """Refuse to boot with a dev-shaped config in production (
-    checklist: "DEBUG=0 asserted at startup"). Only runs when MERIDIAN_EDGE_ENV=
-    production is explicitly set - local dev and the test suite never set it,
-    so neither ever exercises this path by accident."""
+    """Refuse to boot with a dev-shaped or unsafe config in production.
+
+    Only runs when MERIDIAN_EDGE_ENV=production is explicitly set - local dev and
+    the test suite never set it, so neither exercises this path by accident."""
     if os.environ.get("MERIDIAN_EDGE_ENV") != "production":
         return
     problems: list[str] = []
@@ -79,6 +81,14 @@ def _assert_production_safe(
         )
     if database_url.startswith("sqlite"):
         problems.append("MERIDIAN_EDGE_DATABASE_URL is a SQLite dev artifact - never deploy it")
+    if os.environ.get("FORWARDED_ALLOW_IPS", "").strip() == "*":
+        # Trusting every peer to set X-Forwarded-For lets any client name its own
+        # address, which defeats the per-IP rate limits and poisons the security
+        # log. Name the proxy's address or network instead.
+        problems.append(
+            'FORWARDED_ALLOW_IPS is "*" - any client could then forge its own address '
+            "and bypass the per-IP rate limits; set the proxy's address or network"
+        )
     time_cost, memory_cost, parallelism = security.hasher_params()
     if (
         time_cost != ARGON2ID_ITERATIONS
@@ -154,6 +164,9 @@ def create_app(
     )
     app.state.recover_limiter = TokenBucketLimiter(
         RECOVER_RATE_CAPACITY, RECOVER_RATE_WINDOW_SECONDS
+    )
+    app.state.keys_upload_limiter = TokenBucketLimiter(
+        KEYS_UPLOAD_RATE_CAPACITY, KEYS_UPLOAD_RATE_WINDOW_SECONDS
     )
 
     install_security_headers(app)
