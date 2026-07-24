@@ -1,4 +1,4 @@
-// KEM double-ratchet (CLAUDE.md §4, MVP §6.4). A Signal-Double-Ratchet analog
+// KEM double-ratchet. A Signal-Double-Ratchet analog
 // with every asymmetric step replaced by ML-KEM-768 (FIPS 203); no DH anywhere.
 //
 // Bootstrapping: the PQ-KX first message (kx.ts, envelope type KX) is a one-off
@@ -6,13 +6,13 @@
 // (envelope type MSG) and is initialised from { rk: RK0, role }. Leaving kx.ts
 // untouched keeps the audited handshake stable.
 //
-// Per-message forward secrecy (§4.1): sending/receiving symmetric chains advance
+// Per-message forward secrecy: sending/receiving symmetric chains advance
 //   MK_n     = HKDF(CK_n, KDF_INFO_CK ‖ 0x01)
 //   CK_{n+1} = HKDF(CK_n, KDF_INFO_CK ‖ 0x02)
 // and the message key is wiped immediately after use. A dumped chain key cannot
 // recover an earlier message key (HKDF is one-way).
 //
-// Post-compromise security (§4.2): on the first send of a new turn - or every
+// Post-compromise security: on the first send of a new turn - or every
 // KEM_STEP_INTERVAL messages of an unbroken turn - the sender offers a fresh
 // ML-KEM-768 public key in its (encrypted) header. The peer encapsulates to it
 // on its next send; both mix the shared secret into the root:
@@ -20,7 +20,7 @@
 // and derive fresh chains from RK_{i+1}. Continuous entropy injection heals the
 // session within one round trip after a transient leak.
 //
-// Header encryption (§4.3): the header (counters + KEM material) is encrypted
+// Header encryption: the header (counters + KEM material) is encrypted
 // under HK = HKDF(root, KDF_INFO_HDR). The header key is snapshotted per turn to
 // the root both parties provably share when the turn begins, so a KEM-accept
 // header - which itself carries the ciphertext the peer needs to derive the new
@@ -41,9 +41,9 @@ import { KDF_INFO_CK, KDF_INFO_HDR, KDF_INFO_RK } from "./constants";
 import { decodeMsgHeader, encodeMsgHeader } from "./envelope";
 import type { MsgHeader } from "./envelope";
 
-/** A KEM offer is refreshed at least this often within one unbroken turn (§4.2). */
+/** A KEM offer is refreshed at least this often within one unbroken turn. */
 export const KEM_STEP_INTERVAL = 10;
-/** Skipped-message-key cache bound per session (§4.1); beyond this we refuse. */
+/** Skipped-message-key cache bound per session; beyond this we refuse. */
 export const MAX_SKIP = 256;
 
 const NONCE_BYTES = 24;
@@ -66,14 +66,14 @@ function kdf(ikm: Uint8Array, info: Uint8Array, length: number): Uint8Array {
   return hkdf(sha512, ikm, undefined, info, length);
 }
 
-/** MK_n and CK_{n+1} from CK_n (§4.1). CK_n is wiped by the caller. */
+/** MK_n and CK_{n+1} from CK_n. CK_n is wiped by the caller. */
 function chainStep(ck: Uint8Array): { mk: Uint8Array; next: Uint8Array } {
   const mk = kdf(ck, concatBytes(CK_INFO, TAG_MK), 32);
   const next = kdf(ck, concatBytes(CK_INFO, TAG_CK), 32);
   return { mk, next };
 }
 
-/** RK_{i+1} from RK_i and a fresh KEM shared secret (§4.2). */
+/** RK_{i+1} from RK_i and a fresh KEM shared secret. */
 function rootStep(rk: Uint8Array, ss: Uint8Array): Uint8Array {
   const ikm = concatBytes(rk, ss);
   const next = kdf(ikm, RK_INFO, 64);
@@ -110,7 +110,7 @@ export interface RatchetState {
   nr: number; // messages received in the current receiving chain
   pn: number; // length of the previous sending chain (for skip accounting)
   lastAction: "send" | "recv";
-  // Header roots (§4.3).
+  // Header roots.
   hks: Uint8Array; // keys our current sending turn's headers
   hkr: Uint8Array; // keys the peer's current turn (decrypt with this)
   nhkr: Uint8Array | null; // keys the peer's next turn (set on every root roll)
@@ -119,7 +119,7 @@ export interface RatchetState {
   sendKemPk: Uint8Array | null; // the public we are offering (echoed until accepted)
   peerKemPk: Uint8Array | null; // peer's latest offer, awaiting our encapsulation
   sinceOffer: number; // sends since our last fresh offer (drives the every-N rule)
-  // Out-of-order (§4.1): skipped keys, keyed `${chainId}:${n}`, insertion-ordered.
+  // Out-of-order: skipped keys, keyed `${chainId}:${n}`, insertion-ordered.
   recvChainId: number; // increments each time a new receiving chain starts
   skipped: Map<string, Uint8Array>;
 }
@@ -250,7 +250,7 @@ export function ratchetDecrypt(state: RatchetState, body: Uint8Array): DecryptRe
   // A new turn is entered only via its KEM-accept (the first message carries the
   // ciphertext that rolls the root). A *later* message of a new turn arriving
   // before that accept cannot be advanced to - the transport delivers per-sender
-  // roughly in order, so we defer it (§4.3: cross-turn reordering unsupported
+  // roughly in order, so we defer it (: cross-turn reordering unsupported
   // under header encryption). It stays queued server-side for a re-read.
   if (usedNext && header.kemCt === null) {
     return { ok: false, reason: "decrypt-failed" };
@@ -273,7 +273,7 @@ export function ratchetDecrypt(state: RatchetState, body: Uint8Array): DecryptRe
     }
   }
 
-  // Mutate a scratch copy; commit only on full success (crash/replay safety §4.4).
+  // Mutate a scratch copy; commit only on full success (crash/replay safety ).
   const scratch = cloneRecvScratch(state);
   if (usedNext) {
     scratch.hkr.fill(0);
@@ -323,7 +323,7 @@ export function ratchetDecrypt(state: RatchetState, body: Uint8Array): DecryptRe
     return { ok: false, reason: "decrypt-failed" };
   }
 
-  // Skip forward to header.n, caching intermediate message keys (§4.1).
+  // Skip forward to header.n, caching intermediate message keys.
   if (!skipTo(scratch, header.n)) {
     return { ok: false, reason: "skip-overflow" };
   }
@@ -398,7 +398,7 @@ function commitRecvScratch(state: RatchetState, scratch: RecvScratch): void {
 }
 
 /** Cache message keys nr..target-1 of the current receiving chain, so an
- * out-of-order earlier message can still be decrypted (§4.1). Returns false if
+ * out-of-order earlier message can still be decrypted. Returns false if
  * the skip cache would exceed MAX_SKIP. */
 function skipTo(scratch: RecvScratch, target: number): boolean {
   if (scratch.ckr === null || target <= scratch.nr) {

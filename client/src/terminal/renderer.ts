@@ -1,4 +1,4 @@
-// Typed event renderer (CLAUDE.md §1.3): every output line is a typed event
+// Typed event renderer: every output line is a typed event
 // written as plain text into the transcript terminal via xterm.js `write` with
 // ANSI colors - content is never markup. User-influenced text is stripped of
 // control characters so a hostile message cannot inject terminal escape

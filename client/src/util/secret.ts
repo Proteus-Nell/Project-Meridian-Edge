@@ -4,7 +4,7 @@
 // habit of never comparing secrets with early-exit equality). JS strings are
 // immutable and cannot be zeroized; the transient byte copies made for the
 // comparison are wiped, which is the best the platform allows (documented
-// limitation, MVP_DOC.md §10).
+// limitation).
 
 export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {

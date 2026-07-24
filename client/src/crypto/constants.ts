@@ -1,4 +1,4 @@
-// Shared protocol constants (CLAUDE.md §0). Mirrored in server/app/constants.py -
+// Shared protocol constants. Mirrored in server/app/constants.py -
 // any change here must be made there in the same commit.
 
 export const PROTOCOL_VERSION = 1;
@@ -13,7 +13,7 @@ export const ARGON2ID_MEM_KIB = 65536;
 export const ARGON2ID_ITERATIONS = 3;
 export const ARGON2ID_PARALLELISM = 1;
 
-// UID: 128 bits, Crockford Base32 → 26 chars (see docs/adr/0001).
+// UID: 128 bits, Crockford Base32 → 26 chars.
 export const UID_BYTES = 16;
 export const UID_CHARS = 26;
 export const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -26,20 +26,20 @@ export const ML_DSA_65_SIG_BYTES = 3309;
 export const ML_KEM_768_PUBKEY_BYTES = 1184;
 export const ML_KEM_768_CT_BYTES = 1088;
 
-// Server payload cap (CLAUDE.md §3).
+// Server payload cap.
 export const MAX_PAYLOAD_BYTES = 65536;
 
-// Recovery codes (CLAUDE.md §2.2): 80 bits, Crockford Base32, 16 chars.
+// Recovery codes: 80 bits, Crockford Base32, 16 chars.
 export const RECOVERY_CODE_CHARS = 16;
 
-// Login nonces (CLAUDE.md §2.3).
+// Login nonces.
 export const NONCE_BYTES = 32;
 
-// Prekeys (CLAUDE.md §2.6).
+// Prekeys.
 export const OPK_BATCH_MAX = 50;
 export const OPK_LOW_WATERMARK = 20;
 export const SPK_ROTATION_DAYS = 7;
 export const SPK_RETENTION_DAYS = 7; // beyond rotation, for late handshakes
 
-// Local store auto-lock (CLAUDE.md §2.4).
+// Local store auto-lock.
 export const AUTO_LOCK_MS = 10 * 60 * 1000;

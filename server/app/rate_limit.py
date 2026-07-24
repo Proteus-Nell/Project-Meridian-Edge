@@ -1,7 +1,8 @@
-"""Per-key token bucket rate limiting (CLAUDE.md section 5).
+"""Per-key token bucket rate limiting.
 
-In-memory and single-process - sufficient for the W1 dev server. A shared
-store (or proxy-level limiting) is a W5 hardening concern.
+In-memory and single-process - sufficient for a single-process dev server. A
+shared store (or proxy-level limiting) is a production hardening concern; see
+deploy/rate-limiting.md.
 """
 
 from __future__ import annotations

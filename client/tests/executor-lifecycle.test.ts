@@ -1,4 +1,4 @@
-// Message lifecycle (CLAUDE.md §5.1-5.3): mutual disappearing timer and local
+// Message lifecycle (-5.3): mutual disappearing timer and local
 // purge. Alice is a real Executor with an injectable clock; Bob is a crypto-peer
 // that runs the handshake + ratchet directly and speaks the executor's app
 // payload ({m?, tmr}), so both the send and receive timer paths are exercised.
@@ -237,7 +237,7 @@ beforeEach(() => {
 
 const HOUR_MS = 60 * 60 * 1000;
 
-describe("mutual disappearing timer (§5.2)", () => {
+describe("mutual disappearing timer", () => {
   it("sets a timer, announces it, and propagates it to the peer", async () => {
     const alice = await bootstrapAlice();
     const bob = makeBob();
@@ -291,7 +291,7 @@ describe("mutual disappearing timer (§5.2)", () => {
     await run(alice, "ephemeral");
     expect((await storedMessages(alice)).some((m) => m.text === "ephemeral")).toBe(true);
 
-    // Advance past the deadline; the next send runs purgeExpired and sweeps it (§5.2).
+    // Advance past the deadline; the next send runs purgeExpired and sweeps it.
     alice.clock.now += HOUR_MS + 1;
     await run(alice, "trigger");
     const remaining = await storedMessages(alice);
@@ -316,7 +316,7 @@ describe("mutual disappearing timer (§5.2)", () => {
   });
 });
 
-describe("local purge (§5.3)", () => {
+describe("local purge", () => {
   it("/purge now [alias] deletes stored messages for one conversation", async () => {
     const alice = await bootstrapAlice();
     const bob = makeBob();
@@ -350,7 +350,7 @@ describe("local purge (§5.3)", () => {
   });
 });
 
-describe("/delete own messages, bilateral (§5.3a)", () => {
+describe("/delete own messages, bilateral", () => {
   // Set up Alice with a live session to bob, kept in ratchet sync (bob decodes
   // each of Alice's sends), plus one incoming message from bob so we can prove
   // it survives deletion of Alice's own messages.
@@ -496,7 +496,7 @@ describe("/delete own messages, bilateral (§5.3a)", () => {
   });
 });
 
-describe("focused chat view & /home (§1.5)", () => {
+describe("focused chat view & /home", () => {
   it("/chat switches into a focused conversation view with a header", async () => {
     const alice = await bootstrapAlice();
     const bob = makeBob();

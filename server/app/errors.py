@@ -1,4 +1,4 @@
-"""Uniform error responses (CLAUDE.md section 0): same shape everywhere,
+"""Uniform error responses: same shape everywhere,
 no stack traces, no distinction between failure causes beyond a coarse code.
 """
 

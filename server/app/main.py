@@ -63,7 +63,7 @@ from .ws import router as ws_router
 def _assert_production_safe(
     *, dev: bool, allowed_origins: list[str] | None, database_url: str
 ) -> None:
-    """Refuse to boot with a dev-shaped config in production (CLAUDE.md §5
+    """Refuse to boot with a dev-shaped config in production (
     checklist: "DEBUG=0 asserted at startup"). Only runs when MERIDIAN_EDGE_ENV=
     production is explicitly set - local dev and the test suite never set it,
     so neither ever exercises this path by accident."""
@@ -78,14 +78,14 @@ def _assert_production_safe(
             "MERIDIAN_EDGE_WS_ORIGINS) - WebSocket and login origin checking would be disabled"
         )
     if database_url.startswith("sqlite"):
-        problems.append("MERIDIAN_EDGE_DATABASE_URL is a SQLite dev artifact - never deploy it (§7.5)")
+        problems.append("MERIDIAN_EDGE_DATABASE_URL is a SQLite dev artifact - never deploy it")
     time_cost, memory_cost, parallelism = security.hasher_params()
     if (
         time_cost != ARGON2ID_ITERATIONS
         or memory_cost != ARGON2ID_MEM_KIB
         or parallelism != ARGON2ID_PARALLELISM
     ):
-        problems.append("Argon2id hasher parameters do not match the §0 constants")
+        problems.append("Argon2id hasher parameters do not match the constants")
     if problems:
         raise RuntimeError(
             "refusing to boot in production mode:\n- " + "\n- ".join(problems)
@@ -100,7 +100,7 @@ def create_app(
 ) -> FastAPI:
     """App factory. Run with: uvicorn app.main:create_app --factory --reload
 
-    API docs are off unless MERIDIAN_EDGE_DEV=1 (CLAUDE.md section 7.5). `clock` is
+    API docs are off unless MERIDIAN_EDGE_DEV=1. `clock` is
     injectable so nonce/session expiry is testable without sleeping.
     `allowed_origins` is the exact Origin allowlist governing BOTH the WebSocket
     upgrade and the login challenge/verify pair (or MERIDIAN_EDGE_ALLOWED_ORIGINS
@@ -133,7 +133,7 @@ def create_app(
     )
 
     engine = make_engine(url)
-    # W1: create_all stands in for migrations; revisit when the schema grows.
+    # create_all stands in for migrations; revisit when the schema grows.
     Base.metadata.create_all(engine)
     app.state.sessionmaker = sessionmaker(engine)
     app.state.clock = clock

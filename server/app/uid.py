@@ -1,4 +1,4 @@
-"""Server-authoritative UID generation (CLAUDE.md section 2.1).
+"""Server-authoritative UID generation.
 
 128 CSPRNG bits encoded as 26 canonical Crockford Base32 characters. The
 canonical (dash-free, uppercase) form is what gets stored; formatting is

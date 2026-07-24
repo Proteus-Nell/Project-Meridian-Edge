@@ -1,4 +1,4 @@
-"""Account recovery by one-time code (CLAUDE.md sections 2.2, 7.7).
+"""Account recovery by one-time code.
 
 A recovery code is the sole credential: whoever presents a valid unused code
 for a UID takes the identity over. Redemption is therefore a full identity

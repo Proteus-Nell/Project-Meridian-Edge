@@ -1,4 +1,4 @@
-// DOM chrome around the two terminals (CLAUDE.md §1): the footer status strip
+// DOM chrome around the two terminals: the footer status strip
 // (transient event + persistent chat context), the keyboard-navigable
 // autosuggest dropdown, the right-edge "sent" tick marks, and the toggleable
 // atmosphere layers (/settings theme). This is the only DOM-building module in
@@ -177,7 +177,7 @@ export class Chrome implements SuggestionNav {
   }
 
   /** Persistent right-hand context: `[chatting with: bob (UNVERIFIED)] [timer: 1h]`
-   * (spec §1.5). Never fades; null clears it. App-generated text only. */
+   * (spec ). Never fades; null clears it. App-generated text only. */
   setChatContext(text: string | null): void {
     this.statusContextEl.textContent = text ?? "";
   }

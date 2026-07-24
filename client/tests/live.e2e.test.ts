@@ -1,4 +1,4 @@
-// Live end-to-end against a running server (CLAUDE.md §3 DoD): Alice
+// Live end-to-end against a running server (DoD): Alice
 // registers, Bob registers and goes offline, Alice sends, Bob logs in and
 // reads, and the queue row is provably deleted after ack.
 //
@@ -285,7 +285,7 @@ describe.skipIf(process.env["MERIDIAN_EDGE_E2E"] !== "1")("live: offline first m
     expect(status.opk_count).toBe(0);
 
     // A peer that pinned Alice's old key now sees a different one - the
-    // client-side section 4.6 key-change warning trigger.
+    // client-side key-change warning trigger.
     const wire = await call<{ ik_pub: string }>(
       "GET",
       `/v1/bundles/${alice.uid}?opk=0`,

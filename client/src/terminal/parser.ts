@@ -1,4 +1,4 @@
-// Command parser (CLAUDE.md §1.2): a line starting with "/" is tokenized
+// Command parser: a line starting with "/" is tokenized
 // against a static allowlist; anything else is message text for the active
 // conversation. The parser is total - it never throws on any input - and
 // returns a typed discriminated union consumed by a switch in the executor.
@@ -33,7 +33,7 @@ export type RotationSetting =
 export const THEME_ELEMENTS = ["emblem", "scanlines", "vignette", "dock"] as const;
 export type ThemeElement = (typeof THEME_ELEMENTS)[number];
 
-/** Scope of a `/delete` of your own (outgoing) messages (§5.3):
+/** Scope of a `/delete` of your own (outgoing) messages:
  * the last one, the last N, all in the active conversation, or every one
  * across all conversations ("purge"). */
 export type DeleteScope =
@@ -145,7 +145,7 @@ export function isCommandWord(word: string): word is CommandWord {
   return Object.prototype.hasOwnProperty.call(COMMAND_USAGE, word);
 }
 
-/** Alternate spellings that execute a canonical command (§1). Resolved in
+/** Alternate spellings that execute a canonical command. Resolved in
  * parseLine before the allowlist check, so `/text bob` behaves exactly like
  * `/chat bob` (arguments and validation are identical). Kept to non-destructive
  * commands by design - never `/wipe` or `/delete`. The autosuggest dropdown
@@ -292,7 +292,7 @@ export function parseLine(line: string): ParseResult {
     return { kind: "empty" };
   }
   if (line.startsWith(" ")) {
-    // A leading space escapes a literal "/" at message start (CLAUDE.md §1.2).
+    // A leading space escapes a literal "/" at message start.
     return { kind: "message", text: line.slice(1) };
   }
   if (!line.startsWith("/")) {

@@ -1,7 +1,7 @@
 # Benchmark harness
 
-Suites B1–B5 per MVP_DOC.md §8: quantify the cost of pure-PQC crypto against
-classical baselines (ML-KEM-768 vs X25519, ML-DSA-65 vs Ed25519).
+Suites B1–B5 quantify the cost of pure-PQC crypto against classical baselines
+(ML-KEM-768 vs X25519, ML-DSA-65 vs Ed25519).
 
 All five suites are implemented — see [Status](#status) for the split across
 browser and server and the deliberate methodology limitations.
@@ -53,7 +53,7 @@ make bench-test                  # or: cd bench && python -m pytest -q
 The client harness is tested in `client/tests/bench.test.ts` (run with the
 client suite via `npm test`).
 
-## Methodology (MVP §8)
+## Methodology
 
 - Warm-up iterations discarded, then median / p95 / mean over the sample set.
 - Primitives: ≥ 1000 iterations (the default).

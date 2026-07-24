@@ -57,7 +57,7 @@ export async function doSettingsMask(
   );
 }
 
-/** `/settings trust <auto|manual>`: switch trust-on-first-use (§4.6a). */
+/** `/settings trust <auto|manual>`: switch trust-on-first-use (a). */
 export async function doSettingsTrust(
   x: ExecutorInternals,
   mode: "auto" | "manual",

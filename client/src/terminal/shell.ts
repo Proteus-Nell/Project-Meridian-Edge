@@ -1,4 +1,4 @@
-// Line discipline over xterm.js (CLAUDE.md §1.1): single-line editing with
+// Line discipline over xterm.js: single-line editing with
 // cursor movement, history (up/down), Ctrl+L clear, Ctrl+U kill-line, and Tab
 // completion. The shell drives a dedicated *input* terminal pinned at the bottom
 // of the UI; transcript output goes to a separate *output* terminal via

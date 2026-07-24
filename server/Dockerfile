@@ -1,4 +1,4 @@
-# Production server image (CLAUDE.md §5 container checklist): non-root,
+# Production server image (container checklist): non-root,
 # read-only filesystem (see docker-compose.yml's read_only + tmpfs), no shell
 # entrypoint, secrets via environment only. DEBUG=0 is enforced at boot by
 # _assert_production_safe (app/main.py), not by anything in this image.

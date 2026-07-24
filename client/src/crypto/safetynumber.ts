@@ -1,4 +1,4 @@
-// Safety numbers (CLAUDE.md §4.5, MVP_DOC.md §6.5): a human-comparable
+// Safety numbers: a human-comparable
 // fingerprint of both parties' identity keys, used for out-of-band
 // verification. This is the sole mechanism that defeats an actively
 // malicious server at handshake time (A2 in the threat model) - the UI
@@ -11,8 +11,7 @@
 // the IDENTICAL number regardless of whose terminal computes it, both the
 // key pair and its corresponding UID must be ordered by the same criterion.
 // We sort by identity-key bytes (lexicographic) and carry each UID along
-// with its own key, rather than sorting keys and UIDs independently - see
-// docs/adr/0003-safety-number-ordering.md.
+// with its own key, rather than sorting keys and UIDs independently.
 
 import { sha512 } from "@noble/hashes/sha2.js";
 import { concatBytes } from "@noble/hashes/utils.js";

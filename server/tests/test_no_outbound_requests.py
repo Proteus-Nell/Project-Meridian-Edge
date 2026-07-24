@@ -1,4 +1,4 @@
-"""A10 SSRF (CLAUDE.md §7.10): the server makes no outbound HTTP requests by
+"""A10 SSRF: the server makes no outbound HTTP requests by
 design. Assert it structurally - no HTTP client dependency reachable from
 app code at all, so there is no code path left that could construct an
 outbound URL from user input.

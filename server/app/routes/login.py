@@ -1,4 +1,4 @@
-"""Login challenge-response (CLAUDE.md section 2.3).
+"""Login challenge-response.
 
 A challenge is issued for ANY well-formed UID - existing or not - so the
 endpoint is useless as an existence oracle. All verification failures

@@ -16,12 +16,12 @@ htmlcov/
 *.egg-info/
 build/
 
-# Dev databases (SQLite artifacts must never be deployed - CLAUDE.md §7.5)
+# Dev databases (SQLite artifacts must never be deployed)
 *.db
 *.sqlite
 *.sqlite3
 
-# Generated benchmark reports (§8) - regenerate with `make bench`
+# Generated benchmark reports - regenerate with `make bench`
 bench/out/
 
 # Environment / secrets

@@ -81,7 +81,7 @@ def test_depletion_degrades_to_spk_only(client: TestClient) -> None:
     assert client.get(f"/v1/bundles/{bob.uid}", headers=auth(token_a)).json()["opk"] is not None
     depleted = client.get(f"/v1/bundles/{bob.uid}", headers=auth(token_a))
     assert depleted.status_code == 200
-    assert depleted.json()["opk"] is None  # reduced-fs, not failure (§7.4)
+    assert depleted.json()["opk"] is None  # reduced-fs, not failure
 
 
 def test_opk_query_flag_skips_consumption(client: TestClient) -> None:

@@ -5,7 +5,7 @@
 // paints the CSS defaults first and only learns the user's real scheme a few
 // milliseconds later. The synchronous web-storage API would close the gap
 // entirely, but scripts/audit.py bans it repo-wide as a token-persistence
-// guard (§2.3), and evading a security gate for a cosmetic win is not a trade
+// guard, and evading a security gate for a cosmetic win is not a trade
 // worth making. Instead:
 //
 //   1. main.ts starts the prefs read as its very first statement, so it runs

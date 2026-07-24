@@ -24,7 +24,7 @@ export type EmblemState = "idle" | "active" | "alert";
 
 /** The UI surface the executor drives, implemented by terminal/chrome.ts in
  * the browser: right-edge delivery ticks, the /clr screen wipe, the
- * persistent chat-context segment of the status strip (§1.5), the
+ * persistent chat-context segment of the status strip, the
  * toggleable atmosphere layers, and the medallion animation state. A
  * null-object default keeps the executor fully testable headless (no DOM). */
 export interface UiChrome {
@@ -75,7 +75,7 @@ export interface ExecutorInternals {
   token: string | null;
   /** Saved contacts keyed by alias. */
   contacts: Map<string, Contact>;
-  /** The conversation the terminal is focused on (§1.5). null = the home
+  /** The conversation the terminal is focused on. null = the home
    * view. Set via /chat; cleared by /home. */
   active: Contact | null;
   /** Per-contact (by uid) count of messages that arrived while their
@@ -83,7 +83,7 @@ export interface ExecutorInternals {
   unread: Map<string, number>;
   /** The screen shown before the current one, for /return. In-memory only. */
   previousView: ViewRef | null;
-  /** Trust-on-first-use mode (§4.6a, /settings trust). When true
+  /** Trust-on-first-use mode (a, /settings trust). When true
    * (default), a contact's first key is auto-pinned and auto-verified, and a
    * later key change is auto-re-pinned with a loud warning instead of
    * blocking behind /ack. */
@@ -103,7 +103,7 @@ export interface ExecutorInternals {
   lockLocal(): void;
   /** (Re)connect the WS delivery channel for the current session token. */
   connectWs(): void;
-  /** Restart the idle auto-lock countdown (§2.4). */
+  /** Restart the idle auto-lock countdown. */
   touchAutoLock(): void;
 }
 
@@ -136,7 +136,7 @@ export async function loadTrustMode(x: ExecutorInternals): Promise<void> {
 }
 
 /** Pin a contact's identity key, adopting it as verified when trust-on-first-
- * use is on (§4.6a). Returns the updated Contact; the caller persists it. */
+ * use is on (a). Returns the updated Contact; the caller persists it. */
 export function pinKey(x: ExecutorInternals, contact: Contact, ikB64: string): Contact {
   return { ...contact, ik: ikB64, verified: x.autoTrust ? true : contact.verified };
 }
@@ -153,7 +153,7 @@ export function isActiveConversation(x: ExecutorInternals, uid: string): boolean
 }
 
 /** Recompute the persistent status-strip context for the active conversation
- * (§1.5): `[chatting with: alias (verified|UNVERIFIED)] [timer: 1h]`.
+ *: `[chatting with: alias (verified|UNVERIFIED)] [timer: 1h]`.
  * Re-resolves from the contacts map so trust/timer mutations are reflected;
  * call after any state change that could alter it. */
 export function refreshChatContext(x: ExecutorInternals): void {

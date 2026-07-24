@@ -1,4 +1,4 @@
-"""Security-event logging (CLAUDE.md section 5, section 7.9 item 9).
+"""Security-event logging.
 
 The server keeps no analytics and no message metadata; this is the one place it
 records anything about traffic, and it exists for a single purpose: noticing an
@@ -10,13 +10,13 @@ and a coarse reason from a fixed vocabulary - never a UID, token, nonce,
 signature, passphrase, or any message content. Network-sourced events also carry
 the client IP, and that inclusion is a deliberate line: detecting a spike needs a
 source to attribute it to, and the peer IP is inherent to serving the request,
-whereas a UID is an account identifier the section 5 posture says to keep out of
-logs "where avoidable" - here it is avoidable, so it is omitted.
+whereas a UID is an account identifier the metadata-minimal posture keeps out of
+logs where it can, and here it can, so it is omitted.
 
 Output goes through the standard library logging system under the
 "meridian_edge.security" logger. The application installs no handler of its own,
 so events propagate to whatever the deployment already configured (uvicorn or
-gunicorn in production); retention and rotation - 30 days per section 5 - are an
+gunicorn in production); retention and rotation (target 30 days) are an
 operator concern handled there, not here. Levels: WARNING for the routine
 rejections, and a distinct ERROR for signature-verification failure so an alert
 rule can single it out.

@@ -1,4 +1,4 @@
-// The startup banner (§1): the first thing a new user reads. It leads with
+// The startup banner: the first thing a new user reads. It leads with
 // plain language and a numbered path to a working conversation, because the
 // terminal offers no buttons to discover - the only way in is knowing which
 // command to type. The cryptography is named at the end as a footnote, not as

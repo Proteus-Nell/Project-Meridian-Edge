@@ -34,7 +34,7 @@ class User(Base):
     # regenerated silently inside the registration transaction.
     uid: Mapped[str] = mapped_column(String(UID_CHARS), unique=True, index=True)
     # ML-DSA-65 verification key. Public material only - the server never
-    # stores private keys (CLAUDE.md section 0).
+    # stores private keys.
     ik_pub: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -113,7 +113,7 @@ class OneTimePrekey(Base):
 
 
 class QueuedMessage(Base):
-    """Per-recipient ciphertext queue (CLAUDE.md section 5): opaque envelope
+    """Per-recipient ciphertext queue: opaque envelope
     blobs, deleted on ack in the same transaction, 14-day TTL. The server
     never parses the envelope - it routes on the recipient column only."""
 

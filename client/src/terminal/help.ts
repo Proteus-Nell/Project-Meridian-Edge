@@ -1,4 +1,4 @@
-// Help text rendering (CLAUDE.md §1). Pure and total: returns plain lines the
+// Help text rendering. Pure and total: returns plain lines the
 // renderer prints as-is. Grouped into sections with the command names aligned
 // in a column, so `/help` reads as a tidy reference rather than a flat dump.
 // Text-only (no ANSI): the renderer sanitizes plain output, which would strip

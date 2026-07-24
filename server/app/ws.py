@@ -1,8 +1,8 @@
-"""WebSocket delivery (CLAUDE.md sections 3, 5, 7.11).
+"""WebSocket delivery.
 
 Order of operations is the security property: origin check before accept,
 authentication before the socket is attached to any queue, session-token
-rotation on every connect (§2.3). Frames over 64 KiB close the connection.
+rotation on every connect. Frames over 64 KiB close the connection.
 Ack handling matches the REST path: delete own rows only.
 """
 
@@ -41,7 +41,7 @@ WS_CLOSE_IDLE = 4408
 
 
 class _FrameBudget:
-    """Per-connection token bucket for inbound frames (§5, §7.11). Deliberately
+    """Per-connection token bucket for inbound frames. Deliberately
     not the shared TokenBucketLimiter: that keys on strings in a dict that
     outlives the connection, which would leak one entry per socket ever
     opened over the server's lifetime."""
@@ -134,7 +134,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
             await websocket.close(code=WS_CLOSE_AUTH_FAILED)
             return
         user_id = row.user_id
-        # Token rotation on every WS connect (§2.3): the presented token is
+        # Token rotation on every WS connect: the presented token is
         # retired and a fresh one is issued over the socket.
         row.revoked = True
         rotated = new_session_token()

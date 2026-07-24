@@ -1,4 +1,4 @@
-// Benchmark entry point (MVP_DOC.md §8): runs the selected suites and returns
+// Benchmark entry point: runs the selected suites and returns
 // the results plus terminal / Markdown / JSON renderings. Driven by the /bench
 // command; also importable headlessly by tests.
 

@@ -1,6 +1,6 @@
-// REST client (CLAUDE.md §0): errors are uniform - callers get a status code
+// REST client: errors are uniform - callers get a status code
 // and a generic message, never server internals. The session token lives in
-// JS memory only and is attached as a bearer header (§2.3).
+// JS memory only and is attached as a bearer header.
 
 import { toBase64 } from "../util/base64";
 
@@ -53,7 +53,7 @@ export interface RecoverResponse {
 }
 
 /** Redeem a recovery code and enroll `ikPub` as the account's new identity
- * key (§2.2). The server destroys every artifact of the old identity. */
+ * key. The server destroys every artifact of the old identity. */
 export function recover(uid: string, code: string, ikPub: Uint8Array): Promise<RecoverResponse> {
   return requestJson<RecoverResponse>("POST", "/v1/recover", {
     uid,
@@ -154,7 +154,7 @@ export interface WireBundle {
 }
 
 /** consumeOpk=false is the identity-binding path: it must never drain the
- * target's one-time prekeys (ADR 0002). */
+ * target's one-time prekeys. */
 export function fetchBundle(token: string, uid: string, consumeOpk = true): Promise<WireBundle> {
   const suffix = consumeOpk ? "" : "?opk=0";
   return requestJson<WireBundle>("GET", `/v1/bundles/${uid}${suffix}`, undefined, token);

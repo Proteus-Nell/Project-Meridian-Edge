@@ -1,7 +1,7 @@
-"""Prekey upload and status (CLAUDE.md section 2.6).
+"""Prekey upload and status.
 
 The server stores public halves only and treats them as opaque sized blobs;
-signature verification is the *fetching client's* job (section 3.1), so a
+signature verification is the *fetching client's* job, so a
 malicious server gains nothing by skipping it. Per-OPK leaf hashes are
 retained so one OPK remains verifiable against the batch root signature
 after its siblings are consumed.

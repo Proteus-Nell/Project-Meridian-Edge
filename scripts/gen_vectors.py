@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate cross-implementation test vectors (CLAUDE.md section 3 DoD).
+"""Generate cross-implementation test vectors (DoD).
 
 Produced with pyca/cryptography (OpenSSL) as the implementation independent
 of the client's @noble/post-quantum; consumed by client/tests/vectors.test.ts
-(see docs/adr/0002 for why pyca stands in for liboqs).
+(pyca cryptography stands in for liboqs as the reference implementation).
 
 Run with the server venv:  server/.venv/Scripts/python scripts/gen_vectors.py
 """

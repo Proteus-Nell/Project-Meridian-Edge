@@ -1,4 +1,4 @@
-// Benchmark report formatting (MVP_DOC.md §8): turns suite results into aligned
+// Benchmark report formatting: turns suite results into aligned
 // monospace tables for the terminal and Markdown tables for the report file,
 // plus a JSON blob. Pure - no timing, no I/O.
 
@@ -118,7 +118,7 @@ export function renderMarkdown(results: readonly SuiteResult[], generatedAt: str
     "",
     `Generated: ${generatedAt}`,
     "",
-    "PQC vs classical baselines (MVP_DOC.md §8). Latency figures are for these",
+    "PQC vs classical baselines. Latency figures are for these",
     "implementations in this environment, not the algorithms in the abstract.",
   ];
   for (const result of results) {

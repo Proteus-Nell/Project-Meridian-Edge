@@ -1,4 +1,4 @@
-// /bench (§8): run the PQC-vs-classical benchmark suites in the browser.
+// /bench: run the PQC-vs-classical benchmark suites in the browser.
 // The whole bench module, including its classical baseline primitives, is
 // dynamically imported so it only loads on demand and never enters the main
 // bundle (keeps the B5 size delta honest).

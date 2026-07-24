@@ -1,4 +1,4 @@
-# Meridian Edge benchmark entry point (MVP_DOC.md §8).
+# Meridian Edge benchmark entry point.
 #
 # The server-side suites (B1/B2 latency + B5 footprint) run here; the browser
 # suites (B1-B4) run interactively via `/bench` in the client terminal (they

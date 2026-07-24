@@ -1,9 +1,9 @@
-// Benchmark timing core (MVP_DOC.md §8). Kept dependency-free and pure where it
+// Benchmark timing core. Kept dependency-free and pure where it
 // matters: summarize() is a total function over a sample array, unit-tested
 // against known inputs; timeit() is the only impure part (performance.now + the
 // work under test).
 //
-// Methodology (MVP §8): a warm-up run is discarded, then `iters` samples are
+// Methodology: a warm-up run is discarded, then `iters` samples are
 // collected and reported as median / p95 / mean. Fast primitives (X25519,
 // Ed25519 at tens of microseconds) sit near the browser's clamped
 // performance.now() resolution, so each sample times a `batch` of calls and
@@ -64,7 +64,7 @@ const yieldToEventLoop = (): Promise<void> =>
     setTimeout(resolve, 0);
   });
 
-/** Time `fn` per the §8 methodology and return summary statistics. */
+/** Time `fn` per the methodology and return summary statistics. */
 export async function timeit(
   label: string,
   fn: () => void,

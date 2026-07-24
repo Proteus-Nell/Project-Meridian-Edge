@@ -1,5 +1,5 @@
 // B5 (footprint) - frontend bundle-size delta attributable to the PQC libraries
-// (MVP_DOC.md §8). Bundles the PQC primitives (@noble/post-quantum) and, for
+//. Bundles the PQC primitives (@noble/post-quantum) and, for
 // context, the classical baseline (@noble/curves) each on their own, minified
 // the same way the production build does (esbuild), and reports raw + gzipped
 // size. The PQC row IS the delta a pure-PQC client pays over a classical one.

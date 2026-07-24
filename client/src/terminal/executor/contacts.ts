@@ -1,5 +1,5 @@
 // Contact management: /add (which doubles as accepting a held contact
-// request, §7.4) and the /contacts listing. Aliases are local-only; the
+// request) and the /contacts listing. Aliases are local-only; the
 // server never learns them.
 
 import { formatUid } from "../parser";
@@ -44,7 +44,7 @@ export async function doAdd(
 
   const pending = await x.store.getJson<PendingRequest>(`pending/${uid}`);
   if (pending !== null) {
-    // Accepting a held first-contact message (§7.4): promote its session
+    // Accepting a held first-contact message: promote its session
     // and show the message that was queued behind the request line.
     await x.store.putJson(`session/${uid}`, pending.session);
     await recordMessage(x, uid, "in", pending.text, pending.receivedAt, pending.mid ?? null);
@@ -109,7 +109,7 @@ export async function doContacts(x: ExecutorInternals): Promise<void> {
  * session, so a later message from them arrives as a fresh contact request -
  * and drops any held request and unread mark. Message history is KEPT unless
  * `purge` is given, which also deletes msg/<uid> (irreversible; browser
- * deletion is not forensic erasure, §5.4). `all` clears every contact and
+ * deletion is not forensic erasure). `all` clears every contact and
  * confirms first. Nothing is signalled to the peer; removal is purely local. */
 export async function doRemove(
   x: ExecutorInternals,

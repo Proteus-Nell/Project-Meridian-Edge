@@ -1,6 +1,5 @@
-"""The API surface itself is a security control: no enumeration oracle
-(CLAUDE.md section 2.1), no docs in prod (7.5), uniform 404s, headers on
-every response (section 5).
+"""The API surface itself is a security control: no enumeration oracle, no API
+docs in production, uniform 404s, and security headers on every response.
 """
 
 from __future__ import annotations
@@ -71,7 +70,7 @@ def test_security_headers_on_success_and_error(client: TestClient) -> None:
 
 
 def test_no_cors_headers_ever_returned(client: TestClient) -> None:
-    # No CORS middleware is installed at all (CLAUDE.md section 5 checklist:
+    # No CORS middleware is installed at all (checklist:
     # "exact origin only, no wildcard, credentials disabled"). The strongest
     # version of that is simply never answering the CORS handshake - a cross-
     # origin page's fetch() gets no Access-Control-Allow-* headers to read,

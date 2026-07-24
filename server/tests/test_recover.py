@@ -1,4 +1,4 @@
-"""Recovery-code redemption (CLAUDE.md sections 2.2, 7.7).
+"""Recovery-code redemption.
 
 Covers the identity takeover (new key in, old key dead), the scorched-earth
 cleanup (prekeys, sessions, queue), full code-set reissue, anti-enumeration

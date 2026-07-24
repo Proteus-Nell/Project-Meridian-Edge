@@ -1,8 +1,8 @@
-// Message lifecycle (§5.1-5.3a): the mutual disappearing timer, the
+// Message lifecycle (-5.3a): the mutual disappearing timer, the
 // local retention cap, immediate local purge, and cooperative two-sided
 // deletion of your own messages. Deletion is cooperative, not forensic: it
 // relies on the peer's client honoring the request, and browser deletion is
-// not forensic erasure (§5.4, §7.12).
+// not forensic erasure.
 
 import { findContactByUid, isActiveConversation, refreshChatContext, resolveContact } from "./context";
 import type { ExecutorInternals } from "./context";
@@ -16,7 +16,7 @@ import { renderActiveConversation } from "./views";
 
 /** Adopt a mutual-timer value the peer carried in its payload (last-writer-
  * wins) and announce the change inline, mirroring the sender's own line
- * (§5.2). */
+ *. */
 export async function applyIncomingTimer(
   x: ExecutorInternals,
   uid: string,
@@ -39,7 +39,7 @@ export async function applyIncomingTimer(
 }
 
 /** Delete at-rest messages past their mutual-timer deadline or the local
- * retention cap, whichever bites first (§5.2-5.3). Best-effort, on
+ * retention cap, whichever bites first (-5.3). Best-effort, on
  * activity. */
 export async function purgeExpired(x: ExecutorInternals): Promise<void> {
   if (!x.store.isUnlocked()) {
@@ -114,7 +114,7 @@ export async function doTimer(
   await sendRatchetMessage(x, updated, stored, null);
 }
 
-/** `/purge set <duration|off>`: local retention cap, never transmitted (§5.3). */
+/** `/purge set <duration|off>`: local retention cap, never transmitted. */
 export async function doPurgeSet(x: ExecutorInternals, duration: Duration): Promise<void> {
   if (!x.store.isUnlocked()) {
     x.renderer.event("warning", "locked or not registered - /login or /register");
@@ -131,7 +131,7 @@ export async function doPurgeSet(x: ExecutorInternals, duration: Duration): Prom
   );
 }
 
-/** `/purge now [alias]`: immediate local deletion of stored messages (§5.3). */
+/** `/purge now [alias]`: immediate local deletion of stored messages. */
 export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined): Promise<void> {
   if (!x.store.isUnlocked()) {
     x.renderer.event("warning", "locked or not registered - /login or /register");
@@ -152,7 +152,7 @@ export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined
 }
 
 /** `/delete <last|N|all|purge> [/s]`: delete your own (outgoing) messages on
- * BOTH sides (§5.3a). `last`/`N`/`all` scope to the active conversation;
+ * BOTH sides (a). `last`/`N`/`all` scope to the active conversation;
  * `purge` spans every conversation. Each deleted message is removed from
  * local history and, where a live session exists, a delete directive naming
  * its shared id is pushed to the peer over the encrypted ratchet. `/s` makes
@@ -275,7 +275,7 @@ async function requestPeerDeletion(
   return sendRatchetMessage(x, contact, stored, null, { deletes: mids, deleteSilent: silent });
 }
 
-/** A peer asked us to delete messages they had sent us (§5.3a). Remove
+/** A peer asked us to delete messages they had sent us (a). Remove
  * the matching incoming records by shared id and, unless the request was
  * silent, announce it inline so the deletion is visible rather than a silent
  * gap. */

@@ -31,7 +31,7 @@ body {
 
 /* App shell: the transcript fills the space above a fixed footer that holds the
    status strip and the bottom-pinned command line. 100dvh keeps the command line
-   above the mobile software keyboard (CLAUDE.md §1.6). */
+   above the mobile software keyboard. */
 /* The saved colour scheme lives in IndexedDB and can only be read
    asynchronously, so the app stays hidden until paint.ts has applied it
    (body.theme-ready). Without this, everything painted in the default scheme
@@ -403,7 +403,7 @@ body.th-dock #divider {
   font-weight: 700;
 }
 
-/* Persistent §1.5 context: [chatting with: alias (verified|UNVERIFIED)] [timer: 1h] */
+/* Persistent context: [chatting with: alias (verified|UNVERIFIED)] [timer: 1h] */
 #status-context {
   flex: 0 1 auto;
   overflow: hidden;

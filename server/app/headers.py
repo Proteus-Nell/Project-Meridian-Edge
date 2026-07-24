@@ -1,7 +1,7 @@
-"""Security headers on every response (CLAUDE.md section 5).
+"""Security headers on every response.
 
 The API serves JSON only; the strict page-level CSP for the client bundle is
-enforced at the reverse proxy in production (W5). These headers are the
+enforced at the reverse proxy in production. These headers are the
 API-side baseline and are deliberately deny-everything.
 """
 
@@ -25,7 +25,7 @@ SECURITY_HEADERS: dict[str, str] = {
     "Cache-Control": "no-store",
     # Browsers only honor this over HTTPS, so it is harmless to send in plain-
     # HTTP dev; in production it is the belt to the reverse proxy's suspenders
-    # (CLAUDE.md §5 checklist: max-age=63072000; includeSubDomains; preload).
+    # (checklist: max-age=63072000; includeSubDomains; preload).
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 }
 

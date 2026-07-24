@@ -1,4 +1,4 @@
-// Autosuggest + typo correction for the command line (CLAUDE.md §1). Pure and
+// Autosuggest + typo correction for the command line. Pure and
 // total: no DOM, no throws. `commandSuggestions` drives the live dropdown while
 // the user is typing a slash word; `suggestCommand` powers the "did you mean …?"
 // hint when an unknown command is entered. Both read the same static allowlist

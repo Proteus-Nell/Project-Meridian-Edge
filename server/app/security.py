@@ -1,4 +1,4 @@
-"""Tokens and recovery codes (CLAUDE.md sections 2.2, 2.3, 7.7).
+"""Tokens and recovery codes.
 
 Session tokens are stored only as SHA-512 digests; recovery codes only as
 Argon2id hashes. Nothing in this module persists a secret in plaintext.
@@ -24,7 +24,7 @@ from .constants import (
 )
 
 # Module-level so tests can substitute weaker parameters; production params
-# come from the shared constants (section 0).
+# come from the shared constants module.
 _hasher = PasswordHasher(
     time_cost=ARGON2ID_ITERATIONS,
     memory_cost=ARGON2ID_MEM_KIB,

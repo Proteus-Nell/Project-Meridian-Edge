@@ -47,11 +47,11 @@ def register(
         try:
             session.flush()
         except IntegrityError:
-            # UNIQUE constraint hit: silently regenerate (CLAUDE.md section 2.1).
+            # UNIQUE constraint hit: silently regenerate.
             session.rollback()
             continue
         # Recovery codes: shown once in this response, stored only as
-        # Argon2id hashes (CLAUDE.md section 2.2 / 7.7).
+        # Argon2id hashes (/ 7.7).
         codes = generate_recovery_codes()
         for code in codes:
             session.add(RecoveryCode(user_id=user.id, code_hash=hash_recovery_code(code)))

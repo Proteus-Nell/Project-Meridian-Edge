@@ -1,4 +1,4 @@
-"""Production boot-safety gate (CLAUDE.md §5 checklist: "DEBUG=0 asserted at
+"""Production boot-safety gate (checklist: "DEBUG=0 asserted at
 startup (refuse to boot otherwise in prod mode)").
 
 _assert_production_safe is a no-op unless MERIDIAN_EDGE_ENV=production is set, so

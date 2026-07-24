@@ -7,7 +7,7 @@
 #   MERIDIAN_EDGE_DOMAIN  - the public hostname, e.g. chat.example.com
 #   ACME_EMAIL            - optional contact for the ACME account
 #
-# The security-header set mirrors deploy/nginx.conf exactly (CLAUDE.md §5): the
+# The security-header set mirrors deploy/nginx.conf exactly: the
 # page-level CSP is scoped to the static bundle; the FastAPI backend keeps its
 # own stricter JSON CSP (app/headers.py), which passes through untouched.
 

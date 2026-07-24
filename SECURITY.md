@@ -1,8 +1,8 @@
 # Security Policy
 
-Meridian Edge is a post-quantum E2EE messenger (CLAUDE.md, MVP_DOC.md). We take
-reports of security issues seriously and ask that you report them privately
-rather than through a public GitHub issue.
+Meridian Edge is a post-quantum end-to-end-encrypted messenger. We take reports
+of security issues seriously and ask that you report them privately rather than
+through a public GitHub issue.
 
 ## Reporting a vulnerability
 
@@ -24,13 +24,12 @@ ratchet protocol design, and the deployment reference config (`deploy/`,
 Out of scope: third-party dependencies themselves (report those upstream -
 `@noble/post-quantum`, `@noble/ciphers`, `@noble/hashes`, FastAPI,
 `cryptography`, `argon2-cffi`); denial-of-service via raw traffic volume
-(rate limiting is documented as a non-goal beyond the limits already in
-CLAUDE.md §7.14 - this is not resilience against a resourced attacker).
+(rate limiting is a documented non-goal beyond the existing per-endpoint
+limits - this is not resilience against a resourced attacker).
 
 ## Known limitations (documented, not bugs)
 
-These are called out in CLAUDE.md §7.12 and are inherent to the browser
-platform, not oversights:
+These are inherent to the browser platform, not oversights:
 
 - XSS would still mean key theft despite the CSP - WebCrypto has no
   ML-KEM/ML-DSA, so key material must live in JS memory. CSP is a

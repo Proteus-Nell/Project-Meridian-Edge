@@ -1,4 +1,4 @@
-"""Prekey bundle fetch (CLAUDE.md sections 2.1, 3.1, 7.4).
+"""Prekey bundle fetch.
 
 Authenticated and rate-limited per requesting UID. One fetch consumes at
 most one OPK, atomically (conditional UPDATE - two racing fetches can never
@@ -7,7 +7,7 @@ identical uniform 404, so this endpoint is not an existence oracle.
 
 `?opk=0` skips OPK consumption - used for identity-binding checks on
 received messages, so verification traffic does not drain the sender's
-one-time prekeys (ADR 0002).
+one-time prekeys.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def fetch_bundle(
     )
     if target is None or latest_spk is None:
         # Same shape for "no such user" and "user without prekeys".
-        # Full timing uniformity is part of the W5 hardening pass.
+        # Full timing uniformity is a further hardening step.
         raise _not_found()
 
     bundle_opk: BundleOpk | None = None
@@ -112,7 +112,7 @@ def _claim_opk(session: Session, user_id: int) -> OneTimePrekey | None:
 
     The conditional UPDATE only wins if `consumed` is still false, so a
     concurrent claim of the same row loses and retries on the next one.
-    Depletion degrades to an SPK-only bundle instead of failing (§7.4).
+    Depletion degrades to an SPK-only bundle instead of failing.
     """
     for _ in range(_CLAIM_RETRIES):
         candidate = session.execute(

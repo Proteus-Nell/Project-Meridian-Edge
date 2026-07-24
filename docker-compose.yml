@@ -1,4 +1,4 @@
-# Reference production topology (CLAUDE.md §5 container checklist): Postgres,
+# Reference production topology (container checklist): Postgres,
 # the FastAPI server, and an nginx edge that serves the static client bundle
 # same-origin and terminates TLS. Not battle-tested against a live cluster in
 # this session (no Docker daemon available here) - review before relying on

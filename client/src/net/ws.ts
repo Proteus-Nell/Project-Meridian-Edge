@@ -1,5 +1,5 @@
-// WebSocket delivery client (CLAUDE.md §3). Auth is the first frame after
-// connect; the server answers with a rotated session token (§2.3) and then
+// WebSocket delivery client. Auth is the first frame after
+// connect; the server answers with a rotated session token and then
 // pushes queued + live envelopes. Acks go back over the socket.
 
 import { fromBase64 } from "../util/base64";
@@ -10,7 +10,7 @@ export interface WsHandlers {
   onClose(intentional: boolean): void;
 }
 
-// Server closes an idle connection (no frames at all) after 90s (§5, §7.11
+// Server closes an idle connection (no frames at all) after 90s (
 // WS_IDLE_TIMEOUT_SECONDS); ping well inside that window so a healthy,
 // otherwise-quiet connection is never mistaken for an idle one.
 const HEARTBEAT_INTERVAL_MS = 30_000;

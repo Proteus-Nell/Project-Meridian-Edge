@@ -1,4 +1,4 @@
-// Color schemes and emblem catalog (CLAUDE.md §1). Pure data + helpers, no
+// Color schemes and emblem catalog. Pure data + helpers, no
 // DOM: chrome.ts turns a resolved scheme into CSS custom properties and xterm
 // theme objects; the executor persists the user's choice in the unencrypted
 // display prefs. Each scheme is exactly five slots (accent / background /

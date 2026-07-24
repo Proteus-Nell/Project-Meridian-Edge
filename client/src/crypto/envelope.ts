@@ -1,7 +1,7 @@
-// KX envelope v1 (CLAUDE.md §3.6): versioned fixed binary layout, no JSON
+// KX envelope v1: versioned fixed binary layout, no JSON
 // for crypto payloads. The spk/opk hashes are routing hints so the responder
 // finds the right retained secrets in O(1); they are not covered by the
-// transcript - tampering them only makes decryption fail (ADR 0002).
+// transcript - tampering them only makes decryption fail.
 //
 //   u8 version | u8 type | u8 flags(bit0=hasOpk)
 //   spkHash(64) | [opkHash(64)]
@@ -139,11 +139,11 @@ export function decodeKxEnvelope(bytes: Uint8Array): KxEnvelope | null {
   return { spkHash, opkHash, ikA, ct1, ct2, sig, nonce, ciphertext };
 }
 
-// ----- MSG envelope v1 (ratchet, CLAUDE.md §4) -----------------------------
+// ----- MSG envelope v1 (ratchet) -----------------------------
 //
 // The ratchet frames a message body itself (encrypted header + encrypted
 // payload); this layer only prepends version+type so the server still routes an
-// opaque blob and the receiver can tell KX from MSG (§4.3).
+// opaque blob and the receiver can tell KX from MSG.
 //
 //   u8 version | u8 type=MSG | body(...)
 //

@@ -1,13 +1,13 @@
-# Runtime dependencies - exact pins (CLAUDE.md §0: versions pinned exact,
-# additions justified in the commit message).
+# Runtime dependencies - exact pins (versions pinned exact; additions
+# justified in the commit message).
 fastapi==0.139.0
 uvicorn[standard]==0.50.0
 SQLAlchemy==2.0.51
 pydantic==2.13.4
-# W2: ML-DSA-65 login-challenge verification (FIPS 204 via OpenSSL 3.5+).
+# ML-DSA-65 login-challenge verification (FIPS 204 via OpenSSL 3.5+).
 cryptography==49.0.0
-# W2: Argon2id hashing of recovery codes at rest.
+# Argon2id hashing of recovery codes at rest.
 argon2-cffi==25.1.0
-# W5: Postgres driver for production (SQLite is a dev-only artifact, §7.5);
+# Postgres driver for production (SQLite is a dev-only artifact, never deployed);
 # binary wheel so the runtime image needs no C toolchain.
 psycopg[binary]==3.2.13

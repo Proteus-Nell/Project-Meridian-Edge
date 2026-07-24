@@ -1,6 +1,6 @@
-# Reverse proxy + static client bundle (CLAUDE.md §5): the client is built
-# here and served same-origin - zero CDN assets, no separate Node process in
-# production. TLS termination, the page-level CSP, and HSTS live in nginx.conf.
+# Reverse proxy + static client bundle: the client is built here and served
+# same-origin - zero CDN assets, no separate Node process in production. TLS
+# termination, the page-level CSP, and HSTS live in nginx.conf.
 #
 # IMPORTANT: the base nginx image must be built against OpenSSL >= 3.5, where the
 # standardized X25519MLKEM768 hybrid-group codepoint landed, for the group named

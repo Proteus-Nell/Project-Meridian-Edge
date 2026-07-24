@@ -1,4 +1,4 @@
-// KEM double-ratchet (CLAUDE.md §4 DoD): forward secrecy, post-compromise
+// KEM double-ratchet (DoD): forward secrecy, post-compromise
 // security, out-of-order delivery with a bounded skip cache, and the MSG
 // envelope/header codec. Both peers run in-process from a shared RK0.
 
@@ -87,7 +87,7 @@ describe("ratchet round-trip", () => {
   });
 });
 
-describe("forward secrecy (§4.1)", () => {
+describe("forward secrecy", () => {
   it("a captured ciphertext is undecryptable from later state", () => {
     const { a, b } = pair();
     const c0 = send(a, "secret-0");
@@ -102,7 +102,7 @@ describe("forward secrecy (§4.1)", () => {
   });
 });
 
-describe("post-compromise security (§4.2)", () => {
+describe("post-compromise security", () => {
   it("a leaked state loses decryption ability within a round trip", () => {
     const { a, b } = pair();
     // Establish and exercise a couple of KEM steps.
@@ -132,7 +132,7 @@ describe("post-compromise security (§4.2)", () => {
   });
 });
 
-describe("out-of-order delivery (§4.1)", () => {
+describe("out-of-order delivery", () => {
   it("decrypts messages delivered 3, 1, 2", () => {
     const { a, b } = pair();
     // One unbroken sending turn → a single chain, no KEM step between them.

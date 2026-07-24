@@ -1,4 +1,4 @@
-// Parser fuzz test (CLAUDE.md §1 definition of done): random bytes and
+// Parser fuzz test (definition of done): random bytes and
 // mutated valid commands must never throw uncaught and must never yield a
 // command outside the static allowlist. Deterministically seeded so CI
 // failures are reproducible.

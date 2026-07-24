@@ -1,4 +1,4 @@
-// Benchmark suites B1-B3 (MVP_DOC.md §8): primitive latency and size overhead,
+// Benchmark suites B1-B3: primitive latency and size overhead,
 // PQC (@noble/post-quantum) vs classical baselines (@noble/curves).
 //
 // The classical baselines are the ONLY classical asymmetric crypto in the
@@ -317,7 +317,7 @@ function buildProtocolFixture(): ProtocolFixture {
   };
 }
 
-/** B4 - protocol-level latency and throughput (MVP §8). Measures the crypto
+/** B4 - protocol-level latency and throughput. Measures the crypto
  * cost of the real handshake and ratchet paths; network RTT is excluded (it is
  * identical for classical and PQC). Protocol metrics use >=100 iterations. */
 export async function benchB4(cfg: BenchConfig): Promise<ProtocolResult> {

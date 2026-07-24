@@ -1,4 +1,4 @@
-// PQ-KX end-to-end (CLAUDE.md §3 DoD): both roles in-process, tampered
+// PQ-KX end-to-end (DoD): both roles in-process, tampered
 // bundle aborts, tampered ciphertext fails AEAD, reduced-fs without an OPK.
 
 import { describe, expect, it } from "vitest";

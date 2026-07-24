@@ -1,4 +1,4 @@
-// Login challenge message (CLAUDE.md §2.3): the client signs
+// Login challenge message: the client signs
 // nonce ‖ origin ‖ timestamp, where origin and timestamp are the values the
 // server bound to the nonce (echoed in the challenge response) and the
 // timestamp is encoded as 8 bytes big-endian unix seconds. Must match

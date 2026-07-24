@@ -1,4 +1,4 @@
-// Benchmark harness (MVP_DOC.md §8): the pure pieces (stats, size math,
+// Benchmark harness: the pure pieces (stats, size math,
 // formatting, suite parsing) are asserted exactly; the timed suites run with a
 // tiny iteration count just to prove they execute and shape their results.
 
@@ -11,7 +11,7 @@ import { parseSuite, runBench } from "../src/bench/index";
 import { ERRORS } from "../src/terminal/messages";
 import { COMMAND_USAGE } from "../src/terminal/parser";
 
-describe("summarize (§8 methodology)", () => {
+describe("summarize (methodology)", () => {
   it("computes nearest-rank median/p95, mean, and min", () => {
     const stats = summarize("t", [10, 1, 3, 5, 2, 9, 4, 8, 6, 7]);
     expect(stats.iters).toBe(10);
@@ -34,7 +34,7 @@ describe("B3 size overhead", () => {
   const result = benchB3();
   const byObject = new Map(result.rows.map((r) => [r.object, r]));
 
-  it("measures the FIPS primitive sizes and matches the §8 reference factors", () => {
+  it("measures the FIPS primitive sizes and matches the reference factors", () => {
     expect(byObject.get("KEM/DH public key")).toMatchObject({ classicalBytes: 32, pqcBytes: 1184 });
     expect(byObject.get("KEM ciphertext / DH share")).toMatchObject({
       classicalBytes: 32,
@@ -45,7 +45,7 @@ describe("B3 size overhead", () => {
       classicalBytes: 32,
       pqcBytes: 1952,
     });
-    // The MVP §8 reference table: ×37 pubkey, ×34 ct, ×52 sig, ×61 sig-pubkey.
+    // The reference table: ×37 pubkey, ×34 ct, ×52 sig, ×61 sig-pubkey.
     expect(formatFactor(1184, 32)).toBe("x37");
     expect(formatFactor(1088, 32)).toBe("x34");
     expect(formatFactor(3309, 64)).toBe("x52");

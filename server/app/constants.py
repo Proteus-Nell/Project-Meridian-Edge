@@ -1,4 +1,4 @@
-"""Shared protocol constants (CLAUDE.md section 0).
+"""Shared protocol constants.
 
 Mirrored in client/src/crypto/constants.ts - any change here must be made
 there in the same commit.
@@ -16,7 +16,7 @@ ARGON2ID_MEM_KIB = 65536
 ARGON2ID_ITERATIONS = 3
 ARGON2ID_PARALLELISM = 1
 
-# UID: 128 bits, Crockford Base32 -> 26 chars (see docs/adr/0001).
+# UID: 128 bits, Crockford Base32 -> 26 chars.
 UID_BYTES = 16
 UID_CHARS = 26
 CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -29,14 +29,14 @@ ML_DSA_65_SIG_BYTES = 3309
 ML_KEM_768_PUBKEY_BYTES = 1184
 ML_KEM_768_CT_BYTES = 1088
 
-# Server payload cap (CLAUDE.md section 3).
+# Server payload cap.
 MAX_PAYLOAD_BYTES = 65536
 
-# Message queue (CLAUDE.md sections 3, 5): delete-on-ack, 14-day TTL.
+# Message queue: delete-on-ack, 14-day TTL.
 MESSAGE_TTL_SECONDS = 14 * 86400.0
 ACK_MAX_IDS = 256
 
-# WebSocket delivery (CLAUDE.md section 5 checklist).
+# WebSocket delivery (checklist).
 WS_AUTH_TIMEOUT_SECONDS = 10.0
 WS_MAX_FRAME_BYTES = 65536
 # Idle-kill: a connection that sends nothing (not even a ping) for this long is
@@ -47,7 +47,7 @@ WS_IDLE_TIMEOUT_SECONDS = 90.0
 WS_FRAME_RATE_CAPACITY = 30
 WS_FRAME_RATE_WINDOW_SECONDS = 10.0
 
-# Rate limits (CLAUDE.md section 5): register 3/hour/IP, login-challenge
+# Rate limits: register 3/hour/IP, login-challenge
 # 10/min/IP, bundle fetch 30/min/UID, message send 60/min/UID.
 REGISTER_RATE_CAPACITY = 3
 REGISTER_RATE_WINDOW_SECONDS = 3600.0
@@ -58,7 +58,7 @@ BUNDLE_FETCH_RATE_WINDOW_SECONDS = 60.0
 MESSAGE_SEND_RATE_CAPACITY = 60
 MESSAGE_SEND_RATE_WINDOW_SECONDS = 60.0
 
-# Login nonces (CLAUDE.md section 2.3): single-use, 60 s expiry, origin-bound.
+# Login nonces: single-use, 60 s expiry, origin-bound.
 NONCE_BYTES = 32
 NONCE_TTL_SECONDS = 60.0
 
@@ -71,12 +71,12 @@ RECOVERY_CODE_COUNT = 10
 RECOVERY_CODE_BYTES = 10
 RECOVERY_CODE_CHARS = RECOVERY_CODE_BYTES * 8 // 5  # 16 Crockford chars
 
-# Account recovery (CLAUDE.md section 2.2): redemption is rate-limited far
+# Account recovery: redemption is rate-limited far
 # below login since a legitimate user redeems at most a handful per lifetime.
 RECOVER_RATE_CAPACITY = 5
 RECOVER_RATE_WINDOW_SECONDS = 3600.0
 
-# Prekeys (CLAUDE.md section 2.6).
+# Prekeys.
 OPK_BATCH_MAX = 50
 OPK_LOW_WATERMARK = 20
 OPK_UNCONSUMED_CAP = 200

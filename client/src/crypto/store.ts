@@ -1,4 +1,4 @@
-// Encrypted local key store (CLAUDE.md §2.4).
+// Encrypted local key store.
 //
 // Everything in IndexedDB is ciphertext: a random 256-bit DEK encrypts every
 // record with XChaCha20-Poly1305 (random 24-byte nonce per write, record key
@@ -21,7 +21,7 @@ export interface Argon2Params {
   readonly p: number;
 }
 
-// Stored beside the ciphertext so parameters can be upgraded later (§0).
+// Stored beside the ciphertext so parameters can be upgraded later.
 export const DEFAULT_ARGON2_PARAMS: Argon2Params = {
   mKib: ARGON2ID_MEM_KIB,
   t: ARGON2ID_ITERATIONS,
@@ -320,7 +320,7 @@ export class KeyStore {
     }
   }
 
-  /** Verifies the old passphrase, then re-wraps the DEK only (§2.4). */
+  /** Verifies the old passphrase, then re-wraps the DEK only. */
   async rotatePassphrase(oldPassphrase: string, newPassphrase: string): Promise<boolean> {
     const meta = (await this.readRaw(META_KEY)) as MetaRecord | undefined;
     if (meta === undefined) {
@@ -360,7 +360,7 @@ export class KeyStore {
     return true;
   }
 
-  /** Best-effort overwrite of every record, then database deletion (§2 /wipe). */
+  /** Best-effort overwrite of every record, then database deletion (/wipe). */
   async wipe(): Promise<void> {
     this.lock();
     const db = await this.openDb();

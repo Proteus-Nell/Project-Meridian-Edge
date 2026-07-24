@@ -79,7 +79,7 @@ Code families:
 | `an identity store already exists on this device - /login (or /wipe to destroy it first)` | `/register` refused to overwrite an existing identity. |
 | `no signed prekey uploaded yet` | `/keys status` before the first bundle upload finished. |
 | `weekly passphrase rotation is due - /rotate passphrase (configure: /settings rotation)` | The weekly local rotation reminder. Declining is fine and unlogged. |
-| `reduced forward secrecy: recipient had no one-time prekeys left (§7.4) - heals with the W4 ratchet` | The handshake ran SPK-only (OPK pool empty); the first ratchet round-trip restores full FS. |
+| `reduced forward secrecy: recipient had no one-time prekeys left; heals once the ratchet takes its first key-encapsulation step` | The handshake ran SPK-only (OPK pool empty); the first ratchet round-trip restores full FS. |
 | `session has reduced forward secrecy (no one-time prekey)` | Receiver-side view of the same SPK-only condition. |
 | `new contact request from <uid> - /add <uid> [alias] to accept` | An unknown sender's first message is held until accepted. |
 | `live delivery disconnected - /login to reconnect` | The WebSocket dropped and will not silently retry. |
@@ -112,8 +112,8 @@ Code families:
 ## Server wire errors
 
 The API returns one uniform JSON shape, `{"error": "<code>"}`, with
-deliberately coarse codes so responses cannot be used as an oracle
-(CLAUDE.md §0, §7.13). The client maps them to E3xx/E2xx messages above.
+deliberately coarse codes so responses cannot be used as an oracle. The client
+maps them to E3xx/E2xx messages above.
 
 | Wire code | HTTP | Meaning |
 |---|---|---|

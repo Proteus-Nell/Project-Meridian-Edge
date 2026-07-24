@@ -1,4 +1,4 @@
-"""Session authentication dependency (CLAUDE.md section 2.3).
+"""Session authentication dependency.
 
 Bearer token -> SHA-512 lookup -> idle-expiry check -> sliding refresh.
 Every failure is the same uniform 401; the caller learns nothing about

@@ -1,9 +1,9 @@
 """ML-DSA-65 signature verification (FIPS 204) via pyca/cryptography.
 
 The server verifies login-challenge signatures against stored public keys.
-It never holds private keys (CLAUDE.md section 0); the keypair generated at
+It never holds private keys; the keypair generated at
 import time below exists solely so failure paths can burn comparable
-verification time (uniform timing, CLAUDE.md section 5).
+verification time (uniform timing).
 """
 
 from __future__ import annotations

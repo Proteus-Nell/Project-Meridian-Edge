@@ -1,4 +1,4 @@
-# CI gates (CLAUDE.md §5): dependency audits, the classical-crypto grep,
+# CI gates: dependency audits, the classical-crypto grep,
 # the parser fuzz test, and the full test suite - all blocking.
 name: CI
 

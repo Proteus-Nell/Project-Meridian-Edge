@@ -1,4 +1,4 @@
-// UI-surface wiring in the executor (CLAUDE.md §1): the /clr screen wipe and the
+// UI-surface wiring in the executor: the /clr screen wipe and the
 // "did you mean …?" hint. Neither touches the network or an unlocked store, so
 // these run without api mocks.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI security audit gates (CLAUDE.md sections 0, 5, 7.9).
+"""CI security audit gates.
 
 Exits non-zero if a forbidden pattern appears in an application code path.
 
@@ -21,7 +21,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Classical asymmetric crypto is banned from application code paths (section 0).
+# Classical asymmetric crypto is banned from application code paths: this
+# project's asymmetric primitives are ML-KEM-768 and ML-DSA-65 only.
 CLASSICAL_CRYPTO: list[str] = [
     r"\bRSA\b",
     r"\bECDH\b",
@@ -36,7 +37,7 @@ CLASSICAL_CRYPTO: list[str] = [
 ]
 
 # Client: no HTML injection paths, no dynamic code, no weak randomness,
-# no persistent token storage (sections 0, 1, 2.3).
+# no persistent token storage (the session token must live in memory only).
 CLIENT_FORBIDDEN: list[str] = [
     r"\binnerHTML\b",
     r"\bouterHTML\b",
@@ -48,8 +49,7 @@ CLIENT_FORBIDDEN: list[str] = [
     r"\blocalStorage\b",
 ]
 
-# Server: no dynamic code, no pickle, no weak randomness, no f-string SQL
-# (sections 0, 7.3).
+# Server: no dynamic code, no pickle, no weak randomness, no f-string SQL.
 SERVER_FORBIDDEN: list[str] = [
     r"\beval\s*\(",
     r"(?<!_)\bexec\s*\(",

@@ -1,7 +1,7 @@
-// /recover (CLAUDE.md §2.2): redeem a recovery code, enroll a fresh identity
+// /recover: redeem a recovery code, enroll a fresh identity
 // key, rebuild the local store. Network is mocked; the store, prompts, and
 // crypto are real. The peer-side consequence of a recovery (identity-key
-// change) is covered by the §4.6 tests in executor-verify.test.ts.
+// change) is covered by the tests in executor-verify.test.ts.
 
 import { describe, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
@@ -54,7 +54,7 @@ function mockServerFlows(): void {
 }
 
 /** A store whose internally created databases (the /recover rebuild) use the
- * fast Argon2id parameters instead of the production §0 cost. */
+ * fast Argon2id parameters instead of the production cost. */
 function fastStore(name: string): KeyStore {
   return new KeyStore(name, new IDBFactory(), FAST);
 }

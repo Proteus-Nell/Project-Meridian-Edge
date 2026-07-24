@@ -1,10 +1,10 @@
 // The command executor: consumes the parser's typed union in one switch
-// (§1.2) and dispatches into the flow modules (identity, contacts,
+// and dispatches into the flow modules (identity, contacts,
 // trust, messaging, lifecycle, settings, views, bench). This class owns the
 // mutable session state and the async plumbing: a command lane, a render
 // lane for cosmetic view rebuilds, the idle auto-lock, and the WS delivery
 // channel. Flow logic lives in the sibling modules; a command that is not
-// implemented yet answers with its scheduled milestone so the surface stays
+// implemented yet answers with a short status so the surface stays
 // honest about what exists.
 
 import { WsClient } from "../../net/ws";
@@ -52,7 +52,7 @@ import { doAck, doVerified, doVerify } from "./trust";
 import { renderActiveConversation, renderHome, returnToPreviousView } from "./views";
 
 const SEGMENT_OF: Partial<Record<Command["name"], string>> = {
-  "settings-notify": "W6 (could-have)",
+  "settings-notify": "a future release (could-have)",
 };
 
 export class Executor implements ExecutorInternals {
@@ -250,7 +250,7 @@ export class Executor implements ExecutorInternals {
         }
         this.active = null;
         this.shell.setPrompt("> ");
-        refreshChatContext(this); // clears the §1.5 context line
+        refreshChatContext(this); // clears the context line
         this.enqueueRender(() => renderHome(this));
         return;
       }
@@ -282,14 +282,14 @@ export class Executor implements ExecutorInternals {
         this.chrome.clearScreen();
         return;
       default: {
-        const segment = SEGMENT_OF[cmd.name] ?? "a later segment";
+        const segment = SEGMENT_OF[cmd.name] ?? "a later release";
         this.renderer.event("info", `/${cmd.name} is not implemented yet - scheduled for ${segment}`);
         return;
       }
     }
   }
 
-  /** `/chat <target> [message]`: focus a conversation (§1.5) and, with
+  /** `/chat <target> [message]`: focus a conversation and, with
    * the inline form, echo and send the trailing message exactly as if it had
    * been typed after switching. */
   private openChat(target: string, message: string | undefined): void {
@@ -441,7 +441,7 @@ export class Executor implements ExecutorInternals {
     this.ws = new WsClient();
     this.ws.connect(this.token ?? "", {
       onToken: (token) => {
-        // Rotation on WS connect (§2.3): adopt the fresh token everywhere.
+        // Rotation on WS connect: adopt the fresh token everywhere.
         this.token = token;
       },
       onEnvelope: (id, envelope) => {

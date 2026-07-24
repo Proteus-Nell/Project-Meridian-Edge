@@ -1,9 +1,9 @@
-"""Message queue (CLAUDE.md sections 3, 5): enqueue, fetch, delete-on-ack.
+"""Message queue: enqueue, fetch, delete-on-ack.
 
 Envelopes are opaque ciphertext blobs; the server never parses them. Acks
 delete in the same transaction and only for the authenticated recipient's
-own ids (§7.1, §7.4 ack forgery). Expired rows (14-day TTL) are swept on
-every touch of a recipient's queue; the scheduled job lands with W5.
+own ids (ack forgery). Expired rows (14-day TTL) are swept on
+every touch of a recipient's queue; a periodic sweep job is a future addition.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ async def send_message(
     ).scalar_one_or_none()
     if recipient is None:
         # Accept-and-drop: a distinguishable error here would be a UID
-        # existence oracle (§2.1). Honest senders always fetched the
+        # existence oracle. Honest senders always fetched the
         # recipient's bundle first, so they already know.
         return
 

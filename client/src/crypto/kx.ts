@@ -1,4 +1,4 @@
-// PQ-KX: the asynchronous handshake (CLAUDE.md §3, PQXDH analog, no DH).
+// PQ-KX: the asynchronous handshake (PQXDH analog, no DH).
 //
 //   transcript = SHA-512(version ‖ IK_A ‖ IK_B ‖ SPK_B ‖ ct1 [‖ OPK_B ‖ ct2])
 //   RK0 = HKDF-SHA-512(ss1 ‖ ss2, salt=∅, info = KDF_INFO_KX ‖ transcript)
@@ -7,7 +7,7 @@
 //
 // Responder order is prescribed: verify sig_A first, then decapsulate,
 // derive, decrypt, and the caller deletes the consumed OPK secret
-// immediately (§3.7). respondKx is total - every failure is a typed reason.
+// immediately. respondKx is total - every failure is a typed reason.
 
 import { ml_kem768 } from "@noble/post-quantum/ml-kem.js";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
@@ -33,7 +33,7 @@ export interface Bundle {
 }
 
 /** Both prekey signatures must verify against the bundle's identity key
- * before any encapsulation happens (§3.1). */
+ * before any encapsulation happens. */
 export function verifyBundle(bundle: Bundle): boolean {
   if (!verifySpk(bundle.spkPub, bundle.spkSig, bundle.ikPub)) {
     return false;
@@ -96,7 +96,7 @@ export function initiateKx(
 ): { envelope: Uint8Array; session: KxSession } {
   if (!verifyBundle(bundle)) {
     // Callers surface this as a security event; encapsulating to an
-    // unverified key is never acceptable (§3.1).
+    // unverified key is never acceptable.
     throw new Error("bundle verification failed");
   }
   const enc1 = ml_kem768.encapsulate(bundle.spkPub);

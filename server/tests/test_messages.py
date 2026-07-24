@@ -47,7 +47,7 @@ def test_ack_cannot_delete_someone_elses_messages(client: TestClient) -> None:
     assert send(client, token_a, bob.uid) == 204
     message_id = client.get("/v1/messages", headers=auth(token_b)).json()["messages"][0]["id"]
 
-    # Mallory acks Bob's id: uniform 204, nothing deleted (§7.1, §7.4).
+    # Mallory acks Bob's id: uniform 204, nothing deleted.
     assert (
         client.post("/v1/messages/ack", json={"ids": [message_id]}, headers=auth(token_m)).status_code
         == 204

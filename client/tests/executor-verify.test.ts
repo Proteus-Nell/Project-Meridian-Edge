@@ -1,4 +1,4 @@
-// Safety numbers & key-change teardown (CLAUDE.md §4.5-4.6, MVP_DOC §6.5).
+// Safety numbers & key-change teardown (-4.6).
 // The network layer is mocked so these run offline; all crypto (ML-DSA
 // signing/verification, ML-KEM keygen) is real.
 

@@ -1,4 +1,4 @@
-// Ratchet integration through the executor (CLAUDE.md §4): a registered Alice
+// Ratchet integration through the executor: a registered Alice
 // (real Executor + encrypted store) converses with a Bob crypto-peer that runs
 // the handshake and ratchet directly. Exercises the KX→ratchet handoff, the
 // serialize→store→deserialize round trip on every send, and the trial-decrypt
@@ -252,7 +252,7 @@ describe("continued messaging over the ratchet", () => {
     expect(chrome.emblem).toBe("idle");
   });
 
-  it("keeps the §1.5 chat-context line in sync with /chat and /timer", async () => {
+  it("keeps the chat-context line in sync with /chat and /timer", async () => {
     const { executor, chrome } = await bootstrapAlice();
     const bob = makeBob();
     vi.mocked(api.fetchBundle).mockResolvedValue(bob.bundle);

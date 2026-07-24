@@ -12,11 +12,6 @@ application layer, and CI enforces that.
 - [DEPLOY.md](DEPLOY.md) — deployment, TLS certificates, and PQC/TLS screening
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure contact
 
-Source comments cite `CLAUDE.md` (the build guide) and `MVP_DOC.md` (the
-specification) by section number. Those are internal working documents kept
-outside this repository; the invariants they pin down are restated in the code
-where they are enforced.
-
 Licensed under the [GNU AGPL v3.0](LICENSE).
 
 ## Quick start
@@ -59,7 +54,7 @@ PORT=5175 npm run dev   # user C → http://localhost:5175
 message across — real crypto against the real backend; only TLS and Postgres
 are missing versus production.
 
-## Using Meridian Edge today (W1-W5)
+## Using Meridian Edge today
 
 ### Create your identity — `/register`
 
@@ -77,7 +72,7 @@ are missing versus production.
    passphrase *and* the codes means the identity is unrecoverable, by design.
 4. You are logged in automatically and a prekey bundle (1 signed prekey +
    50 one-time prekeys, all signed by your identity key) is uploaded so
-   others can start encrypted chats with you while you are offline (W3).
+   others can start encrypted chats with you while you are offline.
 
 Share your UID out-of-band; there is deliberately no directory to search.
 
@@ -131,7 +126,7 @@ The session token lives only in JS memory and expires after 15 minutes idle —
 a page reload always brings you back locked and logged out, and your data is
 still there (encrypted) until you `/wipe` it.
 
-### Contacts & first messages (W3)
+### Contacts & first messages
 
 | Command | What it does |
 |---|---|
@@ -157,7 +152,7 @@ message from a stranger is held behind a `[!] new contact request` line and
 only opens after `/add`. If no one-time prekey was available the session is
 flagged **reduced-fs** until the ratchet's first key-encapsulation step heals
 it. The first message per conversation is the PQ-KX handshake above; every
-message after that rides the **KEM double-ratchet** (W4) — a fresh symmetric
+message after that rides the **KEM double-ratchet** — a fresh symmetric
 key per message, with periodic ML-KEM re-keying for post-compromise
 security, and the header itself encrypted so an observer of ciphertexts
 learns nothing about ratchet state.
@@ -170,7 +165,7 @@ contact reverts to `UNVERIFIED`, even if you had verified them before.
 `/ack <alias>` clears the block so you can act on it; sending stays honestly
 marked `UNVERIFIED` until you `/verify` the new key and `/verified` it again.
 
-### Message lifecycle (W5)
+### Message lifecycle
 
 | Command | What it does |
 |---|---|
@@ -216,7 +211,7 @@ not forensic erasure.
   console. The server-side and footprint suites (B5) run via `make bench` — see
   [bench/README.md](bench/README.md).
 
-The MVP build order (W1–W6) is complete. Remaining items are
+The MVP build order is complete. Remaining items are
 documented could-haves (charts, a rehearsed demo script) and the B4/B5
 methodology notes in the bench README.
 
@@ -273,7 +268,7 @@ All of the above plus `npm audit` / `pip-audit` run blocking in CI.
 - **W5** ✓ lifecycle + hardening: `/timer`, `/purge set`/`/purge now`;
   per-connection WS rate cap + idle-kill + client heartbeat; a
   production-boot-safety gate that refuses to start with a dev-shaped
-  config; §7 sweep (CORS/SSRF absence, nonce uniqueness, HSTS); reference
+  config; a security-gap sweep (CORS/SSRF absence, nonce uniqueness, HSTS); reference
   `docker-compose.yml` + Dockerfiles + `SECURITY.md`.
 - **W6** ✓ benchmarks: `/bench` B1–B4 in the browser (primitive latency, size
   overhead, protocol-level) + a server harness (`make bench`) for native B1/B2

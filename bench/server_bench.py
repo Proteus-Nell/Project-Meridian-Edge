@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Server-side benchmark harness (MVP_DOC.md §8, suites B1/B2 native column).
+"""Server-side benchmark harness (suites B1/B2 native column).
 
 PQC vs classical primitive latency, measured with pyca `cryptography` for BOTH
 sides - ML-KEM-768 / ML-DSA-65 and X25519 / Ed25519 share one OpenSSL 3.5
@@ -68,7 +68,7 @@ def summarize(label: str, samples_us: list[float]) -> Stats:
 
 
 def timeit(label: str, fn: Callable[[], object], *, warmup: int = WARMUP, iters: int = ITERS) -> Stats:
-    """Time `fn` per the §8 methodology (warm-up discarded, median/p95 of iters).
+    """Time `fn` per the methodology (warm-up discarded, median/p95 of iters).
     perf_counter has sub-microsecond resolution, so per-call timing is fine
     without batching (unlike the browser's clamped timer)."""
     for _ in range(warmup):
@@ -241,7 +241,7 @@ def render_terminal(results: list[LatencyResult], footprint: FootprintResult | N
 
 def render_markdown(results: list[LatencyResult], footprint: FootprintResult | None = None) -> str:
     parts = [
-        "# Meridian Edge server benchmark (§8)",
+        "# Meridian Edge server benchmark",
         "",
         f"Environment: {platform.python_implementation()} {platform.python_version()}, "
         f"{platform.platform()}. pyca/cryptography (OpenSSL) for both PQC and classical.",
@@ -298,7 +298,7 @@ def _to_json(results: list[LatencyResult], footprint: FootprintResult | None = N
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Meridian Edge server benchmark (§8 B1/B2)")
+    parser = argparse.ArgumentParser(description="Meridian Edge server benchmark (B1/B2)")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of tables")
     parser.add_argument("--iters", type=int, default=ITERS, help="iterations per op")
     parser.add_argument("--sessions", type=int, default=1000, help="sessions for the B5 footprint")

@@ -1,9 +1,9 @@
-// Prekey generation and batch signing (CLAUDE.md §2.6).
+// Prekey generation and batch signing.
 //
 // The SPK is individually signed by the identity key. OPKs are batch-signed:
 // root = SHA-512(leaf_0 ‖ ... ‖ leaf_n) with leaf_i = SHA-512(opk_pub_i).
 // The server retains the leaf list, so a fetching client can verify any
-// single OPK against the root signature (used in W3).
+// single OPK against the root signature.
 
 import { ml_kem768 } from "@noble/post-quantum/ml-kem.js";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";

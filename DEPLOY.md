@@ -32,7 +32,7 @@ Pick a route:
 | **B. Caddy** | Caddy (container) | **automatic** (Let's Encrypt) | most people - the simplest hardened HTTPS deploy |
 | **C. Single box** | Caddy (host) | **automatic** | 10-20 users on one small VPS, no container orchestration |
 
-All three keep the section 5 hardening posture (non-root, read-only filesystems,
+All three keep the same hardening posture (non-root, read-only filesystems,
 TLS 1.3, the exact CSP/HSTS header set, WS origin allowlist). **If you do not
 want to think about certificates, use Route B or C** - Caddy fetches and renews
 TLS for you, and negotiates the post-quantum TLS group with no OpenSSL wrangling.
@@ -61,7 +61,7 @@ Two consequences shape deployment:
   distinction matters for screenings - see [section 10](#10-passing-pqctls-screenings).
 
 The trust model does **not** depend on the server or database being trustworthy;
-end-to-end encryption and the safety-number check (section 4) are what protect
+end-to-end encryption and the safety-number check are what protect
 users. This guide is about running the service reliably, not about making the
 server a trusted party (it is not one).
 
@@ -180,7 +180,7 @@ The server **refuses to boot** in production if any of these is wrong
 | `MERIDIAN_EDGE_DEV` | must be unset / not `1` | `=1` enables `/docs`; refused alongside production |
 
 The gate also refuses to boot if the live Argon2id parameters have drifted from
-the section 0 constants (m = 64 MiB, t = 3, p = 1). If the server container exits
+the expected Argon2id constants (m = 64 MiB, t = 3, p = 1). If the server container exits
 immediately on `up`, read `docker compose logs server` - the gate names exactly
 what is wrong.
 
@@ -412,8 +412,8 @@ the next start.
 The lightest sane deployment: one small VPS, no Docker, Caddy on the host for
 auto-TLS, one `uvicorn` under systemd, one local Postgres.
 
-> Postgres is still required - the boot guard rejects SQLite by design
-> (section 7.5). It just runs on the same box here.
+> Postgres is still required - the boot guard rejects SQLite by design (a dev
+> artifact must never be deployed). It just runs on the same box here.
 
 ```bash
 # 0. Base packages (Debian/Ubuntu)
@@ -559,7 +559,7 @@ no data loss, since each client keeps its own encrypted store.
 Vite content-hashes the JS/CSS filenames (e.g. `index-CTYmNQn3.js`), so a new
 build produces new URLs that bypass any stale cache; `index.html` is served
 uncached and points at the new hashed assets. A normal page load picks up the
-new front-end. There is **no server-push auto-update** in the MVP (section 7.8) -
+new front-end. There is **no server-push auto-update** in the MVP -
 a user with the app already open keeps the old bundle until they reload.
 
 ### 9.4 Database schema changes - read before a schema-changing release
@@ -634,7 +634,7 @@ here is how to make it pass and prove it.
   `ssl_ecdh_curve X25519MLKEM768:X25519:secp384r1;` (nginx), native in Caddy 2.9+.
 - **HSTS** `max-age=63072000; includeSubDomains; preload` on every response.
 - **Full security-header set** (CSP, `nosniff`, `Referrer-Policy`, COOP, CORP,
-  `Permissions-Policy`) - target Mozilla Observatory grade A (section 5).
+  `Permissions-Policy`) - target Mozilla Observatory grade A.
 - **Same-origin, zero CDN** - nothing downstream can strip or weaken the headers.
 
 ### 10.2 Verify the PQ handshake from the command line
@@ -738,7 +738,7 @@ docker compose logs -f proxy      # access + TLS errors
 docker compose logs -f db
 ```
 
-Server logs are privacy-minimal by design (section 5): auth-failure counts,
+Server logs are privacy-minimal by design: auth-failure counts,
 rate-limit trips, and errors - no message metadata, no UIDs where avoidable.
 Retain ~30 days per policy.
 
@@ -753,7 +753,7 @@ docker compose exec db pg_dump -U meridian_edge meridian_edge > backup-$(date +%
 It contains public keys, prekey bundles, session hashes, recovery-code hashes,
 and the transient ciphertext queue - **no plaintext, no private keys**, so a
 leaked backup does not expose message content. The **message queue is
-intentionally ephemeral** (delete-on-ack + 14-day TTL, section 5) - never add it
+intentionally ephemeral** (delete-on-ack + 14-day TTL) - never add it
 to any archival tooling that would retain delivered ciphertext.
 
 ### 11.3 Scaling and its limits
@@ -780,7 +780,7 @@ circle comfortably.
 
 ### 11.4 What is enforced where
 
-| Control (CLAUDE.md section 5) | Enforced by |
+| Control | Enforced by |
 |---|---|
 | TLS 1.3 only, `X25519MLKEM768` hybrid group | `deploy/nginx.conf` / Caddy |
 | HSTS `max-age=63072000; includeSubDomains; preload` | edge headers |
