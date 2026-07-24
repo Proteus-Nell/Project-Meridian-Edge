@@ -12,6 +12,7 @@ from ..models import RecoveryCode, User
 from ..rate_limit import TokenBucketLimiter
 from ..schemas import RegisterRequest, RegisterResponse
 from ..security import generate_recovery_codes, hash_recovery_code
+from ..security_log import record_security_event
 
 router = APIRouter(prefix="/v1")
 
@@ -33,6 +34,9 @@ def register(
 ) -> RegisterResponse:
     limiter: TokenBucketLimiter = request.app.state.register_limiter
     if not limiter.allow(_client_key(request)):
+        record_security_event(
+            "rate_limit_exceeded", endpoint=request.url.path, client_ip=_client_key(request)
+        )
         raise HTTPException(status_code=429, detail="rate_limited")
 
     ik_pub = payload.decoded_ik_pub()

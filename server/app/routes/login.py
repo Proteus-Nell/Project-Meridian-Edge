@@ -37,6 +37,7 @@ from ..pqc import burn_verification_time, verify_mldsa65
 from ..rate_limit import TokenBucketLimiter
 from ..schemas import ChallengeRequest, ChallengeResponse, TokenResponse, VerifyRequest
 from ..security import hash_token, new_session_token
+from ..security_log import record_security_event
 
 router = APIRouter(prefix="/v1")
 
@@ -59,6 +60,9 @@ def _require_allowed_origin(request: Request) -> None:
     """
     allowed: list[str] | None = request.app.state.allowed_origins
     if allowed is not None and _origin(request) not in allowed:
+        record_security_event(
+            "origin_rejected", endpoint=request.url.path, client_ip=_client_key(request)
+        )
         raise HTTPException(status_code=403, detail="forbidden_origin")
 
 
@@ -79,6 +83,9 @@ def challenge(
     _require_allowed_origin(request)
     limiter: TokenBucketLimiter = request.app.state.login_challenge_limiter
     if not limiter.allow(_client_key(request)):
+        record_security_event(
+            "rate_limit_exceeded", endpoint=request.url.path, client_ip=_client_key(request)
+        )
         raise HTTPException(status_code=429, detail="rate_limited")
 
     now: float = request.app.state.clock()
@@ -132,10 +139,25 @@ def verify(
 
     if row is None or not nonce_ok or user is None:
         burn_verification_time(signature, login_message(bytes(NONCE_BYTES), origin, 0))
+        # Unknown UID and bad nonce are indistinguishable to the caller and are
+        # logged the same coarse way: a missing/expired/replayed credential.
+        record_security_event(
+            "auth_failure",
+            endpoint=request.url.path,
+            client_ip=_client_key(request),
+            reason="invalid_nonce_or_uid",
+        )
         raise HTTPException(status_code=401, detail="auth_failed")
 
     message = login_message(bytes.fromhex(row.nonce), origin, row.timestamp)
     if not verify_mldsa65(user.ik_pub, signature, message):
+        # A valid nonce for a real UID but a signature that does not verify: the
+        # attack-signal case (someone signing with the wrong identity key).
+        record_security_event(
+            "signature_verification_failed",
+            endpoint=request.url.path,
+            client_ip=_client_key(request),
+        )
         raise HTTPException(status_code=401, detail="auth_failed")
 
     token = new_session_token()

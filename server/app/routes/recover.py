@@ -49,6 +49,7 @@ from ..security import (
     hash_recovery_code,
     verify_recovery_code,
 )
+from ..security_log import record_security_event
 from ..constants import RECOVERY_CODE_COUNT
 
 router = APIRouter(prefix="/v1")
@@ -79,6 +80,9 @@ def recover(
 ) -> RecoverResponse:
     limiter: TokenBucketLimiter = request.app.state.recover_limiter
     if not limiter.allow(_client_key(request)):
+        record_security_event(
+            "rate_limit_exceeded", endpoint=request.url.path, client_ip=_client_key(request)
+        )
         raise HTTPException(status_code=429, detail="rate_limited")
 
     user = session.execute(
@@ -107,6 +111,14 @@ def recover(
         verify_recovery_code(_get_dummy_hash(), payload.code)
 
     if user is None or matched is None:
+        # Brute-forcing recovery codes is an attack on the account-takeover path;
+        # logged coarsely (unknown UID and wrong code are indistinguishable).
+        record_security_event(
+            "auth_failure",
+            endpoint=request.url.path,
+            client_ip=_client_key(request),
+            reason="invalid_recovery_code",
+        )
         raise HTTPException(status_code=401, detail="auth_failed")
 
     # Identity replacement, all-or-nothing.

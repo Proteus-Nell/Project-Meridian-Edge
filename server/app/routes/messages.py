@@ -21,9 +21,15 @@ from ..deps import get_session
 from ..models import QueuedMessage, User
 from ..rate_limit import TokenBucketLimiter
 from ..schemas import AckRequest, MessagesResponse, QueuedMessageOut, SendMessageRequest
+from ..security_log import record_security_event
 from ..ws import WsHub
 
 router = APIRouter(prefix="/v1")
+
+
+def _client_ip(request: Request) -> str:
+    client = request.client
+    return client.host if client is not None else "unknown"
 
 
 def _sweep_expired(session: Session, recipient_id: int, now: float) -> None:
@@ -44,6 +50,9 @@ async def send_message(
 ) -> None:
     limiter: TokenBucketLimiter = request.app.state.message_send_limiter
     if not limiter.allow(ctx.user.uid):
+        record_security_event(
+            "rate_limit_exceeded", endpoint=request.url.path, client_ip=_client_ip(request)
+        )
         raise HTTPException(status_code=429, detail="rate_limited")
 
     envelope = payload.decoded_envelope()

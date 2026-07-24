@@ -24,12 +24,18 @@ from ..deps import get_session
 from ..models import OneTimePrekey, OpkBatch, SignedPrekey, User
 from ..rate_limit import TokenBucketLimiter
 from ..schemas import BundleOpk, BundleResponse
+from ..security_log import record_security_event
 from ..uid import canonicalize_uid
 
 router = APIRouter(prefix="/v1")
 
 _LEAF_BYTES = 64
 _CLAIM_RETRIES = 4
+
+
+def _client_ip(request: Request) -> str:
+    client = request.client
+    return client.host if client is not None else "unknown"
 
 
 def _not_found() -> HTTPException:
@@ -50,6 +56,11 @@ def fetch_bundle(
 ) -> BundleResponse:
     limiter: TokenBucketLimiter = request.app.state.bundle_fetch_limiter
     if not limiter.allow(ctx.user.uid):
+        # The limiter keys on the UID; the log deliberately does not - endpoint
+        # and source IP only, no account identifier.
+        record_security_event(
+            "rate_limit_exceeded", endpoint=request.url.path, client_ip=_client_ip(request)
+        )
         raise HTTPException(status_code=429, detail="rate_limited")
 
     canonical = canonicalize_uid(uid)

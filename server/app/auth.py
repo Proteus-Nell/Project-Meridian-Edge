@@ -18,6 +18,12 @@ from .constants import SESSION_IDLE_SECONDS
 from .deps import get_session
 from .models import SessionToken, User
 from .security import hash_token
+from .security_log import record_security_event
+
+
+def _client_ip(request: Request) -> str:
+    client = request.client
+    return client.host if client is not None else "unknown"
 
 
 @dataclass
@@ -52,12 +58,22 @@ def require_auth(
 ) -> AuthContext:
     header = request.headers.get("authorization", "")
     if not header.startswith("Bearer "):
+        # No credential presented at all: ordinary unauthenticated traffic, not
+        # a signal worth recording.
         raise _unauthorized()
 
     now: float = request.app.state.clock()
     row = authenticate_token(session, header[len("Bearer ") :], now)
     if row is None:
         session.commit()  # persist a revocation set by idle expiry
+        # A token WAS presented and did not resolve (unknown, revoked, or idle-
+        # expired). Logged coarsely - the three are indistinguishable here too.
+        record_security_event(
+            "auth_failure",
+            endpoint=request.url.path,
+            client_ip=_client_ip(request),
+            reason="invalid_token",
+        )
         raise _unauthorized()
 
     user = session.get(User, row.user_id)
