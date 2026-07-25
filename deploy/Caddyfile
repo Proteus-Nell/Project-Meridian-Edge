@@ -18,6 +18,22 @@
 {$MERIDIAN_EDGE_DOMAIN} {
 	encode gzip
 
+	# TLS 1.3 only, matching nginx.conf's `ssl_protocols TLSv1.3`. Without this,
+	# Caddy allows TLS 1.2, which drops to a classical cipher and, more to the
+	# point, never negotiates the post-quantum group. Curves stay unpinned on
+	# purpose: Caddy picks the best the binary supports, which is
+	# X25519MLKEM768 on Caddy 2.9+ built with Go 1.24+, X25519 otherwise.
+	#
+	# The PQ group therefore depends on the BINARY, not this file. To confirm
+	# the live server actually negotiates it:
+	#   echo | openssl s_client -connect HOST:443 -servername HOST 2>/dev/null \
+	#     | grep -i 'Peer Temp Key'
+	# X25519MLKEM768 means PQ transport is on; plain X25519 (253 bits) means the
+	# Caddy binary is too old, so upgrade it. Needs OpenSSL 3.5+ client-side.
+	tls {
+		protocols tls1.3
+	}
+
 	# HSTS is authoritative here; strip any copy the backend sets so it isn't
 	# duplicated (matches nginx's proxy_hide_header Strict-Transport-Security).
 	header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"

@@ -384,10 +384,13 @@ is on you (section 4.2's deploy hook); if that is tedious, Route B removes it.
 ## 6. Route B - Caddy (automatic HTTPS)
 
 Same containerized topology, edge is **Caddy** instead of nginx. Caddy
-provisions and renews TLS automatically (Let's Encrypt / ZeroSSL) and Caddy 2.9+
-negotiates `X25519MLKEM768` out of the box - no section 4, no OpenSSL wrangling.
-Files: `docker-compose.caddy.yml`, `deploy/caddy.Dockerfile`, `deploy/Caddyfile`
-(its header set mirrors nginx.conf exactly).
+provisions and renews TLS automatically (Let's Encrypt / ZeroSSL), and Caddy
+**2.9+ built with Go 1.24+** negotiates `X25519MLKEM768` with no section 4 and
+no OpenSSL wrangling. An older Caddy still serves TLS 1.3 but drops to classical
+X25519 **silently**, so verify with 10.2 after deploying and keep the binary
+current. Files: `docker-compose.caddy.yml`, `deploy/caddy.Dockerfile`,
+`deploy/Caddyfile` (its header set mirrors nginx.conf exactly, and it pins
+TLS 1.3).
 
 ```bash
 # 1. Secrets + config
@@ -630,10 +633,13 @@ here is how to make it pass and prove it.
 
 ### 10.1 What the config already gives you
 
-- **TLS 1.3 only** (`ssl_protocols TLSv1.3;` / Caddy default). No TLS 1.2 or
-  lower is offered.
+- **TLS 1.3 only**: `ssl_protocols TLSv1.3;` (nginx) and `tls { protocols tls1.3 }`
+  (Caddyfile). Note that Caddy's *default* is TLS 1.2+, so the Caddyfile pins
+  1.3 explicitly; without that line Caddy would accept 1.2.
 - **Hybrid PQ key exchange first**:
-  `ssl_ecdh_curve X25519MLKEM768:X25519:secp384r1;` (nginx), native in Caddy 2.9+.
+  `ssl_ecdh_curve X25519MLKEM768:X25519:secp384r1;` (nginx), or native in Caddy
+  2.9+ built with Go 1.24+. An older Caddy binary silently negotiates classical
+  X25519 instead (see 10.4).
 - **HSTS** `max-age=63072000; includeSubDomains; preload` on every response.
 - **Full security-header set** (CSP, `nosniff`, `Referrer-Policy`, COOP, CORP,
   `Permissions-Policy`) - target Mozilla Observatory grade A.
@@ -645,11 +651,13 @@ Use an **OpenSSL 3.5+** client (older clients do not know the group and will
 mislead you):
 
 ```bash
-# Force the hybrid group; a completed 1.3 handshake reporting it = PQ transport on
+# The most reliable indicator is the negotiated key-exchange group. A default
+# handshake (let the client offer everything) reports what the server actually
+# picked:
 openssl s_client -connect chat.example.com:443 -servername chat.example.com \
-  -groups X25519MLKEM768 -tls1_3 </dev/null 2>/dev/null \
-  | grep -Ei 'Negotiated TLS1.3 group|Server Temp Key|Protocol'
-#   expect: Negotiated TLS1.3 group: X25519MLKEM768
+  </dev/null 2>/dev/null | grep -Ei 'Peer Temp Key|Server Temp Key|Negotiated TLS1.3 group'
+#   expect: Peer Temp Key: X25519MLKEM768   (PQ transport on)
+#   a plain "X25519, 253 bits" means classical only: the edge is too old (10.4)
 
 # TLS 1.2 must be refused
 openssl s_client -connect chat.example.com:443 -tls1_2 </dev/null 2>&1 | grep -i 'alert\|no protocols'
@@ -682,7 +690,11 @@ testssl.sh --protocols --fs --headers chat.example.com
 
 ### 10.4 If the edge cannot negotiate the group
 
-Almost always the nginx image's OpenSSL predates 3.5 (the standardized
+The two edges fail differently, and Caddy's failure is the quiet one:
+
+**nginx fails closed.** It lists `X25519MLKEM768` in `ssl_ecdh_curve` and
+**refuses to start** if its OpenSSL does not know the group, so you find out at
+deploy time. Almost always the image's OpenSSL predates 3.5 (the standardized
 `X25519MLKEM768` codepoint landed in **OpenSSL 3.5**, April 2025). Check inside
 the image:
 
@@ -692,12 +704,21 @@ docker compose run --rm --entrypoint sh proxy -c \
 ```
 
 - Lists an ML-KEM algorithm -> you are set.
-- Does not -> either rebuild `deploy/proxy.Dockerfile` on an nginx image built
-  against OpenSSL >= 3.5, **or** switch to **Route B/C (Caddy)**, which ships the
-  group in its own Go TLS stack. As a last resort, drop the hybrid group from
-  `ssl_ecdh_curve` (leaving `X25519:secp384r1`) so nginx starts at all - a
-  documented downgrade of the **transport** layer only; the end-to-end
-  ML-KEM/ML-DSA guarantees are untouched. Restore it once the image supports it.
+- Does not -> rebuild `deploy/proxy.Dockerfile` on an nginx image built against
+  OpenSSL >= 3.5, **or** switch to Caddy. As a last resort, drop the hybrid group
+  from `ssl_ecdh_curve` (leaving `X25519:secp384r1`) so nginx starts at all: a
+  documented downgrade of the **transport** only, with the end-to-end
+  ML-KEM/ML-DSA guarantees untouched. Restore it once the image supports it.
+
+**Caddy fails open.** An older Caddy (before 2.9, or built with Go < 1.24)
+serves TLS 1.3 happily but silently negotiates **classical X25519**, with no
+error and no log line. Nothing tells you the PQ transport is missing except a
+handshake probe, so run 10.2 after every deploy. `caddy version` prints the
+Caddy and Go versions; you need **Caddy >= 2.9** built with **Go >= 1.24**. If
+it is older, upgrade the binary (the official images track this) and re-check
+`Peer Temp Key` from 10.2. Message security does not depend on this, since the
+ML-KEM/ML-DSA E2EE runs in the client; the fix restores the transport layer the
+project advertises.
 
 > nginx **refuses to start** when the first named group is unknown, so a running
 > nginx that lacks PQ means someone already dropped the group - re-add it after
