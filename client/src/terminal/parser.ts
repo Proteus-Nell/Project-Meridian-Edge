@@ -5,8 +5,8 @@
 
 import { CROCKFORD_ALPHABET, RECOVERY_CODE_CHARS, UID_CHARS } from "../crypto/constants";
 import { suggestCommand } from "./suggest";
-import { isColorSlot, isEmblemName, isSchemeName, normalizeHex } from "./theme";
-import type { ColorSlot, EmblemName, SchemeName } from "./theme";
+import { isColorSlot, isEmblemName, normalizeHex } from "./theme";
+import type { ColorSlot, EmblemName } from "./theme";
 
 export type DurationUnit = "m" | "h" | "d" | "w";
 
@@ -60,6 +60,7 @@ export type Command =
   | { readonly name: "add"; readonly uid: string; readonly alias: string | undefined }
   | { readonly name: "remove"; readonly target: RemoveTarget; readonly purge: boolean }
   | { readonly name: "rename"; readonly target: string; readonly alias: string }
+  | { readonly name: "favourite"; readonly target: string; readonly on: boolean }
   | { readonly name: "chat"; readonly target: string; readonly message: string | undefined }
   | { readonly name: "home" }
   | { readonly name: "return" }
@@ -77,10 +78,18 @@ export type Command =
   | { readonly name: "settings-mask"; readonly mask: "asterisk" | "hidden" }
   | { readonly name: "settings-trust"; readonly mode: "auto" | "manual" }
   | { readonly name: "settings-theme"; readonly element: ThemeElement | "all"; readonly enabled: boolean }
-  | { readonly name: "settings-scheme"; readonly scheme: SchemeName }
+  // The scheme name is free-form here: presets and user-defined schemes share
+  // one namespace, and only the executor can see which names exist.
+  | { readonly name: "settings-scheme"; readonly scheme: string }
+  | { readonly name: "settings-scheme-new"; readonly scheme: string }
+  | { readonly name: "settings-scheme-delete"; readonly scheme: string }
+  | { readonly name: "settings-scheme-list" }
   | { readonly name: "settings-emblem"; readonly emblem: EmblemName }
   | { readonly name: "settings-color"; readonly slot: ColorSlot; readonly hex: string }
   | { readonly name: "settings-color-reset" }
+  | { readonly name: "duress-set" }
+  | { readonly name: "duress-off" }
+  | { readonly name: "duress-status" }
   | { readonly name: "keys-status" }
   | { readonly name: "keys-refill" }
   | { readonly name: "bench"; readonly suite: string | undefined }
@@ -119,6 +128,7 @@ export const COMMAND_USAGE = {
   add: "/add <uid> [alias]",
   remove: "/remove <alias|uid> [purge]  |  /remove all [purge]  (purge = also delete message history)",
   rename: "/rename <alias|uid> <new-alias>",
+  favourite: "/favourite <alias|uid> [off]  (favourites sort to the top of your contact list)",
   contacts: "/contacts",
   chat: "/chat <alias|uid> [message]",
   home: "/home",
@@ -131,7 +141,9 @@ export const COMMAND_USAGE = {
   delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
   rotate: "/rotate passphrase",
   settings:
-    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <dark|parchment|olive>  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
+  duress:
+    "/duress set  |  /duress off  |  /duress status  (a passphrase that silently destroys this device and the account)",
   keys: "/keys status  |  /keys refill",
   bench: "/bench [b1|b2|b3|b4|all]",
   wipe: "/wipe",
@@ -166,6 +178,10 @@ export const COMMAND_ALIASES: Record<string, CommandWord> = {
   clear: "clr",
   cls: "clr",
   back: "return",
+  // Both spellings of the same word, plus the short form people actually type.
+  favorite: "favourite",
+  fav: "favourite",
+  star: "favourite",
 };
 
 /** Resolve a typed word to a canonical command word: itself if it is one, its
@@ -180,6 +196,11 @@ export function resolveCommandWord(word: string): CommandWord | null {
 const ALIAS_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const DURATION_RE = /^(\d{1,4})([mhdw])$/;
 const SUITE_RE = /^[A-Za-z0-9_-]{1,16}$/;
+/** Shape of any scheme name the grammar will carry. Whether the name exists,
+ * and whether it may be created, is the executor's call (theme.ts owns those
+ * rules); this only keeps junk - whitespace, escapes, absurd lengths - from
+ * travelling any further. */
+const SCHEME_NAME_RE = /^[A-Za-z][A-Za-z0-9-]{0,23}$/;
 
 /** Canonicalize a UID: strip dashes, uppercase, Crockford ambiguity mapping
  * (O→0, I/L→1). Returns null unless exactly 26 canonical chars remain. */
@@ -567,11 +588,33 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         return invalid("expected <emblem|scanlines|vignette|dock|all> <on|off>", usage);
       }
       if (sub === "scheme") {
-        const value = args[1];
-        if (value !== undefined && isSchemeName(value) && args.length === 2) {
-          return command({ name: "settings-scheme", scheme: value });
+        // /settings scheme list | new <name> | delete <name> | <name>
+        if (args[1] === "list" && args.length === 2) {
+          return command({ name: "settings-scheme-list" });
         }
-        return invalid("expected dark, parchment, or olive", usage);
+        const verb = args[1];
+        if (verb === "new" || verb === "delete") {
+          const nameToken = args[2];
+          if (args.length !== 3 || nameToken === undefined) {
+            return invalid(`expected a scheme name after '${verb}'`, usage);
+          }
+          if (!SCHEME_NAME_RE.test(nameToken)) {
+            return invalid(
+              "invalid scheme name (1-24 characters: a letter, then letters, digits or hyphens)",
+              usage,
+            );
+          }
+          const scheme = nameToken.toLowerCase();
+          return command(
+            verb === "new"
+              ? { name: "settings-scheme-new", scheme }
+              : { name: "settings-scheme-delete", scheme },
+          );
+        }
+        if (verb !== undefined && args.length === 2 && SCHEME_NAME_RE.test(verb)) {
+          return command({ name: "settings-scheme", scheme: verb.toLowerCase() });
+        }
+        return invalid("expected a scheme name, or 'list', 'new <name>', 'delete <name>'", usage);
       }
       if (sub === "emblem") {
         const value = args[1];
@@ -603,7 +646,43 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
           usage,
         );
       }
-      return invalid("expected 'rotation', 'notify', 'mask', 'theme', 'scheme', 'emblem', or 'color'", usage);
+      return invalid(
+        "expected 'rotation', 'notify', 'mask', 'trust', 'theme', 'scheme', 'emblem', or 'color'",
+        usage,
+      );
+    }
+    case "duress": {
+      const sub = args[0];
+      if (args.length !== 1) {
+        return invalid("expected 'set', 'off', or 'status'", usage);
+      }
+      if (sub === "set") {
+        return command({ name: "duress-set" });
+      }
+      if (sub === "off") {
+        return command({ name: "duress-off" });
+      }
+      if (sub === "status") {
+        return command({ name: "duress-status" });
+      }
+      return invalid("expected 'set', 'off', or 'status'", usage);
+    }
+    case "favourite": {
+      // /favourite <alias|uid> [off] - `off` unstars, mirroring the
+      // <value|off> shape /timer and /purge set already use.
+      const token = args[0];
+      if (args.length < 1 || args.length > 2 || token === undefined) {
+        return invalid("expected a contact and an optional 'off'", usage);
+      }
+      const on = args[1] === undefined;
+      if (!on && args[1] !== "off") {
+        return invalid("the only extra argument is 'off'", usage);
+      }
+      const target = normalizeUid(token) ?? parseAlias(token);
+      if (target === null) {
+        return invalid("not a valid alias or UID", usage);
+      }
+      return command({ name: "favourite", target, on });
     }
     case "keys": {
       const sub = args[0];

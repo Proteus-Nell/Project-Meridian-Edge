@@ -4,9 +4,20 @@
 // unencrypted so they can apply before anyone unlocks the store, for example to
 // the very first passphrase prompt.
 
-import type { ThemePrefs } from "../../crypto/store";
-import { resolveScheme } from "../theme";
-import type { ColorSlot, EmblemName, SchemeName } from "../theme";
+import type { DisplayPrefs, ThemePrefs } from "../../crypto/store";
+import {
+  FORK_SUFFIX,
+  MAX_CUSTOM_SCHEMES,
+  SCHEME_NAMES,
+  baseSchemeOf,
+  findCustomScheme,
+  isSchemeName,
+  isValidCustomSchemeName,
+  resolveScheme,
+  schemeColorsOf,
+  schemeExists,
+} from "../theme";
+import type { ColorSlot, CustomScheme, EmblemName } from "../theme";
 import type { ThemeElement, Weekday } from "../parser";
 import type { ExecutorInternals } from "./context";
 import { DEFAULT_ROTATION } from "./records";
@@ -104,12 +115,107 @@ export async function doSettingsTheme(
   );
 }
 
-/** `/settings scheme <dark|parchment|olive>`: switch the base palette. */
-export async function doSettingsScheme(x: ExecutorInternals, scheme: SchemeName): Promise<void> {
+/** Persist a prefs change and repaint from it in one step, so what is stored
+ * and what is on screen can never disagree. */
+async function applyPrefs(x: ExecutorInternals, prefs: DisplayPrefs): Promise<void> {
+  await x.store.setDisplayPrefs(prefs);
+  x.chrome.applyScheme(resolveScheme(prefs.scheme, prefs.customSchemes));
+}
+
+/** `/settings scheme <name>`: switch to a preset or one of the user's own. */
+export async function doSettingsScheme(x: ExecutorInternals, scheme: string): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
-  await x.store.setDisplayPrefs({ ...prefs, scheme });
-  x.chrome.applyScheme(resolveScheme(scheme, prefs.colorOverrides));
-  x.renderer.event("success", `color scheme set to '${scheme}'`);
+  if (!schemeExists(scheme, prefs.customSchemes)) {
+    x.renderer.error("E106", scheme);
+    return;
+  }
+  await applyPrefs(x, { ...prefs, scheme });
+  x.renderer.event(
+    "success",
+    isSchemeName(scheme)
+      ? `color scheme set to the '${scheme}' preset`
+      : `color scheme set to '${scheme}' (custom)`,
+  );
+}
+
+/** `/settings scheme new <name>`: copy whatever is on screen into a scheme of
+ * your own and switch to it. The copy is what makes presets safe to edit - the
+ * preset itself is never written to. */
+export async function doSettingsSchemeNew(x: ExecutorInternals, name: string): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  if (!isValidCustomSchemeName(name)) {
+    x.renderer.error("E107", name);
+    return;
+  }
+  if (schemeExists(name, prefs.customSchemes)) {
+    x.renderer.error("E109", name);
+    return;
+  }
+  if (prefs.customSchemes.length >= MAX_CUSTOM_SCHEMES) {
+    x.renderer.error("E108", MAX_CUSTOM_SCHEMES);
+    return;
+  }
+  const base = baseSchemeOf(prefs.scheme, prefs.customSchemes);
+  const created: CustomScheme = {
+    name,
+    base,
+    colors: schemeColorsOf(prefs.scheme, prefs.customSchemes),
+  };
+  await applyPrefs(x, {
+    ...prefs,
+    scheme: name,
+    customSchemes: [...prefs.customSchemes, created],
+  });
+  x.renderer.event(
+    "success",
+    `created '${name}' from ${prefs.scheme} and switched to it - /settings color <slot> <#rrggbb> to edit it`,
+  );
+}
+
+/** `/settings scheme delete <name>`: drop one of your own schemes. Presets are
+ * not deletable; the whole point is that they are always there to go back to. */
+export async function doSettingsSchemeDelete(x: ExecutorInternals, name: string): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  if (isSchemeName(name) || !isValidCustomSchemeName(name)) {
+    x.renderer.error("E107", name);
+    return;
+  }
+  const target = findCustomScheme(prefs.customSchemes, name);
+  if (target === null) {
+    x.renderer.error("E106", name);
+    return;
+  }
+  const customSchemes = prefs.customSchemes.filter((scheme) => scheme.name !== name);
+  // Deleting what is on screen falls back to the preset it came from, rather
+  // than leaving the page pointing at something that no longer exists.
+  const scheme = prefs.scheme === name ? target.base : prefs.scheme;
+  await applyPrefs(x, { ...prefs, scheme, customSchemes });
+  x.renderer.event(
+    "success",
+    prefs.scheme === name
+      ? `deleted '${name}' - back to the '${target.base}' preset`
+      : `deleted '${name}'`,
+  );
+}
+
+/** `/settings scheme list`: every scheme that can be switched to, marking the
+ * active one and where each custom scheme came from. */
+export async function doSettingsSchemeList(x: ExecutorInternals): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  x.renderer.event("info", "color schemes:");
+  const names = [...SCHEME_NAMES, ...prefs.customSchemes.map((scheme) => scheme.name)];
+  const width = Math.max(...names.map((name) => name.length));
+  for (const name of SCHEME_NAMES) {
+    const mark = name === prefs.scheme ? "*" : " ";
+    x.renderer.plain(`  ${mark} ${name.padEnd(width)}  preset (never modified)`);
+  }
+  for (const scheme of prefs.customSchemes) {
+    const mark = scheme.name === prefs.scheme ? "*" : " ";
+    x.renderer.plain(`  ${mark} ${scheme.name.padEnd(width)}  custom, based on ${scheme.base}`);
+  }
+  x.renderer.plain(
+    `  (${prefs.customSchemes.length}/${MAX_CUSTOM_SCHEMES} custom · /settings scheme new <name> to add one)`,
+  );
 }
 
 /** `/settings emblem <pq|globe|tree>`: choose the medallion glyph. */
@@ -120,24 +226,72 @@ export async function doSettingsEmblem(x: ExecutorInternals, emblem: EmblemName)
   x.renderer.event("success", `emblem set to '${emblem}'`);
 }
 
-/** `/settings color <slot> <#rrggbb>`: override one slot of the active
- * scheme with a custom HEX value (the terminal-native color picker). */
+/** `/settings color <slot> <#rrggbb>`: the terminal-native color picker.
+ *
+ * Editing a preset does not modify it - presets are immutable, which is what
+ * lets `/settings scheme dark` always mean the palette that shipped. The first
+ * edit on a preset forks it into `<preset>-custom` and switches there, so the
+ * change lands somewhere the user owns and the original stays intact. A second
+ * edit finds that fork already active and just writes to it. */
 export async function doSettingsColor(
   x: ExecutorInternals,
   slot: ColorSlot,
   hex: string,
 ): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
-  const colorOverrides = { ...prefs.colorOverrides, [slot]: hex };
-  await x.store.setDisplayPrefs({ ...prefs, colorOverrides });
-  x.chrome.applyScheme(resolveScheme(prefs.scheme, colorOverrides));
-  x.renderer.event("success", `${slot} set to ${hex} (on the '${prefs.scheme}' scheme)`);
+  const active = findCustomScheme(prefs.customSchemes, prefs.scheme);
+  if (active !== null) {
+    const edited: CustomScheme = { ...active, colors: { ...active.colors, [slot]: hex } };
+    await applyPrefs(x, {
+      ...prefs,
+      customSchemes: prefs.customSchemes.map((s) => (s.name === active.name ? edited : s)),
+    });
+    x.renderer.event("success", `${slot} set to ${hex} on '${active.name}'`);
+    return;
+  }
+
+  const base = baseSchemeOf(prefs.scheme, prefs.customSchemes);
+  const name = `${base}${FORK_SUFFIX}`;
+  const existing = findCustomScheme(prefs.customSchemes, name);
+  if (existing === null && prefs.customSchemes.length >= MAX_CUSTOM_SCHEMES) {
+    x.renderer.error("E108", MAX_CUSTOM_SCHEMES);
+    return;
+  }
+  const colors = { ...(existing?.colors ?? schemeColorsOf(base, [])), [slot]: hex };
+  const forked: CustomScheme = { name, base, colors };
+  await applyPrefs(x, {
+    ...prefs,
+    scheme: name,
+    customSchemes:
+      existing === null
+        ? [...prefs.customSchemes, forked]
+        : prefs.customSchemes.map((s) => (s.name === name ? forked : s)),
+  });
+  x.renderer.event(
+    "success",
+    `${slot} set to ${hex} on '${name}' - the '${base}' preset is unchanged, /settings scheme ${base} goes back to it`,
+  );
 }
 
-/** `/settings color reset`: drop all HEX overrides, back to the pure scheme. */
+/** `/settings color reset`: put the active custom scheme's five slots back to
+ * its base preset's. A preset is already pristine, so there is nothing to do. */
 export async function doSettingsColorReset(x: ExecutorInternals): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
-  await x.store.setDisplayPrefs({ ...prefs, colorOverrides: {} });
-  x.chrome.applyScheme(resolveScheme(prefs.scheme, {}));
-  x.renderer.event("success", `custom colors cleared - pure '${prefs.scheme}' scheme restored`);
+  const active = findCustomScheme(prefs.customSchemes, prefs.scheme);
+  if (active === null) {
+    x.renderer.event(
+      "info",
+      `'${prefs.scheme}' is a preset and carries no custom colors - nothing to reset`,
+    );
+    return;
+  }
+  const restored: CustomScheme = { ...active, colors: schemeColorsOf(active.base, []) };
+  await applyPrefs(x, {
+    ...prefs,
+    customSchemes: prefs.customSchemes.map((s) => (s.name === active.name ? restored : s)),
+  });
+  x.renderer.event(
+    "success",
+    `'${active.name}' reset to the '${active.base}' preset colors (/settings scheme ${active.base} switches to the preset itself)`,
+  );
 }

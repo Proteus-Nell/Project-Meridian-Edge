@@ -87,29 +87,22 @@ describe("/settings theme", () => {
     });
   });
 
-  it("switches schemes, applies HEX overrides, and resets them", async () => {
+  it("switches between presets", async () => {
     const { executor, chrome, store } = makeExecutor();
     executor.handle(parseLine("/settings scheme parchment"));
     await executor.idle();
-    let applied = chrome.schemes[chrome.schemes.length - 1];
+    const applied = chrome.schemes[chrome.schemes.length - 1];
     expect(applied?.background).toBe("#e3e7d3");
     expect(applied?.accent).toBe("#8a6d2f");
     expect((await store.getDisplayPrefs()).scheme).toBe("parchment");
+  });
 
-    // A HEX override layers on the active scheme and persists.
-    executor.handle(parseLine("/settings color background #101820"));
+  it("rejects a scheme name that does not exist", async () => {
+    const { executor, output, store } = makeExecutor();
+    executor.handle(parseLine("/settings scheme neon"));
     await executor.idle();
-    applied = chrome.schemes[chrome.schemes.length - 1];
-    expect(applied?.background).toBe("#101820");
-    expect(applied?.accent).toBe("#8a6d2f"); // untouched slot keeps scheme value
-    expect((await store.getDisplayPrefs()).colorOverrides).toEqual({ background: "#101820" });
-
-    // Reset restores the pure scheme.
-    executor.handle(parseLine("/settings color reset"));
-    await executor.idle();
-    applied = chrome.schemes[chrome.schemes.length - 1];
-    expect(applied?.background).toBe("#e3e7d3");
-    expect((await store.getDisplayPrefs()).colorOverrides).toEqual({});
+    expect(output.text()).toContain("[E106]");
+    expect((await store.getDisplayPrefs()).scheme).toBe("dark");
   });
 
   it("selects an emblem glyph and persists it", async () => {

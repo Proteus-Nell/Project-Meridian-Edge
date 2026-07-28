@@ -2,7 +2,7 @@
 
 Everything the server needs is assembled in create_app(): security headers,
 uniform error handlers, one token-bucket limiter per rate-limited surface, the
-WebSocket hub, and the six route modules. Nothing here is a module-level
+WebSocket hub, and the route modules. Nothing here is a module-level
 singleton - each call builds an isolated app with its own engine, hub and
 limiters, which is what lets the test suite run many independent servers in a
 single process without them sharing rate-limit buckets or sessions.
@@ -51,6 +51,7 @@ from .db import Base, make_engine
 from .errors import install_error_handlers
 from .headers import install_security_headers
 from .rate_limit import TokenBucketLimiter
+from .routes.account import router as account_router
 from .routes.bundles import router as bundles_router
 from .routes.keys import router as keys_router
 from .routes.login import router as login_router
@@ -175,6 +176,7 @@ def create_app(
     app.include_router(recover_router)
     app.include_router(login_router)
     app.include_router(sessions_router)
+    app.include_router(account_router)
     app.include_router(keys_router)
     app.include_router(bundles_router)
     app.include_router(messages_router)

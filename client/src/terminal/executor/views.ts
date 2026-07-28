@@ -12,6 +12,7 @@ import {
 } from "./context";
 import type { ExecutorInternals } from "./context";
 import { formatDuration } from "./format";
+import { favouriteMark, sortContacts } from "./records";
 import type { StoredMessage } from "./records";
 
 /** Rebuild the transcript as the focused conversation view: clear the screen
@@ -68,7 +69,9 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
     x.renderer.plain("  locked - /login to unlock, or /register to create an identity");
     return;
   }
-  const contacts = [...x.contacts.values()].sort((a, b) => a.alias.localeCompare(b.alias));
+  // Favourites first (/favourite), then alphabetical - the same order /contacts
+  // prints, with a leading '*' marking the pinned ones.
+  const contacts = sortContacts([...x.contacts.values()]);
   if (contacts.length === 0) {
     x.renderer.plain("  no contacts yet - /add <uid> [alias] to add one");
   } else {
@@ -84,7 +87,7 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
       ]
         .filter((s) => s.length > 0)
         .join(" · ");
-      x.renderer.plain(`    ${contact.alias.padEnd(width)}  ${flags}`);
+      x.renderer.plain(`  ${favouriteMark(contact)} ${contact.alias.padEnd(width)}  ${flags}`);
     }
   }
   const pending = await x.store.listKeys("pending/");

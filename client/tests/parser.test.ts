@@ -164,6 +164,39 @@ describe("/rename", () => {
   });
 });
 
+describe("/favourite", () => {
+  it("marks and unmarks by alias or UID", () => {
+    expect(parseLine("/favourite bob")).toEqual({
+      kind: "command",
+      command: { name: "favourite", target: "bob", on: true },
+    });
+    expect(parseLine("/favourite bob off")).toEqual({
+      kind: "command",
+      command: { name: "favourite", target: "bob", on: false },
+    });
+    expect(parseLine(`/favourite ${UID}`)).toEqual({
+      kind: "command",
+      command: { name: "favourite", target: UID, on: true },
+    });
+  });
+
+  it("accepts the /favorite, /fav and /star spellings", () => {
+    for (const word of ["favorite", "fav", "star"]) {
+      expect(parseLine(`/${word} bob`), word).toEqual({
+        kind: "command",
+        command: { name: "favourite", target: "bob", on: true },
+      });
+    }
+  });
+
+  it("rejects a missing target or an unexpected extra argument", () => {
+    expect(parseLine("/favourite").kind).toBe("invalid");
+    expect(parseLine("/favourite bob on").kind).toBe("invalid");
+    expect(parseLine("/favourite bob off please").kind).toBe("invalid");
+    expect(parseLine(`/favourite ${"x".repeat(33)}`).kind).toBe("invalid");
+  });
+});
+
 describe("durations (/timer, /purge set)", () => {
   it("parses valid durations", () => {
     expect(parseLine("/timer bob 1d")).toEqual({
@@ -220,7 +253,12 @@ describe("subcommands", () => {
       kind: "command",
       command: { name: "settings-scheme", scheme: "parchment" },
     });
-    expect(parseLine("/settings scheme neon").kind).toBe("invalid");
+    // Presets and user-defined schemes share one namespace, so the parser
+    // carries any well-formed name; the executor decides whether it exists.
+    expect(parseLine("/settings scheme neon")).toEqual({
+      kind: "command",
+      command: { name: "settings-scheme", scheme: "neon" },
+    });
     expect(parseLine("/settings emblem globe")).toEqual({
       kind: "command",
       command: { name: "settings-emblem", emblem: "globe" },
@@ -241,6 +279,57 @@ describe("subcommands", () => {
     expect(parseLine("/settings color accent red").kind).toBe("invalid");
     expect(parseLine("/settings color glow #112233").kind).toBe("invalid");
     expect(parseLine("/settings color accent").kind).toBe("invalid");
+  });
+
+  it("parses the /settings scheme sub-verbs", () => {
+    expect(parseLine("/settings scheme list")).toEqual({
+      kind: "command",
+      command: { name: "settings-scheme-list" },
+    });
+    expect(parseLine("/settings scheme new Midnight")).toEqual({
+      kind: "command",
+      command: { name: "settings-scheme-new", scheme: "midnight" }, // lowercased
+    });
+    expect(parseLine("/settings scheme delete midnight")).toEqual({
+      kind: "command",
+      command: { name: "settings-scheme-delete", scheme: "midnight" },
+    });
+  });
+
+  it("rejects scheme names that could carry escapes, separators, or markup", () => {
+    for (const line of [
+      "/settings scheme new",
+      "/settings scheme new one two",
+      "/settings scheme delete",
+      "/settings scheme list please",
+      "/settings scheme new with;semicolon",
+      "/settings scheme new -leading",
+      "/settings scheme new 9leading",
+      "/settings scheme new ../etc",
+      "/settings scheme new <script>",
+      `/settings scheme new ${"a".repeat(25)}`,
+      "/settings scheme __proto__",
+    ]) {
+      expect(parseLine(line).kind, line).toBe("invalid");
+    }
+  });
+
+  it("parses /duress and rejects anything else", () => {
+    expect(parseLine("/duress set")).toEqual({
+      kind: "command",
+      command: { name: "duress-set" },
+    });
+    expect(parseLine("/duress off")).toEqual({
+      kind: "command",
+      command: { name: "duress-off" },
+    });
+    expect(parseLine("/duress status")).toEqual({
+      kind: "command",
+      command: { name: "duress-status" },
+    });
+    for (const line of ["/duress", "/duress on", "/duress set now", "/duress reset"]) {
+      expect(parseLine(line).kind, line).toBe("invalid");
+    }
   });
 
   it("parses /settings trust variants and rejects bad values", () => {

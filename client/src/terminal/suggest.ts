@@ -7,6 +7,7 @@
 
 import { COMMAND_USAGE, WEEKDAYS, isCommandWord } from "./parser";
 import type { CommandWord } from "./parser";
+import { SCHEME_NAMES } from "./theme";
 
 // Resolved lazily, not at module load: parser.ts imports this module and this
 // module imports parser.ts, so touching COMMAND_USAGE at top level would read it
@@ -79,7 +80,9 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           if (n === 2) return ["on", "off"];
           return [];
         case "scheme":
-          return n === 1 ? ["dark", "parchment", "olive"] : [];
+          // Presets and the sub-verbs only: the user's own scheme names live in
+          // the display prefs, which this pure function cannot read.
+          return n === 1 ? [...SCHEME_NAMES, "new", "delete", "list"] : [];
         case "emblem":
           return n === 1 ? ["globe", "tree"] : [];
         case "color":
@@ -97,6 +100,11 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
     case "logout":
       // Optional "all": sign out every other device.
       return n === 0 ? ["all"] : [];
+    case "duress":
+      return n === 0 ? ["set", "off", "status"] : [];
+    case "favourite":
+      // The contact (first arg) is a free-form alias/uid; `off` unstars.
+      return n === 1 ? ["off"] : [];
     case "keys":
       return n === 0 ? ["status", "refill"] : [];
     case "purge":

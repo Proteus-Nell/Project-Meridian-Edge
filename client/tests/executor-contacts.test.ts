@@ -43,7 +43,7 @@ async function seed(
   h: Harness,
   uid: string,
   alias: string,
-  extra: { pending?: boolean } = {},
+  extra: { pending?: boolean; favourite?: boolean } = {},
 ): Promise<void> {
   h.executor.contacts.set(alias, {
     uid,
@@ -52,6 +52,7 @@ async function seed(
     verified: true,
     keyChangeBlocked: false,
     timerSeconds: null,
+    favourite: extra.favourite ?? false,
   });
   await h.store.putJson(`session/${uid}`, { ratchet: {}, peerIk: "x", reducedFs: false });
   await h.store.putJson(`msg/${uid}/1000`, { dir: "out", text: "hi", ts: 1000 });
@@ -200,5 +201,92 @@ describe("/rename", () => {
   it("reports an unknown contact with E501", async () => {
     await run(h.executor, "/rename nobody someone");
     expect(h.output.text()).toContain("[E501]");
+  });
+});
+
+describe("/favourite", () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await harness();
+    await seed(h, UID_A, "alice");
+    await seed(h, UID_B, "bob");
+  });
+
+  it("marks a contact and persists it", async () => {
+    await run(h.executor, "/favourite bob");
+    expect(h.executor.contacts.get("bob")?.favourite).toBe(true);
+    expect(h.output.text()).toContain("bob favourited");
+    const stored = await h.store.getJson<{ alias: string; favourite: boolean }[]>("contacts");
+    expect(stored?.find((c) => c.alias === "bob")?.favourite).toBe(true);
+  });
+
+  it("unmarks with 'off'", async () => {
+    await run(h.executor, "/favourite bob");
+    await run(h.executor, "/favourite bob off");
+    expect(h.executor.contacts.get("bob")?.favourite).toBe(false);
+    expect(h.output.text()).toContain("bob unfavourited");
+  });
+
+  it("accepts a UID as well as an alias", async () => {
+    await run(h.executor, `/favourite ${UID_A}`);
+    expect(h.executor.contacts.get("alice")?.favourite).toBe(true);
+  });
+
+  it("sorts favourites to the top of /contacts, alphabetical within each group", async () => {
+    await seed(h, "C".repeat(26), "carol");
+    await run(h.executor, "/favourite carol");
+    h.output.lines.length = 0;
+    await run(h.executor, "/contacts");
+
+    const listed = h.output
+      .text()
+      .split("\n")
+      .filter((line) => /^\s+[* ] (alice|bob|carol)\b/.test(line))
+      .map((line) => line.trim());
+    expect(listed[0]).toMatch(/^\* carol/);
+    expect(listed[1]).toMatch(/^alice/);
+    expect(listed[2]).toMatch(/^bob/);
+  });
+
+  it("sorts favourites to the top of the home dashboard too", async () => {
+    // The dashboard only lists contacts for an identified, unlocked session.
+    h.executor.identity = { uid: UID_A, pub: new Uint8Array(1), sec: new Uint8Array(1) };
+    await run(h.executor, "/favourite bob");
+    h.output.lines.length = 0;
+    await run(h.executor, "/home");
+
+    const listed = h.output
+      .text()
+      .split("\n")
+      .filter((line) => /^\s+[* ] (alice|bob)\b/.test(line))
+      .map((line) => line.trim());
+    expect(listed[0]).toMatch(/^\* bob/);
+    expect(listed[1]).toMatch(/^alice/);
+  });
+
+  it("survives a re-/add of the same contact", async () => {
+    await run(h.executor, "/favourite bob");
+    await run(h.executor, `/add ${UID_B} bob`);
+    expect(h.executor.contacts.get("bob")?.favourite).toBe(true);
+  });
+
+  it("no-ops when already in the requested state", async () => {
+    await run(h.executor, "/favourite bob off");
+    expect(h.output.text()).toContain("is not a favourite");
+    await run(h.executor, "/favourite bob");
+    h.output.lines.length = 0;
+    await run(h.executor, "/favourite bob");
+    expect(h.output.text()).toContain("already a favourite");
+  });
+
+  it("reports an unknown contact with E501", async () => {
+    await run(h.executor, "/favourite nobody");
+    expect(h.output.text()).toContain("[E501]");
+  });
+
+  it("needs an unlocked store", async () => {
+    h.store.lock();
+    await run(h.executor, "/favourite bob");
+    expect(h.output.text()).toContain("[E403]");
   });
 });

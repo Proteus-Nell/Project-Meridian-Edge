@@ -69,6 +69,9 @@ export interface Contact {
   /** Mutual disappearing-message timer in seconds; null = off.
    * Shared with the peer over the encrypted ratchet payload, last-writer-wins. */
   readonly timerSeconds: number | null;
+  /** Pinned to the top of the contact list (/favourite). Local and cosmetic:
+   * like the alias, it never leaves the device and the peer is never told. */
+  readonly favourite: boolean;
 }
 
 export interface PartialContact {
@@ -78,6 +81,7 @@ export interface PartialContact {
   verified?: boolean | undefined;
   keyChangeBlocked?: boolean | undefined;
   timerSeconds?: number | null | undefined;
+  favourite?: boolean | undefined;
 }
 
 export function normalizeContact(c: PartialContact): Contact {
@@ -88,7 +92,25 @@ export function normalizeContact(c: PartialContact): Contact {
     verified: c.verified ?? false,
     keyChangeBlocked: c.keyChangeBlocked ?? false,
     timerSeconds: c.timerSeconds ?? null,
+    favourite: c.favourite ?? false,
   };
+}
+
+/** Display order for every contact listing: favourites first, then alphabetical
+ * within each group. Shared by /home and /contacts so the two never disagree
+ * about where a contact sits. */
+export function sortContacts(contacts: readonly Contact[]): Contact[] {
+  return [...contacts].sort((a, b) => {
+    if (a.favourite !== b.favourite) {
+      return a.favourite ? -1 : 1;
+    }
+    return a.alias.localeCompare(b.alias);
+  });
+}
+
+/** The two-column gutter every contact line starts with, marking favourites. */
+export function favouriteMark(contact: Contact): string {
+  return contact.favourite ? "*" : " ";
 }
 
 /** A locally stored message record. Written on send and on receive; the live

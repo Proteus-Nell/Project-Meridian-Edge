@@ -33,6 +33,9 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/keys status", blurb: "signed-prekey age and one-time-prekey count" },
       { cmd: "/keys refill", blurb: "replenish one-time prekeys" },
       { cmd: "/wipe", blurb: "destroy the local store (double confirm)" },
+      { cmd: "/duress set", blurb: "arm a passphrase that silently destroys this device AND the account" },
+      { cmd: "/duress off", blurb: "disarm the duress passphrase" },
+      { cmd: "/duress status", blurb: "whether a duress passphrase is armed" },
     ],
   },
   {
@@ -41,6 +44,7 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/add <uid> [alias]", blurb: "add a contact (alias is local-only)" },
       { cmd: "/remove <alias|uid> [purge]", blurb: "remove a contact (purge = also delete history); /remove all clears everyone" },
       { cmd: "/rename <alias|uid> <new>", blurb: "give a contact a new local alias" },
+      { cmd: "/favourite <alias|uid> [off]", blurb: "pin a contact to the top of your contact list" },
       { cmd: "/contacts", blurb: "list saved contacts with their UIDs and trust state" },
       { cmd: "/chat <alias|uid>", blurb: "open a conversation (focused view - hides everything else)" },
       { cmd: "/home", blurb: "back to the home dashboard of all conversations" },
@@ -63,8 +67,12 @@ const SECTIONS: readonly HelpSection[] = [
   {
     title: "Appearance",
     entries: [
-      { cmd: "/settings scheme <name>", blurb: "color scheme: dark | parchment | olive" },
-      { cmd: "/settings color <slot> <#hex>", blurb: "override a scheme color (or 'reset')" },
+      { cmd: "/settings scheme <name>", blurb: "switch scheme: dark | parchment | olive | one of yours" },
+      { cmd: "/settings scheme list", blurb: "every scheme you can switch to" },
+      { cmd: "/settings scheme new <name>", blurb: "copy the current colors into a scheme of your own" },
+      { cmd: "/settings scheme delete <name>", blurb: "delete one of your schemes (presets cannot be)" },
+      { cmd: "/settings color <slot> <#hex>", blurb: "edit a color; on a preset this forks it, leaving it intact" },
+      { cmd: "/settings color reset", blurb: "put your scheme back to its base preset's colors" },
       { cmd: "/settings emblem <name>", blurb: "medallion glyph: globe | tree" },
       { cmd: "/settings theme <layer> <on|off>", blurb: "toggle atmosphere layers" },
     ],

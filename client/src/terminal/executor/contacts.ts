@@ -14,7 +14,7 @@ import {
 } from "./context";
 import type { ExecutorInternals } from "./context";
 import { formatDuration } from "./format";
-import { normalizeContact } from "./records";
+import { favouriteMark, normalizeContact, sortContacts } from "./records";
 import type { Contact, PendingRequest } from "./records";
 import { recordMessage } from "./messaging";
 import { renderHome } from "./views";
@@ -36,6 +36,7 @@ export async function doAdd(
     ik: existing?.ik ?? null,
     verified: existing?.verified,
     keyChangeBlocked: existing?.keyChangeBlocked,
+    favourite: existing?.favourite,
   });
   if (existing !== null) {
     x.contacts.delete(existing.alias);
@@ -77,7 +78,7 @@ export async function doContacts(x: ExecutorInternals): Promise<void> {
     x.renderer.event("warning", "contacts live in the encrypted store - /login first");
     return;
   }
-  const contacts = [...x.contacts.values()].sort((a, b) => a.alias.localeCompare(b.alias));
+  const contacts = sortContacts([...x.contacts.values()]);
   if (contacts.length === 0) {
     x.renderer.event("info", "no contacts yet - /add <uid> [alias] to add one");
   } else {
@@ -91,7 +92,9 @@ export async function doContacts(x: ExecutorInternals): Promise<void> {
       ]
         .filter((s) => s.length > 0)
         .join(" · ");
-      x.renderer.plain(`  ${contact.alias.padEnd(width)}  ${formatUid(contact.uid)}  ${flags}`);
+      x.renderer.plain(
+        `  ${favouriteMark(contact)} ${contact.alias.padEnd(width)}  ${formatUid(contact.uid)}  ${flags}`,
+      );
     }
   }
   const pending = await x.store.listKeys("pending/");
@@ -195,6 +198,48 @@ function goHomeAfterRemoval(x: ExecutorInternals): void {
   x.shell.setPrompt("> ");
   refreshChatContext(x);
   x.enqueueRender(() => renderHome(x));
+}
+
+/** `/favourite <alias|uid> [off]`: pin a contact to the top of every listing,
+ * or unpin it. Purely a local sort preference - it lives in the encrypted
+ * contact record beside the alias, is never transmitted, and the contact is
+ * never told. */
+export async function doFavourite(
+  x: ExecutorInternals,
+  target: string,
+  on: boolean,
+): Promise<void> {
+  if (!x.store.isUnlocked()) {
+    x.renderer.error("E403");
+    return;
+  }
+  const contact = resolveContact(x, target);
+  if (contact === null) {
+    x.renderer.error("E501", target);
+    return;
+  }
+  if (contact.favourite === on) {
+    x.renderer.event(
+      "info",
+      on
+        ? `${contact.alias} is already a favourite`
+        : `${contact.alias} is not a favourite`,
+    );
+    return;
+  }
+  x.contacts.set(contact.alias, { ...contact, favourite: on });
+  await saveContacts(x);
+  // The home dashboard is the listing this reorders; refresh it if it is what
+  // the transcript is showing.
+  if (x.active === null) {
+    x.enqueueRender(() => renderHome(x));
+  }
+  x.renderer.event(
+    "success",
+    on
+      ? `${contact.alias} favourited - pinned to the top of your contact list`
+      : `${contact.alias} unfavourited`,
+  );
 }
 
 /** `/rename <alias|uid> <new-alias>`: give a contact a new local alias.

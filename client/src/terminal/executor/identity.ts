@@ -34,7 +34,7 @@ import { formatDuration } from "./format";
 import { DEFAULT_ROTATION, WEEKDAY_INDEX } from "./records";
 import type { RotationSettings, StoredIdentity, StoredSpk } from "./records";
 
-const MIN_PASSPHRASE_LENGTH = 12;
+export const MIN_PASSPHRASE_LENGTH = 12;
 const WIPE_CONFIRM_WINDOW_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -251,19 +251,27 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   x.touchAutoLock();
 }
 
-export async function loginWithIdentity(x: ExecutorInternals): Promise<void> {
-  if (x.identity === null) {
-    throw new Error("no identity");
-  }
-  const challenge = await api.loginChallenge(x.identity.uid);
+/** Run the ML-DSA-65 challenge-response and return the session token. Says
+ * nothing on screen and touches no executor state, so flows that must stay
+ * silent (the duress purge) can authenticate with key material they hold
+ * directly rather than through x.identity. */
+export async function authenticate(uid: string, sec: Uint8Array): Promise<string> {
+  const challenge = await api.loginChallenge(uid);
   const message = buildLoginMessage(
     hexToBytes(challenge.nonce),
     challenge.origin,
     challenge.timestamp,
   );
-  const signature = ml_dsa65.sign(message, x.identity.sec);
-  const verified = await api.loginVerify(x.identity.uid, challenge.nonce, signature);
-  x.token = verified.token;
+  const signature = ml_dsa65.sign(message, sec);
+  const verified = await api.loginVerify(uid, challenge.nonce, signature);
+  return verified.token;
+}
+
+export async function loginWithIdentity(x: ExecutorInternals): Promise<void> {
+  if (x.identity === null) {
+    throw new Error("no identity");
+  }
+  x.token = await authenticate(x.identity.uid, x.identity.sec);
   x.renderer.event("success", "logged in - session token held in memory only (15 min idle)");
 }
 
@@ -323,7 +331,16 @@ async function refillOpksInternal(x: ExecutorInternals, count: number): Promise<
   await api.uploadOpks(x.token, batch.pubs, batch.rootSig);
 }
 
-export async function doLogin(x: ExecutorInternals): Promise<void> {
+/** Given a passphrase that did not unlock the store, decide whether it meant
+ * something else before the failure is reported. The duress passphrase is
+ * recognised exactly here (executor/duress.ts::maybeTriggerDuress); it is
+ * passed in as a hook so this module never has to import that one. */
+export type UnlockRejectionHook = (passphrase: string) => Promise<void>;
+
+export async function doLogin(
+  x: ExecutorInternals,
+  onRejected?: UnlockRejectionHook,
+): Promise<void> {
   if (!(await x.store.exists())) {
     x.renderer.error("E204");
     return;
@@ -335,6 +352,9 @@ export async function doLogin(x: ExecutorInternals): Promise<void> {
       return;
     }
     if (!(await x.store.unlock(passphrase))) {
+      // The hook may have just destroyed everything. Either way the report is
+      // the same: a duress passphrase must be indistinguishable from a typo.
+      await onRejected?.(passphrase);
       x.renderer.error("E203");
       return;
     }
@@ -494,6 +514,13 @@ export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
   }
   const next = await promptNewPassphrase(x);
   if (next === null) {
+    return;
+  }
+  if ((await x.store.tryDuress(next)) !== null) {
+    // Rotating the unlock passphrase onto the duress one would turn every
+    // future login into a silent wipe. The duress envelope is untouched by a
+    // rotation, so this stays true afterwards.
+    x.renderer.error("E211");
     return;
   }
   if (secretStringsEqual(current, next)) {

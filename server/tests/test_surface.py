@@ -35,6 +35,7 @@ def test_no_user_lookup_or_existence_routes(app: FastAPI) -> None:
         "/v1/logout",
         "/v1/logout/all",
         "/v1/sessions",
+        "/v1/account/delete",
         "/v1/keys/spk",
         "/v1/keys/opks",
         "/v1/keys/status",

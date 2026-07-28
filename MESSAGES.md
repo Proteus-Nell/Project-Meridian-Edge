@@ -36,6 +36,10 @@ Code families:
 | E103 | `invalid UID (26 Crockford Base32 chars, dashes optional)` | The UID typed at the /recover prompt does not canonicalize to 26 Crockford Base32 characters. | Copy the UID exactly as printed at registration; dashes and case do not matter, O/I/L are auto-corrected. |
 | E104 | `invalid recovery code (16 Crockford Base32 chars, dashes optional)` | The recovery code does not canonicalize to 16 Crockford Base32 characters. | Retype one of your saved codes; dashes, spaces, and case do not matter. |
 | E105 | `unknown suite - use b1, b2, b3, b4, or all (omit for all)` | `/bench` was given a suite name it does not know. | Run `/bench` with `b1`, `b2`, `b3`, `b4`, `all`, or no argument (which runs all). |
+| E106 | `unknown color scheme: <name> - /settings scheme list shows them all` | `/settings scheme` or `/settings scheme delete` named a scheme that is neither a preset nor one of yours. | `/settings scheme list`; `/settings scheme new <name>` creates one. |
+| E107 | `'<name>' cannot name a custom scheme - use 1-24 characters (a letter, then letters, digits or hyphens) that is not a preset or one of 'new', 'delete', 'list', 'reset'` | A custom scheme name was malformed, reserved, or a preset name. Also what `/settings scheme delete dark` gets: the three presets are immutable and cannot be deleted, which is what makes them a reliable way back. | Pick a name matching the rule. To change how a preset looks, switch to it and use `/settings color`, which forks it. |
+| E108 | `custom scheme limit reached (<n>) - /settings scheme delete <name> frees a slot` | You already have the maximum number of custom schemes. | Delete one you no longer use. |
+| E109 | `a scheme named '<name>' already exists - pick another name, or /settings scheme <name> then /settings color to edit it` | `/settings scheme new` was given a name already in use. | Choose a different name, or switch to the existing scheme and edit it. |
 | E201 | `not logged in - /login first` | The command needs an authenticated session and there is none (never logged in, or the session dropped). | `/login`, then retry. |
 | E202 | `session expired or invalid - /login again` | The server rejected the session token (15-minute idle expiry, revocation, or a recovery elsewhere). | `/login` to get a fresh session. |
 | E203 | `unlock failed` | The passphrase did not decrypt the local store. | Retry the passphrase; if it is lost, /recover (destroys local history) is the only way back in. |
@@ -46,6 +50,7 @@ Code families:
 | E208 | `rotation failed` | The current passphrase typed at `/rotate passphrase` did not unlock the store, so the DEK was not re-wrapped. | Retry with the correct current passphrase. |
 | E209 | `passphrase must include at least one number and one symbol` | The passphrase is long enough but lacks a digit or a symbol. Symbol means anything that is not a letter or digit, so punctuation and spaces both count. | Add a digit and a punctuation mark or space anywhere in the phrase. |
 | E210 | `login rejected - the server does not recognise this device's identity key. If you ran /recover on another device, that replaced the account's key: run /recover here with one of the new codes. Otherwise retry, in case the login challenge expired` | `/login` completed the challenge but the server refused the signature. Almost always because the account was recovered on another device, which enrolls a new identity key and orphans the one held here. The server's 401 is uniform, so an unknown UID or an expired challenge look identical. | Run `/recover` on this device with one of the codes reissued by that recovery. If you did not recover anywhere, retry once in case the challenge expired. |
+| E211 | `that is already this device's unlock passphrase - a duress passphrase must be different, or every login would silently destroy the account` | Guards both directions of the same mistake: `/duress set` was given the passphrase that already unlocks the store, or `/rotate passphrase` tried to move the unlock passphrase onto the armed duress one. Either would turn every ordinary login into an unannounced wipe. | Choose a distinct duress passphrase, or a different new unlock passphrase. `/duress off` first if you would rather retire the duress one. |
 | E301 | `rate limit reached - try again later` | The server returned 429: too many requests from this client for that endpoint's budget. | Wait and retry; limits refill within minutes (registration and recovery within the hour). |
 | E302 | `request failed - is the server running?` | A request failed for a reason other than 401/429: server down, network unreachable, or an unexpected status. | Check connectivity and that the server is up, then retry. |
 | E303 | `recipient keys unavailable - unknown UID` | `/verify` asked the server for a bundle and got a uniform 404. | Confirm the contact's UID; they may not exist on this server. |
@@ -55,6 +60,7 @@ Code families:
 | E403 | `contacts live in the encrypted store - /login first` | `/add` ran while the store was locked. | `/login`, then add the contact. |
 | E404 | `store is locked - /login first (settings live encrypted)` | `/settings rotation` ran while the store was locked (the schedule is stored encrypted). | `/login`, then change the setting. |
 | E405 | `store is locked - /login first (trust setting lives encrypted)` | `/settings trust` ran while the store was locked (the trust mode is stored encrypted). | `/login`, then change the setting. |
+| E406 | `store is locked - /login first (the duress passphrase is sealed with the store)` | `/duress set`, `/duress off`, or `/duress status` ran while the store was locked. Arming seals a credential from the unlocked store, and the armed flag itself lives encrypted, which is why the raw database cannot answer the question. | `/login`, then run the command again. |
 | E501 | `unknown contact: <target> - /add <uid> [alias] first` | The alias or UID does not match any saved contact. Contacts load from the encrypted store on /login. | `/contacts` to see what is saved; `/add <uid> [alias]` to add. |
 | E502 | `no known identity key for <alias> yet - /verify first` | `/verified` ran before any key was pinned for that contact. | `/verify <alias>` to fetch and compare the safety number first. |
 | E503 | `<alias> has an unacknowledged key change - /ack <alias> first, then /verify again` | The contact's identity key changed and manual trust mode blocks everything until acknowledged. | `/ack <alias>`, then `/verify` + `/verified` against the new key. |
@@ -92,6 +98,10 @@ Code families:
 | `no contacts to remove` | `/remove all` with an empty contact list. |
 | `removal cancelled - nothing was changed` | The `/remove all` confirmation was declined. |
 | `<alias> already goes by that name` | `/rename` to the alias the contact already has. |
+| `<alias> is already a favourite` / `<alias> is not a favourite` | `/favourite` asked for the state the contact is already in. |
+| `'<scheme>' is a preset and carries no custom colors - nothing to reset` | `/settings color reset` on a preset. Presets are never modified, so there is nothing to undo. |
+| `duress passphrase not armed - nothing was changed` | The `/duress set` confirmation was declined or cancelled. |
+| `duress passphrase not armed - /duress set arms one (read its warning first)` | `/duress status` with the feature off. |
 
 ## Security events `[SECURITY]`
 
@@ -109,6 +119,14 @@ Code families:
 | `NEW recovery codes - the old set is now void. shown ONCE, never recoverable. write them down now:` | Recovery: the reissued set; every older code is dead. |
 | `recovery will REPLACE the identity store on this device - the identity, keys, contacts and message history held here are destroyed and rebuilt from the recovered account. This is a confirmation, not a refusal: answer yes below to go ahead` | `/recover` confirmation gate before touching anything. Answer `yes` to continue; anything else cancels without changing a thing. |
 | `/wipe destroys the local store: identity, keys, history. IRREVERSIBLE without recovery codes. repeat /wipe within 30s to confirm.` | First `/wipe` confirmation gate. |
+| `a duress passphrase gives NO warning and NO confirmation. ...` | The `/duress set` warning, shown before anything is armed. The one and only place the feature announces itself: the trigger never does. |
+| `duress passphrase armed - typing it at the /login prompt destroys this device and the account, silently. /duress off disarms it.` | `/duress set` completed. |
+| `duress passphrase ARMED - typing it at /login destroys this device and the account with no confirmation. ...` | `/duress status` with the feature armed. Readable only with the real passphrase; the raw database gives nothing away. |
+
+**What a duress login shows.** Nothing of its own. It renders exactly `[E203]
+unlock failed`, the same line a typo produces, and does not clear the screen -
+anything else would be the tell the feature exists to avoid. The next `/login`
+reports `[E204] no identity on this device`, which is then simply true.
 
 ## Server wire errors
 

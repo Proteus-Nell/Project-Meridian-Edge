@@ -122,10 +122,54 @@ trusting the new one.
 | `/keys status` | Signed-prekey age and one-time-prekey count on the server |
 | `/keys refill` | Manually top one-time prekeys back up to 50 |
 | `/wipe` | Destroys the local store (identity, keys, everything). Asks you to repeat it within 30 s to confirm |
+| `/duress set` | Arm a second passphrase that destroys everything instead of unlocking it. Warns first and asks you to type `yes` |
+| `/duress off` | Disarm it |
+| `/duress status` | Whether one is armed (needs the real passphrase to answer) |
 
 The session token lives only in JS memory and expires after 15 minutes idle, so
 a page reload always brings you back locked and logged out. Your data stays
 there, encrypted, until you `/wipe` it.
+
+### The duress passphrase
+
+Opt-in and off by default. Once armed, typing it at the `/login` prompt destroys
+the local store and deletes the account from the server: prekeys, queued
+ciphertext, sessions, recovery codes, and the account row itself. There is no
+confirmation, no progress, and no undo.
+
+The screen shows `[E203] unlock failed` and nothing else, because that is the
+whole point: it has to look like a typo to anyone standing over your shoulder.
+`/duress set` prints that warning and makes you type `yes` before anything is
+armed, and that warning is the only place the feature ever announces itself.
+
+Some deliberate properties, and their costs:
+
+- **The armed state is invisible at rest.** The sealed envelope sits in the
+  store's meta record and is written with random contents from the moment the
+  store is created, so an imaged database looks the same either way. The flag
+  `/duress status` reads lives *inside* the encrypted store, so only the real
+  passphrase can answer the question.
+- **It seals a copy of your identity key**, because deleting the account means
+  authenticating to the server as its owner. So the duress passphrase gets the
+  same strength rules as your real one, and is refused if it *is* your real one
+  (as is rotating your real one onto it). It is not a second key to your message
+  history: the envelope holds that credential and nothing else.
+- **Local destruction happens first**, before any network call, and still
+  happens when the server is unreachable. The account deletion is best-effort
+  and silent about its failures.
+- **It does not clear the transcript already on screen.** A screen that wipes
+  itself is exactly the tell this avoids, and anyone watching has already read
+  what is on it. What gets destroyed is what is durable.
+- **It does not recall messages you already sent.** Those sit in your
+  recipients' queues, and reaching into another account's queue is not something
+  this server lets anyone do.
+
+- **It only fires from the lock screen**, since that is the only place a
+  passphrase is asked for. From an unlocked session, `/lock` first (or wait for
+  the 10-minute idle auto-lock), then `/login` and type it.
+
+`/recover` and `/register` rebuild the store from scratch, which leaves the
+duress passphrase disarmed; re-arm it afterwards if you want it.
 
 ### Contacts & first messages
 
@@ -134,6 +178,7 @@ there, encrypted, until you `/wipe` it.
 | `/add <uid> [alias]` | Save a contact. Requires `/login`, since contacts live in the encrypted store. The alias is local only and never transmitted, so it cannot impersonate anyone. Also accepts a held contact request |
 | `/remove <alias\|uid> [purge]` | Remove a contact: deletes the contact and tears down the ratchet session, so a later message from them returns as a fresh request. Keeps your message history unless you add `purge`. `/remove all` clears every contact and asks to confirm first. Purely local; the other side is never told |
 | `/rename <alias\|uid> <new>` | Give a contact a new local alias. History (keyed by UID) survives; a name another contact already uses is rejected |
+| `/favourite <alias\|uid> [off]` | Pin a contact to the top of `/contacts` and the home dashboard, marked `*`. Favourites sort first, then alphabetically. Local only, never transmitted, and the contact is never told. Also spelled `/favorite`, `/fav`, `/star` |
 | `/chat <alias\|uid>` | Set the active conversation (prompt changes to `[alias] >`); the status line shows `(verified)` or `(UNVERIFIED)` |
 | `/verify <alias>` | Fetch the contact's current identity key and print a 60-digit safety number. Compare it out-of-band, in person or by phone, against what they see on their end |
 | `/verified <alias>` | Mark the contact trusted once the safety numbers match |
@@ -178,6 +223,29 @@ again.
 Deletion is at-rest, local-only, and best-effort. Peer deletion is cooperative,
 nothing stops a screenshot, and browser storage deletion is not forensic
 erasure.
+
+### Appearance
+
+| Command | What it does |
+|---|---|
+| `/settings scheme <name>` | Switch scheme: the `dark`, `parchment` and `olive` presets, or one of your own |
+| `/settings scheme list` | Everything you can switch to, marking the active one |
+| `/settings scheme new <name>` | Copy the colors currently on screen into a scheme of your own and switch to it |
+| `/settings scheme delete <name>` | Delete one of yours. Presets cannot be deleted |
+| `/settings color <slot> <#rrggbb>` | Set one of the five slots: `accent`, `background`, `panel`, `text`, `muted` |
+| `/settings color reset` | Put your scheme's colors back to its base preset's |
+| `/settings emblem <globe\|tree>` | Medallion glyph |
+| `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
+
+**The three presets are immutable.** Running `/settings color` while one is
+active does not modify it: it forks a scheme named `<preset>-custom`, switches
+you there, and tells you so. `/settings scheme dark` therefore always means the
+palette that shipped, however far you have wandered. Names are limited to 1-24
+lowercase letters, digits and hyphens, colors to literal `#rrggbb`, and both are
+re-validated on every read, so nothing in that record can reach the page as
+anything but a color. Appearance lives unencrypted by design, so it can apply to
+the lock screen before you have unlocked anything, which is also why it is
+treated as untrusted input.
 
 ### Terminal tips
 

@@ -32,6 +32,10 @@ SecurityEvent = Literal[
     "rate_limit_exceeded",
     "origin_rejected",
     "signature_verification_failed",
+    # An account was destroyed at its owner's request. Recorded so a burst of
+    # deletions is visible; carries no UID, like everything else here, which
+    # also means the log cannot say whether a duress passphrase caused it.
+    "account_deleted",
 ]
 
 _logger = logging.getLogger("meridian_edge.security")

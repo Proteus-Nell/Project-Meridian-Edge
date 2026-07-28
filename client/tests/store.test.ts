@@ -16,7 +16,7 @@ const BASE = {
   theme: { emblem: true, scanlines: true, vignette: true, dock: true },
   scheme: "dark",
   emblemGlyph: "globe",
-  colorOverrides: {},
+  customSchemes: [],
 } as const;
 
 function freshStore(factory = new IDBFactory()): { store: KeyStore; factory: IDBFactory } {
@@ -183,37 +183,262 @@ describe("KeyStore", () => {
     expect(await store.listKeys("")).toEqual(["spk/1"]);
   });
 
-  it("round-trips scheme, emblem glyph, and color overrides; legacy defaults apply", async () => {
+  it("round-trips scheme, emblem glyph, and custom schemes; legacy defaults apply", async () => {
     const factory = new IDBFactory();
     const store = new KeyStore("meridian-edge-test", factory);
     // Nothing written: defaults.
     const defaults = await store.getDisplayPrefs();
     expect(defaults.scheme).toBe("dark");
     expect(defaults.emblemGlyph).toBe("globe");
-    expect(defaults.colorOverrides).toEqual({});
+    expect(defaults.customSchemes).toEqual([]);
 
+    const mine = {
+      name: "midnight",
+      base: "dark",
+      colors: {
+        accent: "#112233",
+        background: "#000000",
+        panel: "#101010",
+        text: "#eeeeee",
+        muted: "#888888",
+      },
+    } as const;
     await store.setDisplayPrefs({
       ...BASE,
-      scheme: "parchment",
+      scheme: "midnight",
       emblemGlyph: "globe",
-      colorOverrides: { accent: "#112233" },
+      customSchemes: [mine],
     });
     const reread = await new KeyStore("meridian-edge-test", factory).getDisplayPrefs();
-    expect(reread.scheme).toBe("parchment");
+    expect(reread.scheme).toBe("midnight");
     expect(reread.emblemGlyph).toBe("globe");
-    expect(reread.colorOverrides).toEqual({ accent: "#112233" });
+    expect(reread.customSchemes).toEqual([mine]);
 
     // Tampered/legacy values degrade to defaults rather than poisoning the UI.
     await store.setDisplayPrefs({
       ...BASE,
       scheme: "neon",
       emblemGlyph: "skull",
-      colorOverrides: { accent: "not-a-color", background: "#abcdef", bogus: "#000000" },
+      customSchemes: [],
     } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
     const cleaned = await store.getDisplayPrefs();
     expect(cleaned.scheme).toBe("dark");
     expect(cleaned.emblemGlyph).toBe("globe");
-    expect(cleaned.colorOverrides).toEqual({ background: "#abcdef" });
+  });
+
+  it("drops a stored custom scheme whose colors or name are not trustworthy", async () => {
+    const { store } = freshStore();
+    const good = {
+      name: "mine",
+      base: "olive",
+      colors: {
+        accent: "#112233",
+        background: "#000000",
+        panel: "#101010",
+        text: "#eeeeee",
+        muted: "#888888",
+      },
+    };
+    await store.setDisplayPrefs({
+      ...BASE,
+      customSchemes: [
+        good,
+        // A CSS-injection attempt in a color value.
+        { ...good, name: "inject", colors: { ...good.colors, accent: "red;}body{display:none" } },
+        // A prototype-shaped name, and a missing slot.
+        { ...good, name: "__proto__" },
+        { ...good, name: "constructor" },
+        { ...good, name: "gappy", colors: { accent: "#112233" } },
+        // A preset name would shadow an immutable scheme.
+        { ...good, name: "dark" },
+      ],
+    } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
+
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.customSchemes.map((s) => s.name)).toEqual(["mine"]);
+    // Nothing tampered survived, so nothing but #rrggbb can reach a CSS var.
+    for (const value of Object.values(prefs.customSchemes[0]?.colors ?? {})) {
+      expect(value).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it("migrates a pre-custom-schemes record into a fork, leaving the preset pristine", async () => {
+    const factory = new IDBFactory();
+    const store = new KeyStore("meridian-edge-test", factory);
+    // A record the old client wrote: overrides smeared over the active preset.
+    await store.setDisplayPrefs({
+      secretMask: "hidden",
+      theme: ALL_OFF,
+      scheme: "parchment",
+      emblemGlyph: "globe",
+      colorOverrides: { accent: "#112233", bogus: "#000000", muted: "not-a-color" },
+    } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
+
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.scheme).toBe("parchment-custom");
+    expect(prefs.customSchemes).toHaveLength(1);
+    const migrated = prefs.customSchemes[0];
+    expect(migrated?.base).toBe("parchment");
+    // The one valid override survived; the invalid ones fell back to parchment.
+    expect(migrated?.colors.accent).toBe("#112233");
+    expect(migrated?.colors.muted).toBe("#5f6d4e");
+    expect(migrated?.colors.background).toBe("#e3e7d3");
+  });
+
+  it("leaves an empty legacy override map on the pure preset", async () => {
+    const { store } = freshStore();
+    await store.setDisplayPrefs({
+      secretMask: "hidden",
+      theme: ALL_OFF,
+      scheme: "olive",
+      emblemGlyph: "globe",
+      colorOverrides: {},
+    } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.scheme).toBe("olive");
+    expect(prefs.customSchemes).toEqual([]);
+  });
+
+  it("falls back to the default scheme when the active one no longer exists", async () => {
+    const { store } = freshStore();
+    await store.setDisplayPrefs({ ...BASE, scheme: "deleted-one", customSchemes: [] });
+    expect((await store.getDisplayPrefs()).scheme).toBe("dark");
+  });
+
+  // --- duress envelope -------------------------------------------------------
+  //
+  // The security properties, not just the round trip: an imaged database must
+  // not reveal whether the feature is armed, and the envelope must be
+  // independent of the DEK so guessing it does not open the vault.
+
+  it("seals and returns a duress payload for its own passphrase only", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery1!", FAST);
+    const payload = new TextEncoder().encode('{"uid":"ABC","sec":"AAAA"}');
+    await store.armDuress("under the floorboards9!", payload);
+
+    expect(await store.tryDuress("under the floorboards9!")).toEqual(payload);
+    expect(await store.tryDuress("correct horse battery1!")).toBeNull();
+    expect(await store.tryDuress("something else entirely")).toBeNull();
+  });
+
+  it("never unlocks the store with the duress passphrase", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery1!", FAST);
+    await store.armDuress("under the floorboards9!", new Uint8Array([1, 2, 3]));
+    store.lock();
+    // The whole design: it is a trigger, not a second key.
+    expect(await store.unlock("under the floorboards9!")).toBe(false);
+    expect(store.isUnlocked()).toBe(false);
+    expect(await store.unlock("correct horse battery1!")).toBe(true);
+  });
+
+  it("writes a decoy of identical shape when disarmed, so the record never says which", async () => {
+    const factory = new IDBFactory();
+    const armed = new KeyStore("armed", factory);
+    const untouched = new KeyStore("untouched", factory);
+    await armed.create("correct horse battery1!", FAST);
+    await untouched.create("correct horse battery1!", FAST);
+    await armed.armDuress("under the floorboards9!", new Uint8Array([7, 7, 7]));
+
+    const read = async (name: string): Promise<Record<string, Uint8Array>> => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = factory.open(name, 1);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error ?? new Error("indexeddb error"));
+      });
+      const tx = db.transaction("vault", "readonly");
+      const meta = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const req = tx.objectStore("vault").get("__meta__");
+        req.onsuccess = () => resolve(req.result as Record<string, unknown>);
+        req.onerror = () => reject(req.error ?? new Error("indexeddb error"));
+      });
+      db.close();
+      return meta.duress as Record<string, Uint8Array>;
+    };
+
+    const withSecret = await read("armed");
+    const withDecoy = await read("untouched");
+    // Same fields, same byte lengths: nothing distinguishes them at rest.
+    expect(Object.keys(withDecoy).sort()).toEqual(Object.keys(withSecret).sort());
+    for (const field of ["salt", "nonce", "ct"] as const) {
+      expect(withDecoy[field]?.length).toBe(withSecret[field]?.length);
+    }
+    // And the decoy opens for nobody.
+    expect(await untouched.tryDuress("under the floorboards9!")).toBeNull();
+  });
+
+  it("hides the payload length: two very different payloads seal to one size", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery1!", FAST);
+    const sizeOf = async (payload: Uint8Array): Promise<number> => {
+      await store.armDuress("under the floorboards9!", payload);
+      const opened = await store.tryDuress("under the floorboards9!");
+      expect(opened).toEqual(payload);
+      return payload.length;
+    };
+    // Both round-trip exactly, whatever their length.
+    expect(await sizeOf(new Uint8Array(1))).toBe(1);
+    expect(await sizeOf(new Uint8Array(4000).fill(9))).toBe(4000);
+  });
+
+  it("disarms back to a decoy nothing can open", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery1!", FAST);
+    await store.armDuress("under the floorboards9!", new Uint8Array([1]));
+    await store.disarmDuress();
+    expect(await store.tryDuress("under the floorboards9!")).toBeNull();
+  });
+
+  it("survives a passphrase rotation untouched", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery1!", FAST);
+    const payload = new Uint8Array([4, 2]);
+    await store.armDuress("under the floorboards9!", payload);
+    expect(await store.rotatePassphrase("correct horse battery1!", "a different one 7?")).toBe(
+      true,
+    );
+    // Own salt, own key: rotating the unlock passphrase does not disturb it.
+    expect(await store.tryDuress("under the floorboards9!")).toEqual(payload);
+    expect(await store.unlock("a different one 7?")).toBe(true);
+  });
+
+  it("recognises its own unlock passphrase without unlocking", async () => {
+    const { store } = freshStore();
+    await store.create("correct horse battery1!", FAST);
+    store.lock();
+    expect(await store.isPrimaryPassphrase("correct horse battery1!")).toBe(true);
+    expect(await store.isPrimaryPassphrase("under the floorboards9!")).toBe(false);
+    expect(store.isUnlocked()).toBe(false);
+  });
+
+  it("treats a store predating the feature as unarmed rather than throwing", async () => {
+    const factory = new IDBFactory();
+    const store = new KeyStore("meridian-edge-test", factory);
+    await store.create("correct horse battery1!", FAST);
+    // Strip the envelope, as a store created by the older client would have.
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = factory.open("meridian-edge-test", 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error ?? new Error("indexeddb error"));
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("vault", "readwrite");
+      const objectStore = tx.objectStore("vault");
+      const get = objectStore.get("__meta__");
+      get.onsuccess = () => {
+        const meta = get.result as Record<string, unknown>;
+        delete meta.duress;
+        const put = objectStore.put(meta, "__meta__");
+        put.onsuccess = () => resolve();
+        put.onerror = () => reject(put.error ?? new Error("indexeddb error"));
+      };
+      get.onerror = () => reject(get.error ?? new Error("indexeddb error"));
+    });
+    db.close();
+
+    expect(await store.tryDuress("under the floorboards9!")).toBeNull();
+    expect(await store.unlock("correct horse battery1!")).toBe(true);
   });
 
   it("lists and deletes prefixed keys", async () => {

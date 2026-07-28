@@ -108,6 +108,15 @@ export function logoutAll(token: string): Promise<{ revoked: number }> {
   return requestJson<{ revoked: number }>("POST", "/v1/logout/all", undefined, token);
 }
 
+/** Destroy the account server-side: prekeys, queued ciphertext, sessions,
+ * recovery codes and the account row itself. Irreversible, and unlike
+ * recover() there is nothing left to take back afterwards. Used by the duress
+ * passphrase; the UID becomes unknown to the server, indistinguishable from
+ * one that never existed. */
+export function deleteAccount(token: string): Promise<void> {
+  return requestJson<void>("POST", "/v1/account/delete", undefined, token);
+}
+
 export function uploadSpk(token: string, pub: Uint8Array, sig: Uint8Array): Promise<void> {
   return requestJson<void>(
     "POST",

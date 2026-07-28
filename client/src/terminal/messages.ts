@@ -23,6 +23,15 @@ export const ERRORS = {
   E103: () => "invalid UID (26 Crockford Base32 chars, dashes optional)",
   E104: () => "invalid recovery code (16 Crockford Base32 chars, dashes optional)",
   E105: () => "unknown suite - use b1, b2, b3, b4, or all (omit for all)",
+  // E106-E109 cover the color-scheme namespace, where presets and user-defined
+  // schemes share one set of names.
+  E106: (name: string) => `unknown color scheme: ${name} - /settings scheme list shows them all`,
+  E107: (name: string) =>
+    `'${name}' cannot name a custom scheme - use 1-24 characters (a letter, then letters, digits or hyphens) that is not a preset or one of 'new', 'delete', 'list', 'reset'`,
+  E108: (max: number) =>
+    `custom scheme limit reached (${max}) - /settings scheme delete <name> frees a slot`,
+  E109: (name: string) =>
+    `a scheme named '${name}' already exists - pick another name, or /settings scheme ${name} then /settings color to edit it`,
 
   // E2xx authentication, session, identity
   E201: () => "not logged in - /login first",
@@ -39,6 +48,11 @@ export const ERRORS = {
   // claiming the server said which.
   E210: () =>
     "login rejected - the server does not recognise this device's identity key. If you ran /recover on another device, that replaced the account's key: run /recover here with one of the new codes. Otherwise retry, in case the login challenge expired",
+  // Guards both directions: arming a duress passphrase that is already the
+  // unlock one, and rotating the unlock passphrase onto the armed duress one.
+  // Either would make every ordinary login a silent, unannounced wipe.
+  E211: () =>
+    "that is already this device's unlock passphrase - a duress passphrase must be different, or every login would silently destroy the account",
 
   // E3xx network / server responses
   E301: () => "rate limit reached - try again later",
@@ -52,6 +66,7 @@ export const ERRORS = {
   E403: () => "contacts live in the encrypted store - /login first",
   E404: () => "store is locked - /login first (settings live encrypted)",
   E405: () => "store is locked - /login first (trust setting lives encrypted)",
+  E406: () => "store is locked - /login first (the duress passphrase is sealed with the store)",
 
   // E5xx contacts, messaging, decryption
   E501: (target: string) => `unknown contact: ${target} - /add <uid> [alias] first`,

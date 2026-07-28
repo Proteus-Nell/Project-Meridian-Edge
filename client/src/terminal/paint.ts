@@ -66,7 +66,7 @@ export function markThemeReady(): void {
 export async function preloadDisplayStyle(store: KeyStore = new KeyStore()): Promise<void> {
   try {
     const prefs = await store.getDisplayPrefs();
-    applySchemeVars(resolveScheme(prefs.scheme, prefs.colorOverrides));
+    applySchemeVars(resolveScheme(prefs.scheme, prefs.customSchemes));
     applyThemeClasses(prefs.theme);
     applyEmblemClass(prefs.emblemGlyph);
   } catch {

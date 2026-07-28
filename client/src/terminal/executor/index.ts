@@ -21,7 +21,8 @@ import { NULL_CHROME, currentViewRef, findContactByUid, refreshChatContext, reso
 import type { ExecutorInternals, UiChrome, ViewRef } from "./context";
 import type { Contact, Identity } from "./records";
 import { doBench } from "./bench";
-import { doAdd, doContacts, doRemove, doRename } from "./contacts";
+import { doAdd, doContacts, doFavourite, doRemove, doRename } from "./contacts";
+import { doDuressOff, doDuressSet, doDuressStatus, maybeTriggerDuress } from "./duress";
 import {
   doKeysRefill,
   doKeysStatus,
@@ -45,6 +46,9 @@ import {
   doSettingsMask,
   doSettingsRotation,
   doSettingsScheme,
+  doSettingsSchemeDelete,
+  doSettingsSchemeList,
+  doSettingsSchemeNew,
   doSettingsTheme,
   doSettingsTrust,
 } from "./settings";
@@ -105,7 +109,7 @@ export class Executor implements ExecutorInternals {
       const prefs = await this.store.getDisplayPrefs();
       this.shell.setSecretMask(prefs.secretMask);
       this.chrome.applyTheme(prefs.theme);
-      this.chrome.applyScheme(resolveScheme(prefs.scheme, prefs.colorOverrides));
+      this.chrome.applyScheme(resolveScheme(prefs.scheme, prefs.customSchemes));
       this.chrome.applyEmblem(prefs.emblemGlyph);
     } catch {
       // ignore: defaults remain
@@ -175,7 +179,9 @@ export class Executor implements ExecutorInternals {
         this.run(() => doRecover(this));
         return;
       case "login":
-        this.run(() => doLogin(this));
+        // The rejection hook is where a duress passphrase is recognised: it
+        // never unlocks anything, so it can only ever be seen on this path.
+        this.run(() => doLogin(this, (passphrase) => maybeTriggerDuress(this, passphrase)));
         return;
       case "logout":
         this.run(() => (cmd.all ? doLogoutOthers(this) : doLogout(this)));
@@ -210,6 +216,24 @@ export class Executor implements ExecutorInternals {
       case "settings-scheme":
         this.run(() => doSettingsScheme(this, cmd.scheme));
         return;
+      case "settings-scheme-new":
+        this.run(() => doSettingsSchemeNew(this, cmd.scheme));
+        return;
+      case "settings-scheme-delete":
+        this.run(() => doSettingsSchemeDelete(this, cmd.scheme));
+        return;
+      case "settings-scheme-list":
+        this.run(() => doSettingsSchemeList(this));
+        return;
+      case "duress-set":
+        this.run(() => doDuressSet(this));
+        return;
+      case "duress-off":
+        this.run(() => doDuressOff(this));
+        return;
+      case "duress-status":
+        this.run(() => doDuressStatus(this));
+        return;
       case "settings-emblem":
         this.run(() => doSettingsEmblem(this, cmd.emblem));
         return;
@@ -230,6 +254,9 @@ export class Executor implements ExecutorInternals {
         return;
       case "rename":
         this.run(() => doRename(this, cmd.target, cmd.alias));
+        return;
+      case "favourite":
+        this.run(() => doFavourite(this, cmd.target, cmd.on));
         return;
       case "verify":
         this.run(() => doVerify(this, cmd.alias));
