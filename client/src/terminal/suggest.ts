@@ -7,7 +7,7 @@
 
 import { COMMAND_USAGE, WEEKDAYS, isCommandWord } from "./parser";
 import type { CommandWord } from "./parser";
-import { SCHEME_NAMES } from "./theme";
+import { EVENT_COLOR_SLOTS, SCHEME_NAMES } from "./theme";
 
 // Resolved lazily, not at module load: parser.ts imports this module and this
 // module imports parser.ts, so touching COMMAND_USAGE at top level would read it
@@ -86,7 +86,13 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
         case "emblem":
           return n === 1 ? ["globe", "tree"] : [];
         case "color":
-          return n === 1 ? ["accent", "background", "panel", "text", "muted", "reset"] : [];
+          if (n === 1) {
+            return ["accent", "background", "panel", "text", "muted", "event", "reset"];
+          }
+          if (n === 2 && priorArgs[1] === "event") {
+            return [...EVENT_COLOR_SLOTS];
+          }
+          return [];
         default:
           return [];
       }

@@ -281,6 +281,26 @@ describe("subcommands", () => {
     expect(parseLine("/settings color accent").kind).toBe("invalid");
   });
 
+  it("parses /settings color event and rejects bad markers or colors", () => {
+    expect(parseLine("/settings color event success #FF00FF")).toEqual({
+      kind: "command",
+      command: { name: "settings-color-event", slot: "success", hex: "#ff00ff" },
+    });
+    expect(parseLine("/settings color event peer 00ffff")).toEqual({
+      kind: "command",
+      command: { name: "settings-color-event", slot: "peer", hex: "#00ffff" },
+    });
+    for (const line of [
+      "/settings color event",
+      "/settings color event success",
+      "/settings color event success red",
+      "/settings color event bogus #112233",
+      "/settings color event success #112233 extra",
+    ]) {
+      expect(parseLine(line).kind, line).toBe("invalid");
+    }
+  });
+
   it("parses the /settings scheme sub-verbs", () => {
     expect(parseLine("/settings scheme list")).toEqual({
       kind: "command",

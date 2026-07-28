@@ -71,6 +71,9 @@ export class FakeChrome implements UiChrome {
   themes: ThemePrefs[] = [];
   schemes: ResolvedScheme[] = [];
   glyphs: EmblemName[] = [];
+  /** Transcript width reported to width-aware output (/help). Assignable so a
+   * test can render the same command at a phone width and a desktop one. */
+  width = 80;
   echoInput(line: string, kind: "command" | "message" = "command"): void {
     this.echoes.push({ line, kind });
   }
@@ -100,5 +103,8 @@ export class FakeChrome implements UiChrome {
   }
   applyEmblem(name: EmblemName): void {
     this.glyphs.push(name);
+  }
+  columns(): number {
+    return this.width;
   }
 }

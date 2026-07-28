@@ -114,10 +114,22 @@ describe("/recover on a fresh device", () => {
     expect((sentKey as Uint8Array).length).toBe(1952);
 
     const text = output.text();
-    expect(text).toContain(`account recovered - your UID is ${formatUid(UID)}`);
+    expect(text).toContain("account recovered");
     expect(text).toContain("NEW recovery codes");
     for (const code of FRESH_CODES) {
       expect(text).toContain(code);
+    }
+
+    // The UID gets a line of its own, narrow enough to survive a phone. It used
+    // to sit at the end of an event line, past the right edge of a small
+    // terminal, where a hard wrap split it mid-token.
+    const lines = output.text().split("\n");
+    const uidLine = lines.find((l) => l.includes(formatUid(UID)));
+    expect(uidLine).toBe(`  ${formatUid(UID)}`);
+    expect(uidLine?.length).toBeLessThanOrEqual(36);
+    for (const code of FRESH_CODES) {
+      const codeLine = lines.find((l) => l.includes(code));
+      expect(codeLine?.length, codeLine).toBeLessThanOrEqual(36);
     }
     expect(text).toContain("identity-key-change warning");
     expect(text).toContain("logged in");

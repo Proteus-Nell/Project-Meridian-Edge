@@ -169,3 +169,57 @@ describe("Renderer discarded-message notices", () => {
     expect(sink.lines).toEqual([]);
   });
 });
+
+// The property that makes /settings color event safe to expose: a marker
+// colour can be set to anything, including the background, without ever
+// making the WORDS of an event unreadable. Every colour sequence is closed
+// before the message text begins, so the text renders in the scheme's default
+// foreground no matter what the marker was set to.
+describe("event colour never reaches the message text", () => {
+  const SGR = /\x1b\[[0-9;]*m/g; // eslint-disable-line no-control-regex
+
+  /** The portion of a line after the last colour reset: what the terminal
+   * paints in the default foreground. */
+  function uncoloredTail(line: string): string {
+    const lastReset = line.lastIndexOf("\x1b[0m");
+    return lastReset === -1 ? "" : line.slice(lastReset + 4);
+  }
+
+  it("closes the marker colour before the message on every event level", () => {
+    for (const level of ["success", "warning", "info", "security"] as const) {
+      const sink = new CaptureSink();
+      new Renderer(sink).event(level, "the message body");
+      const line = sink.lines[0] ?? "";
+      expect(uncoloredTail(line), level).toContain("the message body");
+      // and the body itself carries no colour sequence of its own
+      expect(uncoloredTail(line).match(SGR), level).toBeNull();
+    }
+  });
+
+  it("closes the E-code colour before the error text", () => {
+    const sink = new CaptureSink();
+    new Renderer(sink).error("E301");
+    const line = sink.lines[0] ?? "";
+    expect(uncoloredTail(line)).toContain("rate limit reached");
+    expect(uncoloredTail(line).match(SGR)).toBeNull();
+  });
+
+  it("closes the peer-name colour before the peer's text", () => {
+    const sink = new CaptureSink();
+    new Renderer(sink).peerMessage("alice", "hello there");
+    const line = sink.lines[0] ?? "";
+    expect(uncoloredTail(line)).toContain("hello there");
+  });
+
+  it("keeps the level's meaning in the marker text, not only its colour", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.event("warning", "careful");
+    renderer.event("security", "look at this");
+    renderer.error("E203");
+    const text = sink.lines.join("\n");
+    expect(text).toContain("[!]");
+    expect(text).toContain("[SECURITY]");
+    expect(text).toContain("[E203]");
+  });
+});

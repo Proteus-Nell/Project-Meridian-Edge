@@ -75,17 +75,60 @@ const chrome = new Chrome(transcriptTerm, inputTerm);
 // ResizeObserver is more reliable than window 'resize' alone (it also catches
 // the mobile keyboard shrinking the dvh viewport and device rotation), and the
 // minmax(0,1fr) column lets the containers actually shrink so fit() converges.
-const refit = (): void => {
+//
+// Two guards matter here, and both exist because a wrong column count is not a
+// cosmetic bug. xterm hard-wraps at `cols`, so if cols ends up LARGER than what
+// the container can actually show, every long line is painted partly outside
+// the visible area: the row appears to lose a run of characters in the middle
+// while the tail turns up on the next row. On a phone that lands on exactly the
+// text you cannot afford to lose - the UID at registration, a recovery code.
+//
+//   1. Never fit against a container that is not laid out. A transient zero
+//      size (mobile keyboard opening, rotation, the pane before first paint)
+//      makes FitAddon propose its 2x1 floor, and nothing would re-fit
+//      afterwards, so that garbage would stick.
+//   2. Always fit again on the trailing edge. Mobile viewport changes arrive as
+//      a burst mid-transition, so the measurement that matters is the last one,
+//      after the layout settles.
+const MIN_FITTABLE_PX = 24;
+
+const fitTerminals = (): void => {
+  const pane = mount("transcript-pane");
+  if (pane.clientWidth < MIN_FITTABLE_PX || pane.clientHeight < MIN_FITTABLE_PX) {
+    return; // mid-transition or not yet laid out: measuring now would lie
+  }
   transcriptFit.fit();
   inputFit.fit();
   // fit() may have changed the transcript's column count; re-pin the delivery
   // ticks to the new right edge (their decoration x was fixed at the old cols).
   chrome.reflowTicks();
 };
+
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+const refit = (): void => {
+  fitTerminals();
+  if (settleTimer !== null) {
+    clearTimeout(settleTimer);
+  }
+  settleTimer = setTimeout(() => {
+    settleTimer = null;
+    fitTerminals();
+  }, 120);
+};
 const resizeObserver = new ResizeObserver(refit);
 resizeObserver.observe(mount("transcript-pane"));
 resizeObserver.observe(mount("command-line"));
 window.addEventListener("resize", refit);
+window.addEventListener("orientationchange", refit);
+
+// The first fit above ran against whatever font the browser had resolved at
+// that instant. None of the preferred families ship on Android or iOS, so a
+// phone falls back to its generic monospace, and if that swap lands after the
+// initial measurement the cell width - and therefore the column count - is
+// wrong. Re-fit once the font set is settled.
+if (typeof document.fonts !== "undefined") {
+  void document.fonts.ready.then(refit);
+}
 
 // Declared before the shell and assigned after it: the shell's submit callback
 // closes over the executor, and the executor needs the shell, so one of the two

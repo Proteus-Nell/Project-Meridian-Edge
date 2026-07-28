@@ -97,6 +97,42 @@ export const SCHEMES: Record<SchemeName, Scheme> = {
   },
 };
 
+/** The terminal's notification markers, as colors a user can set.
+ *
+ * These are the `[✓]` `[!]` `[*]` `[E###]` prefixes the renderer puts in front
+ * of every event line, plus the `[alias]` label on an incoming message. They
+ * default to the ANSI palette, which is tuned for the base preset - and that is
+ * exactly the problem worth fixing: a custom scheme can put a green marker on a
+ * green background, and the user has no way to say otherwise.
+ *
+ * Recoloring these is safe, and deliberately so. The renderer tints ONLY the
+ * marker: every event's message text is printed in the scheme's `text` color
+ * after a reset, so no setting here can make the words of a warning
+ * unreadable. The markers also carry their meaning as literal text (`[!]`,
+ * `[SECURITY]`, the E-code), and the DOM status strip mirrors every event with
+ * its own CSS colors, independent of anything here. Three channels, and this
+ * touches one of them. */
+export const EVENT_COLOR_SLOTS = ["success", "warning", "info", "failure", "peer"] as const;
+export type EventColorSlot = (typeof EVENT_COLOR_SLOTS)[number];
+
+export function isEventColorSlot(word: string): word is EventColorSlot {
+  return (EVENT_COLOR_SLOTS as readonly string[]).includes(word);
+}
+
+export type EventColors = Partial<Record<EventColorSlot, string>>;
+
+/** Which ANSI theme entries each event slot drives. The renderer emits SGR 31
+ * (red), 32 (green), 33 (yellow), 36 (cyan) and 96 (bright cyan), so setting a
+ * slot means overriding the matching xterm theme colors; the bright variants
+ * move with their base so bold output does not drift back to the default. */
+const EVENT_ANSI_KEYS: Record<EventColorSlot, readonly (keyof AnsiOverrides)[]> = {
+  success: ["green", "brightGreen"],
+  warning: ["yellow", "brightYellow"],
+  info: ["cyan"],
+  failure: ["red", "brightRed"],
+  peer: ["brightCyan"],
+};
+
 /** A user-defined scheme. `base` is the preset it was derived from: it supplies
  * the ANSI overrides (so a custom light scheme keeps legible terminal output)
  * and is what /settings color reset restores the slots to. */
@@ -104,6 +140,10 @@ export interface CustomScheme {
   readonly name: string;
   readonly base: SchemeName;
   readonly colors: SchemeColors;
+  /** Per-slot notification marker colors layered over the base's ANSI map.
+   * Absent on schemes created before the setting existed, and on any scheme
+   * whose markers the user has left alone. */
+  readonly events?: EventColors;
 }
 
 /** Enough to organise by, few enough that a tampered or runaway record cannot
@@ -190,7 +230,49 @@ export function resolveScheme(name: string, customs: readonly CustomScheme[]): R
   }
   // ANSI comes from the base preset: a custom scheme sets the five slots, and
   // inheriting the base's terminal colors is what keeps a light fork readable.
-  return { ...custom.colors, ansi: SCHEMES[custom.base].ansi };
+  // Any marker colors the user set are layered on top of that.
+  return { ...custom.colors, ansi: mergeEventColors(SCHEMES[custom.base].ansi, custom.events) };
+}
+
+/** Fold a scheme's event-marker choices into an ANSI override map. Returns the
+ * base map untouched when nothing was set, so a scheme that never used the
+ * feature resolves exactly as it did before it existed. */
+export function mergeEventColors(
+  base: AnsiOverrides | null,
+  events: EventColors | undefined,
+): AnsiOverrides | null {
+  if (events === undefined || Object.keys(events).length === 0) {
+    return base;
+  }
+  const merged: Record<string, string> = { ...(base ?? {}) };
+  for (const slot of EVENT_COLOR_SLOTS) {
+    const hex = events[slot];
+    if (hex === undefined) {
+      continue;
+    }
+    for (const key of EVENT_ANSI_KEYS[slot]) {
+      merged[key] = hex;
+    }
+  }
+  return merged;
+}
+
+/** Validate a stored event-color map, dropping any slot that is not a literal
+ * #rrggbb. Same trust boundary as the five main slots. */
+export function sanitizeEventColors(raw: unknown): EventColors {
+  if (typeof raw !== "object" || raw === null) {
+    return {};
+  }
+  const source = raw as Partial<Record<EventColorSlot, unknown>>;
+  const out: EventColors = {};
+  for (const slot of EVENT_COLOR_SLOTS) {
+    const value = source[slot];
+    const hex = typeof value === "string" ? normalizeHex(value) : null;
+    if (hex !== null) {
+      out[slot] = hex;
+    }
+  }
+  return out;
 }
 
 /** The slot values a new custom scheme starts from: the resolved colors of
@@ -262,10 +344,14 @@ export function sanitizeCustomSchemes(raw: unknown): CustomScheme[] {
       continue;
     }
     seen.add(name);
+    const events = sanitizeEventColors((entry as { events?: unknown }).events);
     out.push({
       name,
       base: typeof base === "string" && isSchemeName(base) ? base : DEFAULT_SCHEME,
       colors: validColors,
+      // Omitted rather than stored empty, so a scheme that never touched the
+      // markers round-trips identically (exactOptionalPropertyTypes is on).
+      ...(Object.keys(events).length > 0 ? { events } : {}),
     });
   }
   return out;

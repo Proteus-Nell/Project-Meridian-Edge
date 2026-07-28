@@ -62,6 +62,32 @@ export function passphraseProblem(passphrase: string): PassphraseProblem | null 
   return null;
 }
 
+/** Print the UID and the recovery-code set as standalone, narrow lines.
+ *
+ * These are the two strings a user has to copy down exactly, and they are the
+ * two that cost the most if a character goes missing. Kept off the event lines
+ * on purpose: an event carries a timestamp and a glyph before its text, so the
+ * UID used to start around column 38 and run to column 70, which is past the
+ * right edge of a phone. On its own line, indented two, the grouped UID is 34
+ * columns and the widest code line is 27. */
+function printAccountSecrets(
+  x: ExecutorInternals,
+  uid: string,
+  codes: readonly string[],
+  codesLabel: string,
+): void {
+  x.renderer.plain("");
+  x.renderer.plain("  your UID:");
+  x.renderer.plain(`  ${uid}`);
+  x.renderer.plain("");
+  x.renderer.event("info", "share your UID out-of-band; there is no directory to search");
+  x.renderer.event("security", codesLabel);
+  codes.forEach((code, i) => {
+    x.renderer.plain(`  ${(i + 1).toString().padStart(2)}. ${code}`);
+  });
+  x.renderer.plain("");
+}
+
 export async function promptNewPassphrase(x: ExecutorInternals): Promise<string | null> {
   const first = await x.shell.readSecret(
     `choose a passphrase (${MIN_PASSPHRASE_LENGTH}+ characters, with a number and a symbol): `,
@@ -123,15 +149,13 @@ export async function doRegister(x: ExecutorInternals): Promise<void> {
   await x.store.putJson("settings/rotation", DEFAULT_ROTATION);
   x.identity = { uid, pub: keys.publicKey, sec: keys.secretKey };
 
-  x.renderer.event("success", `registered - your UID is ${response.uid}`);
-  x.renderer.event("info", "share your UID out-of-band; there is no directory to search");
-  x.renderer.event(
-    "security",
+  x.renderer.event("success", "registered");
+  printAccountSecrets(
+    x,
+    response.uid,
+    response.recovery_codes,
     "recovery codes - shown ONCE, never recoverable. write them down now:",
   );
-  response.recovery_codes.forEach((code, i) => {
-    x.renderer.plain(`    ${(i + 1).toString().padStart(2)}. ${code}`);
-  });
 
   await loginWithIdentity(x);
   await uploadInitialBundle(x);
@@ -227,14 +251,13 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   await x.store.putJson("settings/rotation", DEFAULT_ROTATION);
   x.identity = { uid: confirmedUid, pub: keys.publicKey, sec: keys.secretKey };
 
-  x.renderer.event("success", `account recovered - your UID is ${response.uid}`);
-  x.renderer.event(
-    "security",
+  x.renderer.event("success", "account recovered");
+  printAccountSecrets(
+    x,
+    response.uid,
+    response.recovery_codes,
     "NEW recovery codes - the old set is now void. shown ONCE, never recoverable. write them down now:",
   );
-  response.recovery_codes.forEach((freshCode, i) => {
-    x.renderer.plain(`    ${(i + 1).toString().padStart(2)}. ${freshCode}`);
-  });
   x.renderer.event(
     "warning",
     "message history, contacts, and sessions did not survive - they lived only in the old encrypted store",

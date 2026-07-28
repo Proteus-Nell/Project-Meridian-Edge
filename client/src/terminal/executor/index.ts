@@ -41,6 +41,7 @@ import { doDelete, doPurgeNow, doPurgeSet, doTimer } from "./lifecycle";
 import { processEnvelope, sendActiveMessage } from "./messaging";
 import {
   doSettingsColor,
+  doSettingsColorEvent,
   doSettingsColorReset,
   doSettingsEmblem,
   doSettingsMask,
@@ -239,6 +240,9 @@ export class Executor implements ExecutorInternals {
         return;
       case "settings-color":
         this.run(() => doSettingsColor(this, cmd.slot, cmd.hex));
+        return;
+      case "settings-color-event":
+        this.run(() => doSettingsColorEvent(this, cmd.slot, cmd.hex));
         return;
       case "settings-color-reset":
         this.run(() => doSettingsColorReset(this));
@@ -491,7 +495,11 @@ export class Executor implements ExecutorInternals {
   }
 
   private printHelp(topic: keyof typeof COMMAND_USAGE | undefined): void {
-    const lines = topic !== undefined ? renderCommandHelp(topic) : renderHelp();
+    // Lay out to the transcript's real width: the same reference reads as a
+    // tidy two-column table on a desktop and as a stacked list on a phone.
+    const columns = this.chrome.columns();
+    const lines =
+      topic !== undefined ? renderCommandHelp(topic, columns) : renderHelp(columns);
     for (const line of lines) {
       this.renderer.plain(line);
     }

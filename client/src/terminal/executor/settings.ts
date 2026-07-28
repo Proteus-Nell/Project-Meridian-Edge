@@ -17,7 +17,7 @@ import {
   schemeColorsOf,
   schemeExists,
 } from "../theme";
-import type { ColorSlot, CustomScheme, EmblemName } from "../theme";
+import type { ColorSlot, CustomScheme, EmblemName, EventColorSlot } from "../theme";
 import type { ThemeElement, Weekday } from "../parser";
 import type { ExecutorInternals } from "./context";
 import { DEFAULT_ROTATION } from "./records";
@@ -238,15 +238,52 @@ export async function doSettingsColor(
   slot: ColorSlot,
   hex: string,
 ): Promise<void> {
+  await editActiveScheme(x, `${slot} set to ${hex}`, (scheme) => ({
+    ...scheme,
+    colors: { ...scheme.colors, [slot]: hex },
+  }));
+}
+
+/** `/settings color event <slot> <#rrggbb>`: recolor one notification marker -
+ * the `[✓]` `[!]` `[*]` `[E###]` prefixes and the `[alias]` on an incoming
+ * message. They default to the ANSI palette, which a custom scheme can easily
+ * collide with (green markers on a green background); this is the way out.
+ *
+ * Only the marker is tinted. Every event's message text is printed in the
+ * scheme's `text` color, so nothing set here can make the words of a warning
+ * unreadable - see theme.ts::EVENT_COLOR_SLOTS for why that makes it safe to
+ * expose. Forks a preset exactly as the slot colors do. */
+export async function doSettingsColorEvent(
+  x: ExecutorInternals,
+  slot: EventColorSlot,
+  hex: string,
+): Promise<void> {
+  await editActiveScheme(x, `${slot} marker set to ${hex}`, (scheme) => ({
+    ...scheme,
+    events: { ...scheme.events, [slot]: hex },
+  }));
+}
+
+/** Apply `edit` to the scheme currently on screen, and report `summary`.
+ *
+ * When a preset is active there is nothing to edit: presets are immutable, so
+ * this forks `<preset>-custom`, switches there, and applies the change to the
+ * fork instead. A second edit finds that fork already active and just writes to
+ * it. Shared by both colour commands so they fork identically. */
+async function editActiveScheme(
+  x: ExecutorInternals,
+  summary: string,
+  edit: (scheme: CustomScheme) => CustomScheme,
+): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
   const active = findCustomScheme(prefs.customSchemes, prefs.scheme);
   if (active !== null) {
-    const edited: CustomScheme = { ...active, colors: { ...active.colors, [slot]: hex } };
+    const edited = edit(active);
     await applyPrefs(x, {
       ...prefs,
       customSchemes: prefs.customSchemes.map((s) => (s.name === active.name ? edited : s)),
     });
-    x.renderer.event("success", `${slot} set to ${hex} on '${active.name}'`);
+    x.renderer.event("success", `${summary} on '${active.name}'`);
     return;
   }
 
@@ -257,8 +294,7 @@ export async function doSettingsColor(
     x.renderer.error("E108", MAX_CUSTOM_SCHEMES);
     return;
   }
-  const colors = { ...(existing?.colors ?? schemeColorsOf(base, [])), [slot]: hex };
-  const forked: CustomScheme = { name, base, colors };
+  const forked = edit(existing ?? { name, base, colors: schemeColorsOf(base, []) });
   await applyPrefs(x, {
     ...prefs,
     scheme: name,
@@ -269,12 +305,13 @@ export async function doSettingsColor(
   });
   x.renderer.event(
     "success",
-    `${slot} set to ${hex} on '${name}' - the '${base}' preset is unchanged, /settings scheme ${base} goes back to it`,
+    `${summary} on '${name}' - the '${base}' preset is unchanged, /settings scheme ${base} goes back to it`,
   );
 }
 
-/** `/settings color reset`: put the active custom scheme's five slots back to
- * its base preset's. A preset is already pristine, so there is nothing to do. */
+/** `/settings color reset`: put the active custom scheme's five slots AND its
+ * notification markers back to its base preset's. A preset is already pristine,
+ * so there is nothing to do. */
 export async function doSettingsColorReset(x: ExecutorInternals): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
   const active = findCustomScheme(prefs.customSchemes, prefs.scheme);
@@ -285,7 +322,9 @@ export async function doSettingsColorReset(x: ExecutorInternals): Promise<void> 
     );
     return;
   }
-  const restored: CustomScheme = { ...active, colors: schemeColorsOf(active.base, []) };
+  // `events` is dropped entirely rather than emptied: absent is how a scheme
+  // that never touched the markers is stored.
+  const restored: CustomScheme = { name: active.name, base: active.base, colors: schemeColorsOf(active.base, []) };
   await applyPrefs(x, {
     ...prefs,
     customSchemes: prefs.customSchemes.map((s) => (s.name === active.name ? restored : s)),

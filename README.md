@@ -233,9 +233,24 @@ erasure.
 | `/settings scheme new <name>` | Copy the colors currently on screen into a scheme of your own and switch to it |
 | `/settings scheme delete <name>` | Delete one of yours. Presets cannot be deleted |
 | `/settings color <slot> <#rrggbb>` | Set one of the five slots: `accent`, `background`, `panel`, `text`, `muted` |
-| `/settings color reset` | Put your scheme's colors back to its base preset's |
+| `/settings color event <marker> <#rrggbb>` | Recolor a notification marker: `success`, `warning`, `info`, `failure`, `peer` |
+| `/settings color reset` | Put your scheme's colors and markers back to its base preset's |
 | `/settings emblem <globe\|tree>` | Medallion glyph |
 | `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
+
+**Notification markers are yours too.** The `[✓]` `[!]` `[*]` `[E###]` prefixes
+in front of every event line, and the `[alias]` on an incoming message, default
+to the ANSI palette. That palette is tuned for the preset, so a custom scheme
+can easily land a green marker on a green background; `/settings color event`
+is the way out.
+
+Recoloring them is safe, and the design is what makes it safe rather than a
+promise. The renderer tints **only the marker**: every event's message text is
+printed in your scheme's `text` color after the color is closed, so no setting
+here can make the words of a warning unreadable. The markers also carry their
+meaning as literal text, so `[SECURITY]` still reads as `[SECURITY]` in any
+color at all, and the footer status strip mirrors every event using its own CSS
+colors, independent of anything you set here. Three channels; this touches one.
 
 **The three presets are immutable.** Running `/settings color` while one is
 active does not modify it: it forks a scheme named `<preset>-custom`, switches
@@ -249,6 +264,10 @@ treated as untrusted input.
 
 ### Terminal tips
 
+- **`/help`** adapts to the width it is printed at: a two-column reference with
+  the descriptions aligned on a desktop, and one command per line with its
+  description indented beneath on a phone. **`/help <command>`** explains what
+  that command is for and what it costs, then gives its usage
 - **↑ / ↓**: command history. It never records passphrases
 - **Passphrase echo**: asterisks by default; `/settings mask hidden` shows
   nothing while you type, leaking no length. Both bypass history entirely

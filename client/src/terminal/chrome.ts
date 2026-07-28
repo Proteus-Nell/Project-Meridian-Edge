@@ -418,6 +418,13 @@ export class Chrome implements SuggestionNav {
     applyEmblemClass(name);
   }
 
+  /** The transcript's current width in cells, so laid-out output (/help) fits
+   * the screen it lands on. Follows every refit, since xterm updates cols as
+   * part of resize. */
+  columns(): number {
+    return this.transcript.cols;
+  }
+
   // ----- screen clear ---------------------------------------------------------
 
   /** /clr and Ctrl+L: wipe the transcript, its tick decorations, the strip, and

@@ -13,7 +13,7 @@ import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
 import { KeyStore } from "../src/crypto/store";
-import { MAX_CUSTOM_SCHEMES, SCHEMES } from "../src/terminal/theme";
+import { MAX_CUSTOM_SCHEMES, SCHEMES, resolveScheme } from "../src/terminal/theme";
 import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
 
 function makeExecutor(): {
@@ -267,3 +267,74 @@ function makeExecutorOn(store: KeyStore): {
   );
   return { executor, chrome, store };
 }
+
+describe("/settings color event", () => {
+  it("recolors a notification marker on the active scheme", async () => {
+    const { executor, store } = makeExecutor();
+    await run(executor, "/settings scheme new mine");
+    await run(executor, "/settings color event success #ff00ff");
+
+    const mine = (await store.getDisplayPrefs()).customSchemes.find((s) => s.name === "mine");
+    expect(mine?.events).toEqual({ success: "#ff00ff" });
+  });
+
+  it("drives the ANSI slots the renderer actually emits", async () => {
+    const { executor, chrome } = makeExecutor();
+    await run(executor, "/settings color event success #ff00ff");
+    await run(executor, "/settings color event failure #101010");
+    await run(executor, "/settings color event peer #00ffff");
+
+    const ansi = lastScheme(chrome).ansi as Record<string, string>;
+    // success -> SGR 32/92, failure -> 31/91, peer -> 96.
+    expect(ansi.green).toBe("#ff00ff");
+    expect(ansi.brightGreen).toBe("#ff00ff");
+    expect(ansi.red).toBe("#101010");
+    expect(ansi.brightRed).toBe("#101010");
+    expect(ansi.brightCyan).toBe("#00ffff");
+    // Untouched slots keep whatever the base preset had.
+    expect(ansi.yellow).toBeUndefined();
+  });
+
+  it("forks a preset rather than editing it", async () => {
+    const { executor, store } = makeExecutor();
+    await run(executor, "/settings scheme parchment");
+    await run(executor, "/settings color event warning #123456");
+
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.scheme).toBe("parchment-custom");
+    expect(prefs.customSchemes[0]?.events).toEqual({ warning: "#123456" });
+    // The preset still resolves to its shipped ANSI map.
+    expect(resolveScheme("parchment", prefs.customSchemes).ansi).toEqual(SCHEMES.parchment.ansi);
+  });
+
+  it("keeps the base preset's other ANSI entries when overriding one", async () => {
+    const { executor, chrome } = makeExecutor();
+    await run(executor, "/settings scheme parchment");
+    await run(executor, "/settings color event success #ff00ff");
+
+    const ansi = lastScheme(chrome).ansi as Record<string, string>;
+    expect(ansi.green).toBe("#ff00ff");
+    // parchment darkens red/yellow/cyan for a light background; those survive.
+    expect(ansi.red).toBe(SCHEMES.parchment.ansi?.red);
+    expect(ansi.yellow).toBe(SCHEMES.parchment.ansi?.yellow);
+  });
+
+  it("is cleared by /settings color reset along with the slot colors", async () => {
+    const { executor, store } = makeExecutor();
+    await run(executor, "/settings color event success #ff00ff");
+    await run(executor, "/settings color accent #ff0000");
+    await run(executor, "/settings color reset");
+
+    const scheme = (await store.getDisplayPrefs()).customSchemes[0];
+    expect(scheme?.events).toBeUndefined();
+    expect(scheme?.colors).toEqual(SCHEMES.dark.colors);
+  });
+
+  it("rejects a non-color and an unknown marker", async () => {
+    const { executor, output, store } = makeExecutor();
+    await run(executor, "/settings color event success red");
+    await run(executor, "/settings color event bogus #112233");
+    expect(output.text()).toContain("[E102]");
+    expect((await store.getDisplayPrefs()).customSchemes).toEqual([]);
+  });
+});

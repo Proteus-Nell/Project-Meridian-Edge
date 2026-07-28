@@ -8,6 +8,7 @@
 import type { KeyStore } from "../../crypto/store";
 import type { ThemePrefs } from "../../crypto/store";
 import type { WsClient } from "../../net/ws";
+import { DEFAULT_HELP_COLUMNS } from "../help";
 import type { Renderer } from "../renderer";
 import type { ShellIO } from "../shell";
 import type { EmblemName, ResolvedScheme } from "../theme";
@@ -40,6 +41,10 @@ export interface UiChrome {
   setEmblemState(state: EmblemState): void;
   applyScheme(scheme: ResolvedScheme): void;
   applyEmblem(name: EmblemName): void;
+  /** Current width of the transcript in character cells, so output that has to
+   * be laid out (/help) can fit the screen it is printed on instead of assuming
+   * a desktop terminal. */
+  columns(): number;
 }
 
 export const NULL_CHROME: UiChrome = {
@@ -53,6 +58,7 @@ export const NULL_CHROME: UiChrome = {
   setEmblemState() {},
   applyScheme() {},
   applyEmblem() {},
+  columns: () => DEFAULT_HELP_COLUMNS,
 };
 
 /** Which screen the transcript is showing: the home dashboard or a specific

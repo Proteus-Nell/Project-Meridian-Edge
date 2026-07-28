@@ -5,8 +5,8 @@
 
 import { CROCKFORD_ALPHABET, RECOVERY_CODE_CHARS, UID_CHARS } from "../crypto/constants";
 import { suggestCommand } from "./suggest";
-import { isColorSlot, isEmblemName, normalizeHex } from "./theme";
-import type { ColorSlot, EmblemName } from "./theme";
+import { isColorSlot, isEmblemName, isEventColorSlot, normalizeHex } from "./theme";
+import type { ColorSlot, EmblemName, EventColorSlot } from "./theme";
 
 export type DurationUnit = "m" | "h" | "d" | "w";
 
@@ -86,6 +86,7 @@ export type Command =
   | { readonly name: "settings-scheme-list" }
   | { readonly name: "settings-emblem"; readonly emblem: EmblemName }
   | { readonly name: "settings-color"; readonly slot: ColorSlot; readonly hex: string }
+  | { readonly name: "settings-color-event"; readonly slot: EventColorSlot; readonly hex: string }
   | { readonly name: "settings-color-reset" }
   | { readonly name: "duress-set" }
   | { readonly name: "duress-off" }
@@ -141,7 +142,7 @@ export const COMMAND_USAGE = {
   delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
   rotate: "/rotate passphrase",
   settings:
-    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color reset",
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset",
   duress:
     "/duress set  |  /duress off  |  /duress status  (a passphrase that silently destroys this device and the account)",
   keys: "/keys status  |  /keys refill",
@@ -627,6 +628,27 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         if (args[1] === "reset" && args.length === 2) {
           return command({ name: "settings-color-reset" });
         }
+        // /settings color event <success|warning|info|failure|peer> <#rrggbb>
+        if (args[1] === "event") {
+          const eventToken = args[2];
+          const eventHex = args[3];
+          if (
+            args.length === 4 &&
+            eventToken !== undefined &&
+            isEventColorSlot(eventToken) &&
+            eventHex !== undefined
+          ) {
+            const hex = normalizeHex(eventHex);
+            if (hex === null) {
+              return invalid("invalid color (use a 6-digit hex like #1a2b3c)", usage);
+            }
+            return command({ name: "settings-color-event", slot: eventToken, hex });
+          }
+          return invalid(
+            "expected <success|warning|info|failure|peer> <#rrggbb>",
+            usage,
+          );
+        }
         const slotToken = args[1];
         const hexToken = args[2];
         if (
@@ -642,7 +664,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
           return command({ name: "settings-color", slot: slotToken, hex });
         }
         return invalid(
-          "expected <accent|background|panel|text|muted> <#rrggbb>, or 'reset'",
+          "expected <accent|background|panel|text|muted> <#rrggbb>, 'event <slot> <#rrggbb>', or 'reset'",
           usage,
         );
       }
