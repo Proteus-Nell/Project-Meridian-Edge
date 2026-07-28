@@ -114,7 +114,7 @@ describe("/recover on a fresh device", () => {
     expect((sentKey as Uint8Array).length).toBe(1952);
 
     const text = output.text();
-    expect(text).toContain("account recovered");
+    expect(text).toContain("Account recovered");
     expect(text).toContain("NEW recovery codes");
     for (const code of FRESH_CODES) {
       expect(text).toContain(code);
@@ -132,7 +132,7 @@ describe("/recover on a fresh device", () => {
       expect(codeLine?.length, codeLine).toBeLessThanOrEqual(36);
     }
     expect(text).toContain("identity-key-change warning");
-    expect(text).toContain("logged in");
+    expect(text).toContain("Logged in");
     expect(api.uploadSpk).toHaveBeenCalledTimes(1);
     expect(api.uploadOpks).toHaveBeenCalledTimes(1);
 
@@ -152,7 +152,7 @@ describe("/recover on a fresh device", () => {
     shell.secrets = ["not-a-real-code"];
     await runRecover(executor);
 
-    expect(output.text()).toContain("invalid recovery code");
+    expect(output.text()).toContain("recovery code is not valid");
     expect(api.recover).not.toHaveBeenCalled();
     expect(await store.exists()).toBe(false);
   });
@@ -165,7 +165,7 @@ describe("/recover on a fresh device", () => {
     shell.lines = ["definitely-not-a-uid"];
     await runRecover(executor);
 
-    expect(output.text()).toContain("invalid UID");
+    expect(output.text()).toContain("UID is not valid");
     expect(api.recover).not.toHaveBeenCalled();
   });
 });
@@ -190,7 +190,7 @@ describe("/recover over an existing store", () => {
     // The gate must read as a question, not a refusal: an earlier wording was
     // mistaken for /register's "a store already exists" rejection.
     expect(output.text()).toContain("confirmation, not a refusal");
-    expect(output.text()).toContain("recovery cancelled - nothing was changed");
+    expect(output.text()).toContain("Recovery cancelled. Nothing was changed");
     expect(api.recover).not.toHaveBeenCalled();
     store.lock();
     expect(await store.unlock("original passphrase")).toBe(true);
@@ -207,7 +207,7 @@ describe("/recover over an existing store", () => {
     shell.secrets = [CODE_TYPED, "new passphrase 1!", "new passphrase 1!"];
     await runRecover(executor);
 
-    expect(output.text()).toContain("recovery failed - unknown UID or invalid recovery code");
+    expect(output.text()).toContain("Recovery failed.");
     store.lock();
     expect(await store.unlock("original passphrase")).toBe(true);
     expect((await store.getJson<{ uid: string }>("identity"))?.uid).toBe("B".repeat(26));
@@ -222,7 +222,7 @@ describe("/recover over an existing store", () => {
     shell.secrets = [CODE_TYPED, "new passphrase 1!", "new passphrase 1!"];
     await runRecover(executor);
 
-    expect(output.text()).toContain("account recovered");
+    expect(output.text()).toContain("Account recovered");
     store.lock();
     expect(await store.unlock("original passphrase")).toBe(false);
     expect(await store.unlock("new passphrase 1!")).toBe(true);
@@ -245,7 +245,7 @@ describe("/login after the account was recovered on another device", () => {
     shell.secrets = ["original passphrase 1!", "original passphrase 1!"];
     executor.handle(parseLine("/register"));
     await executor.idle();
-    expect(output.text()).toContain("logged in");
+    expect(output.text()).toContain("Logged in");
 
     // The account is then recovered elsewhere: the server enrolls a new
     // identity key, so the signature this device produces stops verifying.
@@ -256,7 +256,7 @@ describe("/login after the account was recovered on another device", () => {
 
     const text = output.text();
     expect(text).toContain("[E210]");
-    expect(text).toContain("run /recover here");
+    expect(text).toContain("Run /recover here");
     // The bug this replaced: every 401 fell through to the session-expired
     // message, telling the user to /login right after they had.
     expect(text).not.toContain("[E202]");

@@ -80,7 +80,7 @@ function printAccountSecrets(
   x.renderer.plain("  your UID:");
   x.renderer.plain(`  ${uid}`);
   x.renderer.plain("");
-  x.renderer.event("info", "share your UID out-of-band; there is no directory to search");
+  x.renderer.event("info", "Share your UID out-of-band. There is no directory to search.");
   x.renderer.event("security", codesLabel);
   codes.forEach((code, i) => {
     x.renderer.plain(`  ${(i + 1).toString().padStart(2)}. ${code}`);
@@ -119,17 +119,17 @@ export async function doRegister(x: ExecutorInternals): Promise<void> {
   if (await x.store.exists()) {
     x.renderer.event(
       "warning",
-      "an identity store already exists on this device - /login (or /wipe to destroy it first)",
+      "An identity store already exists on this device. Run /login, or /wipe to destroy it first.",
     );
     return;
   }
   const passphrase = await promptNewPassphrase(x);
   if (passphrase === null) {
-    x.renderer.event("info", "registration cancelled");
+    x.renderer.event("info", "Registration cancelled.");
     return;
   }
 
-  x.renderer.event("info", "generating ML-DSA-65 identity keypair...");
+  x.renderer.event("info", "Generating ML-DSA-65 identity keypair...");
   const seed = crypto.getRandomValues(new Uint8Array(32));
   const keys = ml_dsa65.keygen(seed);
   seed.fill(0);
@@ -149,12 +149,12 @@ export async function doRegister(x: ExecutorInternals): Promise<void> {
   await x.store.putJson("settings/rotation", DEFAULT_ROTATION);
   x.identity = { uid, pub: keys.publicKey, sec: keys.secretKey };
 
-  x.renderer.event("success", "registered");
+  x.renderer.event("success", "Registered.");
   printAccountSecrets(
     x,
     response.uid,
     response.recovery_codes,
-    "recovery codes - shown ONCE, never recoverable. write them down now:",
+    "Recovery codes, shown ONCE and never recoverable. Write them down now:",
   );
 
   await loginWithIdentity(x);
@@ -176,17 +176,17 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   if (hadStore) {
     x.renderer.event(
       "security",
-      "recovery will REPLACE the identity store on this device - the identity, keys, contacts and message history held here are destroyed and rebuilt from the recovered account. This is a confirmation, not a refusal: answer yes below to go ahead",
+      "Recovery will REPLACE the identity store on this device. The identity, keys, contacts and message history held here are destroyed and rebuilt from the recovered account. This is a confirmation, not a refusal, so answer yes below to go ahead.",
     );
     const answer = await x.shell.readLine("destroy the local store and recover? (yes/NO): ");
     if (answer === null || answer.trim().toLowerCase() !== "yes") {
-      x.renderer.event("info", "recovery cancelled - nothing was changed");
+      x.renderer.event("info", "Recovery cancelled. Nothing was changed.");
       return;
     }
   }
   const uidRaw = await x.shell.readLine("account UID: ");
   if (uidRaw === null) {
-    x.renderer.event("info", "recovery cancelled");
+    x.renderer.event("info", "Recovery cancelled.");
     return;
   }
   const uid = normalizeUid(uidRaw.trim());
@@ -196,7 +196,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   }
   const codeRaw = await x.shell.readSecret("recovery code: ");
   if (codeRaw === null) {
-    x.renderer.event("info", "recovery cancelled");
+    x.renderer.event("info", "Recovery cancelled.");
     return;
   }
   const code = normalizeRecoveryCode(codeRaw);
@@ -206,11 +206,11 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   }
   const passphrase = await promptNewPassphrase(x);
   if (passphrase === null) {
-    x.renderer.event("info", "recovery cancelled");
+    x.renderer.event("info", "Recovery cancelled.");
     return;
   }
 
-  x.renderer.event("info", "generating replacement ML-DSA-65 identity keypair...");
+  x.renderer.event("info", "Generating a replacement ML-DSA-65 identity keypair...");
   const seed = crypto.getRandomValues(new Uint8Array(32));
   const keys = ml_dsa65.keygen(seed);
   seed.fill(0);
@@ -251,20 +251,20 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   await x.store.putJson("settings/rotation", DEFAULT_ROTATION);
   x.identity = { uid: confirmedUid, pub: keys.publicKey, sec: keys.secretKey };
 
-  x.renderer.event("success", "account recovered");
+  x.renderer.event("success", "Account recovered.");
   printAccountSecrets(
     x,
     response.uid,
     response.recovery_codes,
-    "NEW recovery codes - the old set is now void. shown ONCE, never recoverable. write them down now:",
+    "NEW recovery codes. The old set is now void. Shown ONCE and never recoverable, so write them down now:",
   );
   x.renderer.event(
     "warning",
-    "message history, contacts, and sessions did not survive - they lived only in the old encrypted store",
+    "Message history, contacts, and sessions did not survive. They lived only in the old encrypted store.",
   );
   x.renderer.event(
     "warning",
-    "your contacts still pin the OLD identity key: your next message triggers their identity-key-change warning, and they should re-verify your safety number",
+    "Your contacts still pin your OLD identity key. Your next message triggers their identity-key-change warning, and they should re-verify your safety number.",
   );
 
   await loginWithIdentity(x);
@@ -295,7 +295,7 @@ export async function loginWithIdentity(x: ExecutorInternals): Promise<void> {
     throw new Error("no identity");
   }
   x.token = await authenticate(x.identity.uid, x.identity.sec);
-  x.renderer.event("success", "logged in - session token held in memory only (15 min idle)");
+  x.renderer.event("success", "Logged in. The session token is held in memory only and expires after 15 minutes idle.");
 }
 
 async function uploadInitialBundle(x: ExecutorInternals): Promise<void> {
@@ -304,7 +304,7 @@ async function uploadInitialBundle(x: ExecutorInternals): Promise<void> {
   }
   await rotateSpkInternal(x);
   await refillOpksInternal(x, OPK_BATCH_MAX);
-  x.renderer.event("success", `prekey bundle uploaded (SPK + ${OPK_BATCH_MAX} one-time prekeys)`);
+  x.renderer.event("success", `Prekey bundle uploaded: one signed prekey and ${OPK_BATCH_MAX} one-time prekeys.`);
 }
 
 async function rotateSpkInternal(x: ExecutorInternals): Promise<void> {
@@ -371,7 +371,7 @@ export async function doLogin(
   if (!x.store.isUnlocked()) {
     const passphrase = await x.shell.readSecret("passphrase: ");
     if (passphrase === null) {
-      x.renderer.event("info", "login cancelled");
+      x.renderer.event("info", "Login cancelled.");
       return;
     }
     if (!(await x.store.unlock(passphrase))) {
@@ -430,12 +430,12 @@ async function postLoginMaintenance(x: ExecutorInternals): Promise<void> {
   const spkAgeMs = newest === undefined ? Number.POSITIVE_INFINITY : x.now() - newest;
   if (status.spk_uploaded_at === null || spkAgeMs > SPK_ROTATION_DAYS * DAY_MS) {
     await rotateSpkInternal(x);
-    x.renderer.event("info", "signed prekey rotated (weekly schedule)");
+    x.renderer.event("info", "Signed prekey rotated, on the weekly schedule.");
   }
   if (status.opk_count < OPK_LOW_WATERMARK) {
     const needed = OPK_BATCH_MAX - status.opk_count;
     await refillOpksInternal(x, needed);
-    x.renderer.event("info", `one-time prekeys refilled (+${needed})`);
+    x.renderer.event("info", `One-time prekeys refilled (+${needed}).`);
   }
 }
 
@@ -455,7 +455,7 @@ async function maybeRotationPrompt(x: ExecutorInternals): Promise<void> {
   if (settings.lastPrompt < occurrence) {
     x.renderer.event(
       "warning",
-      "weekly passphrase rotation is due - /rotate passphrase (configure: /settings rotation)",
+      "Weekly passphrase rotation is due. Run /rotate passphrase, or configure the reminder with /settings rotation.",
     );
     await x.store.putJson("settings/rotation", { ...settings, lastPrompt: x.now() });
   }
@@ -470,7 +470,7 @@ export async function doLogout(x: ExecutorInternals): Promise<void> {
     }
   }
   x.lockLocal();
-  x.renderer.event("success", "logged out - session revoked server-side, store locked");
+  x.renderer.event("success", "Logged out. The session was revoked on the server and the store is locked.");
 }
 
 /** Elapsed time as a short phrase, coarse for readability. */
@@ -512,18 +512,18 @@ export async function doLogoutOthers(x: ExecutorInternals): Promise<void> {
   }
   const { revoked } = await api.logoutAll(x.token);
   if (revoked === 0) {
-    x.renderer.event("info", "no other sessions to sign out - this is your only active device");
+    x.renderer.event("info", "There are no other sessions to sign out. This is your only active device.");
     return;
   }
   x.renderer.event(
     "success",
-    `signed out ${revoked} other session${revoked === 1 ? "" : "s"} - this device stays logged in`,
+    `Signed out ${revoked} other session${revoked === 1 ? "" : "s"}. This device stays logged in.`,
   );
 }
 
 export function doLock(x: ExecutorInternals): void {
   x.lockLocal();
-  x.renderer.event("success", "store locked (session token, if any, expires after 15 min idle)");
+  x.renderer.event("success", "Store locked. Any session token expires after 15 minutes idle.");
 }
 
 export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
@@ -552,11 +552,11 @@ export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
     // already know.
     x.renderer.event(
       "warning",
-      "the new passphrase is identical to the current one - rotating it changes nothing an attacker would have to guess",
+      "The new passphrase is identical to the current one, so rotating it changes nothing an attacker would have to guess.",
     );
     const answer = await x.shell.readLine("rotate anyway? (y/N): ");
     if (answer === null || !/^y(es)?$/i.test(answer.trim())) {
-      x.renderer.event("info", "rotation cancelled - run /rotate passphrase again with a different passphrase");
+      x.renderer.event("info", "Rotation cancelled. Run /rotate passphrase again with a different passphrase.");
       return;
     }
   }
@@ -570,7 +570,7 @@ export async function doRotatePassphrase(x: ExecutorInternals): Promise<void> {
   if (x.store.isUnlocked()) {
     await x.store.putJson("settings/rotation", { ...settings, lastPrompt: x.now() });
   }
-  x.renderer.event("success", "passphrase rotated - DEK re-wrapped locally, nothing sent anywhere");
+  x.renderer.event("success", "Passphrase rotated. The store key was re-wrapped locally and nothing was sent anywhere.");
 }
 
 export async function doKeysStatus(x: ExecutorInternals): Promise<void> {
@@ -580,14 +580,14 @@ export async function doKeysStatus(x: ExecutorInternals): Promise<void> {
   }
   const status = await api.keysStatus(x.token);
   if (status.spk_uploaded_at === null) {
-    x.renderer.event("warning", "no signed prekey uploaded yet");
+    x.renderer.event("warning", "No signed prekey has been uploaded yet.");
   } else {
     const days = Math.floor((x.now() / 1000 - status.spk_uploaded_at) / 86400);
-    x.renderer.event("info", `signed prekey age: ${days} day(s) (rotates weekly)`);
+    x.renderer.event("info", `Signed prekey age: ${days} day(s). It rotates weekly.`);
   }
   x.renderer.event(
     "info",
-    `one-time prekeys available: ${status.opk_count} (auto-refill below ${OPK_LOW_WATERMARK})`,
+    `One-time prekeys available: ${status.opk_count}. They refill automatically below ${OPK_LOW_WATERMARK}.`,
   );
 }
 
@@ -599,11 +599,11 @@ export async function doKeysRefill(x: ExecutorInternals): Promise<void> {
   const status = await api.keysStatus(x.token);
   const needed = Math.max(0, OPK_BATCH_MAX - status.opk_count);
   if (needed === 0) {
-    x.renderer.event("info", `one-time prekeys already at capacity (${status.opk_count})`);
+    x.renderer.event("info", `One-time prekeys are already at capacity (${status.opk_count}).`);
     return;
   }
   await refillOpksInternal(x, needed);
-  x.renderer.event("success", `uploaded ${needed} one-time prekey(s)`);
+  x.renderer.event("success", `Uploaded ${needed} one-time prekey(s).`);
 }
 
 export async function doWipe(x: ExecutorInternals): Promise<void> {
@@ -624,13 +624,13 @@ export async function doWipe(x: ExecutorInternals): Promise<void> {
   x.active = null;
   refreshChatContext(x);
   x.shell.setPrompt("> ");
-  x.renderer.event("success", "local store destroyed (browser deletion is not forensic erasure)");
+  x.renderer.event("success", "Local store destroyed. Note that browser deletion is not forensic erasure.");
 }
 
 /** `/whoami`: own UID and identity-key fingerprint. */
 export function doWhoami(x: ExecutorInternals): void {
   if (x.identity === null) {
-    x.renderer.event("warning", "locked or not registered - /login or /register");
+    x.renderer.event("warning", "Locked or not registered. Please run /login or /register.");
     return;
   }
   const fingerprint = bytesToHex(sha512(x.identity.pub).slice(0, 16));

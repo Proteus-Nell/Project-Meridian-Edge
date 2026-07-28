@@ -5,7 +5,7 @@
 // Three properties define the feature, and each one is a deliberate cost:
 //
 //   1. It is silent. No confirmation, no warning, no progress. The screen shows
-//      the same "[E203] unlock failed" a typo produces, because anything else
+//      the same "[E203] Unlock failed." a typo produces, because anything else
 //      would tell whoever is standing over the user what just happened. The
 //      warning shown by /duress set is the only place this is ever announced.
 //   2. The armed state is invisible at rest. The sealed envelope lives in the
@@ -78,18 +78,18 @@ export async function doDuressSet(x: ExecutorInternals): Promise<void> {
   }
   x.renderer.event(
     "security",
-    "a duress passphrase gives NO warning and NO confirmation. Typing it at the /login prompt immediately destroys this device's store and deletes your account from the server, and the screen shows only 'unlock failed', exactly as a typo would. There is no undo and no recovery code that brings it back. It also seals a copy of your identity key, so choose one as strong as your real passphrase - and one you could never type by accident.",
+    "a duress passphrase gives NO warning and NO confirmation. Typing it at the /login prompt immediately destroys this device's store and deletes your account from the server, and the screen shows only 'unlock failed', exactly as a typo would. There is no undo and no recovery code that brings it back. It also seals a copy of your identity key, so choose one as strong as your real passphrase, and one you could never type by accident.",
   );
   const answer = await x.shell.readLine("arm a duress passphrase? (yes/NO): ");
   if (answer === null || answer.trim().toLowerCase() !== "yes") {
-    x.renderer.event("info", "duress passphrase not armed - nothing was changed");
+    x.renderer.event("info", "Duress passphrase not armed. Nothing was changed.");
     return;
   }
   const first = await x.shell.readSecret(
     `choose a DURESS passphrase (${MIN_PASSPHRASE_LENGTH}+ characters, with a number and a symbol): `,
   );
   if (first === null) {
-    x.renderer.event("info", "duress passphrase not armed - nothing was changed");
+    x.renderer.event("info", "Duress passphrase not armed. Nothing was changed.");
     return;
   }
   const problem = passphraseProblem(first);
@@ -103,7 +103,7 @@ export async function doDuressSet(x: ExecutorInternals): Promise<void> {
   }
   const second = await x.shell.readSecret("confirm duress passphrase: ");
   if (second === null) {
-    x.renderer.event("info", "duress passphrase not armed - nothing was changed");
+    x.renderer.event("info", "Duress passphrase not armed. Nothing was changed.");
     return;
   }
   if (!secretStringsEqual(first, second)) {
@@ -121,7 +121,7 @@ export async function doDuressSet(x: ExecutorInternals): Promise<void> {
   await x.store.putJson(DURESS_SETTINGS_KEY, { armed: true } satisfies DuressSettings);
   x.renderer.event(
     "success",
-    "duress passphrase armed - typing it at the /login prompt destroys this device and the account, silently. /duress off disarms it.",
+    "Duress passphrase armed. Typing it at the /login prompt destroys this device and the account, silently and with no confirmation. /duress off disarms it.",
   );
 }
 
@@ -136,7 +136,7 @@ export async function doDuressOff(x: ExecutorInternals): Promise<void> {
   await x.store.putJson(DURESS_SETTINGS_KEY, { armed: false } satisfies DuressSettings);
   x.renderer.event(
     "success",
-    "duress passphrase disarmed - the /login prompt now only ever unlocks or fails",
+    "Duress passphrase disarmed. The /login prompt now only ever unlocks or fails.",
   );
 }
 
@@ -151,13 +151,13 @@ export async function doDuressStatus(x: ExecutorInternals): Promise<void> {
   if (settings?.armed === true) {
     x.renderer.event(
       "security",
-      "duress passphrase ARMED - typing it at /login destroys this device and the account with no confirmation. /duress off disarms it; /duress set replaces it.",
+      "Duress passphrase ARMED. Typing it at /login destroys this device and the account with no confirmation. /duress off disarms it, /duress set replaces it.",
     );
     return;
   }
   x.renderer.event(
     "info",
-    "duress passphrase not armed - /duress set arms one (read its warning first)",
+    "Duress passphrase not armed. Run /duress set to arm one, after reading its warning.",
   );
 }
 

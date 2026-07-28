@@ -80,7 +80,7 @@ export class Executor implements ExecutorInternals {
   /** A lane separate from the command `tail` for cosmetic view rebuilds.
    * Kept apart so enqueuing a redraw never trips the `busy` guard: a redraw
    * scheduled by /chat must not make an immediately-following message report
-   * "another operation is in progress". */
+   * "Another operation is in progress. Please wait for it to finish.". */
   private renderTail: Promise<void> = Promise.resolve();
 
   readonly renderer: Renderer;
@@ -155,7 +155,7 @@ export class Executor implements ExecutorInternals {
 
   private handleMessage(text: string): void {
     if (this.active === null) {
-      this.renderer.event("warning", "no active conversation - use /chat <alias|uid> first");
+      this.renderer.event("warning", "No active conversation. Use /chat <alias|uid> first.");
       return;
     }
     // Re-resolve from the map rather than trusting the snapshot captured at
@@ -314,7 +314,7 @@ export class Executor implements ExecutorInternals {
         return;
       default: {
         const segment = SEGMENT_OF[cmd.name] ?? "a later release";
-        this.renderer.event("info", `/${cmd.name} is not implemented yet - scheduled for ${segment}`);
+        this.renderer.event("info", `/${cmd.name} is not implemented yet. It is scheduled for ${segment}.`);
         return;
       }
     }
@@ -340,7 +340,7 @@ export class Executor implements ExecutorInternals {
     if (contact.keyChangeBlocked) {
       this.renderer.event(
         "security",
-        `identity key for ${contact.alias} changed and is UNACKNOWLEDGED - sending is blocked. /ack ${contact.alias}, then /verify + /verified to resume.`,
+        `The identity key for ${contact.alias} changed and is UNACKNOWLEDGED, so sending is blocked. Run /ack ${contact.alias}, then /verify and /verified to resume.`,
       );
     }
     this.shell.setPrompt(`[${contact.alias}] > `);
@@ -372,7 +372,7 @@ export class Executor implements ExecutorInternals {
 
   private run(task: () => Promise<void>): void {
     if (this.busy) {
-      this.renderer.event("warning", "another operation is in progress");
+      this.renderer.event("warning", "Another operation is in progress. Please wait for it to finish.");
       return;
     }
     this.busy = true;
@@ -437,7 +437,7 @@ export class Executor implements ExecutorInternals {
     if (this.store.isUnlocked()) {
       this.autoLockTimer = setTimeout(() => {
         this.lockLocal();
-        this.renderer.event("warning", "auto-locked after 10 minutes idle - /login to unlock");
+        this.renderer.event("warning", "Auto-locked after 10 minutes idle. Run /login to unlock.");
       }, AUTO_LOCK_MS);
     }
   }
@@ -488,7 +488,7 @@ export class Executor implements ExecutorInternals {
       },
       onClose: (intentional) => {
         if (!intentional) {
-          this.renderer.event("warning", "live delivery disconnected - /login to reconnect");
+          this.renderer.event("warning", "Live delivery disconnected. Run /login to reconnect.");
         }
       },
     });

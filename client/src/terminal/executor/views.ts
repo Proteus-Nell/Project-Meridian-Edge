@@ -39,7 +39,7 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
     contact.timerSeconds === null ? "" : ` · timer ${formatDuration(contact.timerSeconds)}`;
   x.renderer.divider(`-- conversation with ${contact.alias} (${trust})${timer} --`);
   if (records.length === 0) {
-    x.renderer.plain("  (no messages yet - type to send the first one · /home to go back)");
+    x.renderer.plain("  (No messages yet. Type to send the first one, or /home to go back.)");
   }
   for (const record of records) {
     if (record.dir === "in") {
@@ -51,7 +51,7 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
   if (contact.keyChangeBlocked) {
     x.renderer.event(
       "security",
-      `sending to ${contact.alias} is blocked by an unacknowledged key change - /ack ${contact.alias}, then /verify + /verified to resume`,
+      `Sending to ${contact.alias} is blocked by an unacknowledged key change. Run /ack ${contact.alias}, then /verify and /verified to resume.`,
     );
   }
 }
@@ -66,14 +66,14 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
   x.chrome.clearScreen(false);
   x.renderer.divider("-- home --");
   if (x.identity === null || !x.store.isUnlocked()) {
-    x.renderer.plain("  locked - /login to unlock, or /register to create an identity");
+    x.renderer.plain("  Locked. Run /login to unlock, or /register to create an identity.");
     return;
   }
   // Favourites first (/favourite), then alphabetical - the same order /contacts
   // prints, with a leading '*' marking the pinned ones.
   const contacts = sortContacts([...x.contacts.values()]);
   if (contacts.length === 0) {
-    x.renderer.plain("  no contacts yet - /add <uid> [alias] to add one");
+    x.renderer.plain("  No contacts yet. Run /add <uid> [alias] to add one.");
   } else {
     x.renderer.plain("  contacts:");
     const width = Math.max(...contacts.map((c) => c.alias.length));
@@ -82,7 +82,7 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
       const flags = [
         contact.verified ? "verified" : "UNVERIFIED",
         unread > 0 ? `${unread} unread` : "",
-        contact.keyChangeBlocked ? "KEY CHANGED - /ack" : "",
+        contact.keyChangeBlocked ? "KEY CHANGED (/ack)" : "",
         contact.timerSeconds === null ? "" : `timer ${formatDuration(contact.timerSeconds)}`,
       ]
         .filter((s) => s.length > 0)
@@ -96,7 +96,7 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
     x.renderer.plain("  contact requests:");
     for (const key of pending) {
       const uid = key.slice("pending/".length);
-      x.renderer.plain(`    ${formatUid(uid)}  - /add ${uid} [alias] to accept`);
+      x.renderer.plain(`    ${formatUid(uid)}   /add ${uid} [alias] to accept`);
     }
   }
   x.renderer.plain("");
@@ -111,7 +111,7 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
  * contact is gone (removed or wiped). */
 export function returnToPreviousView(x: ExecutorInternals): void {
   if (x.previousView === null) {
-    x.renderer.event("info", "no previous screen to return to");
+    x.renderer.event("info", "There is no previous screen to return to.");
     return;
   }
   const current = currentViewRef(x);
@@ -121,7 +121,7 @@ export function returnToPreviousView(x: ExecutorInternals): void {
     x.active = null;
     x.shell.setPrompt("> ");
     refreshChatContext(x);
-    x.renderer.event("info", "returned to home");
+    x.renderer.event("info", "Returned to home.");
     x.enqueueRender(() => renderHome(x));
     return;
   }
@@ -131,7 +131,7 @@ export function returnToPreviousView(x: ExecutorInternals): void {
     x.previousView = null;
     x.shell.setPrompt("> ");
     refreshChatContext(x);
-    x.renderer.event("warning", "that conversation is no longer available - returned to home");
+    x.renderer.event("warning", "That conversation is no longer available, so you are back at home.");
     x.enqueueRender(() => renderHome(x));
     return;
   }
@@ -139,6 +139,6 @@ export function returnToPreviousView(x: ExecutorInternals): void {
   x.unread.delete(contact.uid);
   x.shell.setPrompt(`[${contact.alias}] > `);
   refreshChatContext(x);
-  x.renderer.event("info", `returned to the conversation with ${contact.alias}`);
+  x.renderer.event("info", `Returned to the conversation with ${contact.alias}.`);
   x.enqueueRender(() => renderActiveConversation(x));
 }

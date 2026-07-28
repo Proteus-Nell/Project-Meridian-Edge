@@ -248,7 +248,7 @@ describe("mutual disappearing timer", () => {
     bobReceiveKx(bob, sent[0] as Uint8Array);
 
     await run(alice, "/timer bob 1h");
-    expect(alice.output.text()).toContain("disappearing messages set to 1h for bob");
+    expect(alice.output.text()).toContain("Disappearing messages set to 1h for bob");
 
     // The timer control message reached Bob carrying tmr=3600.
     const control = bobReceive(bob, sent[1] as Uint8Array);
@@ -308,7 +308,7 @@ describe("mutual disappearing timer", () => {
     bobReceiveKx(bob, sent[0] as Uint8Array);
     await run(alice, "/timer bob 1d");
     await run(alice, "/timer bob off");
-    expect(alice.output.text()).toContain("disappearing messages turned off for bob");
+    expect(alice.output.text()).toContain("Disappearing messages turned off for bob");
     await run(alice, "permanent");
     const permanent = (await storedMessages(alice)).find((m) => m.text === "permanent");
     expect(permanent).toBeDefined();
@@ -329,7 +329,7 @@ describe("local purge", () => {
     expect((await storedMessages(alice)).length).toBeGreaterThanOrEqual(2);
 
     await run(alice, "/purge now bob");
-    expect(alice.output.text()).toContain("purged");
+    expect(alice.output.text()).toContain("Purged");
     expect(await storedMessages(alice)).toHaveLength(0);
   });
 
@@ -379,7 +379,7 @@ describe("/delete own messages, bilateral", () => {
     await run(alice, "/delete last");
     const texts = (await storedMessages(alice)).map((m) => m.text).sort();
     expect(texts).toEqual(["first", "from-bob", "second"]);
-    expect(alice.output.text()).toContain("deleted 1 of your message(s) with bob");
+    expect(alice.output.text()).toContain("Deleted 1 of your message(s) with bob");
   });
 
   it("/delete N removes your newest N outgoing messages, leaving incoming intact", async () => {
@@ -422,7 +422,7 @@ describe("/delete own messages, bilateral", () => {
     // ...with no "deleted N message(s)" confirmation printed (that is what /s
     // suppresses). The screen is still redrawn so your own deleted line actually
     // disappears from view rather than lingering in the append-only transcript.
-    expect(alice.output.text()).not.toContain("deleted 1 of your message");
+    expect(alice.output.text()).not.toContain("Deleted 1 of your message");
   });
 
   it("pushes a delete directive naming the same message id to the peer", async () => {
@@ -516,7 +516,7 @@ describe("focused chat view & /home", () => {
 
     await run(alice, "/contacts");
     const text = alice.output.text();
-    expect(text).toContain("contacts (2)");
+    expect(text).toContain("Contacts (2)");
     expect(text).toContain("bob");
     expect(text).toContain(formatUid(bob.uid));
     expect(text).toContain(formatUid(carol.uid));
@@ -526,7 +526,7 @@ describe("focused chat view & /home", () => {
   it("/contacts reports an empty list before any contact is added", async () => {
     const alice = await bootstrapAlice();
     await run(alice, "/contacts");
-    expect(alice.output.text()).toContain("no contacts yet");
+    expect(alice.output.text()).toContain("No contacts yet");
   });
 
   it("/return toggles between the last two screens and names where it went", async () => {
@@ -540,13 +540,13 @@ describe("focused chat view & /home", () => {
     let before = alice.output.lines.length;
     await run(alice, "/return"); // back to the bob conversation
     let out = alice.output.lines.slice(before).join("\n");
-    expect(out).toContain("returned to the conversation with bob");
+    expect(out).toContain("Returned to the conversation with bob");
     expect(out).toContain("conversation with bob"); // the focused view was rebuilt
 
     before = alice.output.lines.length;
     await run(alice, "/return"); // toggle forward to home again
     out = alice.output.lines.slice(before).join("\n");
-    expect(out).toContain("returned to home");
+    expect(out).toContain("Returned to home");
   });
 
   it("/return reports when there is no previous screen", async () => {

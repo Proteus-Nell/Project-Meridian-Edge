@@ -383,20 +383,28 @@ body.th-dock #divider {
   color: var(--muted-dim);
 }
 
-/* Event colors: success/warning/failure stay semantic (green/amber/red work on
-   every scheme); info follows the scheme accent. */
+/* Event colors come from the --event-* variables paint.ts sets from the active
+   scheme, so the strip is tinted by the same values as the transcript's
+   markers and `/settings color event <slot> <#rrggbb>` moves both at once. The
+   literals here are only the pre-scheme fallback for the first paint. */
 .status-event.status-success {
-  color: #3fb950;
+  color: var(--event-success, #3fb950);
 }
 .status-event.status-warning {
-  color: #d29922;
+  color: var(--event-warning, #d29922);
 }
 .status-event.status-failure {
-  color: #f85149;
+  color: var(--event-failure, #f85149);
 }
 .status-event.status-info {
-  color: var(--accent);
+  color: var(--event-info, #58a6ff);
 }
+
+/* Deliberately NOT configurable. Every other strip style tints text that the
+   transcript also carries in full, so a bad color choice costs legibility in
+   one place and not the other. A [SECURITY] event is the one case where the
+   strip must stay readable no matter what the scheme says, so its white-on-red
+   treatment is fixed. */
 .status-event.status-security {
   color: #ffffff;
   background: #da3633;

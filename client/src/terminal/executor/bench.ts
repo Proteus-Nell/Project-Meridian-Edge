@@ -14,7 +14,7 @@ export async function doBench(x: ExecutorInternals, suite: string | undefined): 
   }
   x.renderer.event(
     "info",
-    "running benchmarks (PQC vs classical primitives) - primitive latency takes a few seconds...",
+    "Running benchmarks, comparing PQC against classical primitives. Primitive latency takes a few seconds...",
   );
   const output = await bench.runBench(parsed, {
     onProgress: (message) => x.renderer.event("info", message),
@@ -28,5 +28,5 @@ export async function doBench(x: ExecutorInternals, suite: string | undefined): 
     console.log(output.markdown);
     console.log(output.json);
   }
-  x.renderer.event("success", "benchmark complete - JSON + Markdown logged to the browser console");
+  x.renderer.event("success", "Benchmark complete. The full JSON and Markdown went to the browser console.");
 }

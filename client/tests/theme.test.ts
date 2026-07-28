@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EVENT_COLOR_SLOTS,
   MAX_CUSTOM_SCHEMES,
   SCHEMES,
   isValidCustomSchemeName,
   normalizeHex,
+  resolveEventColors,
   resolveScheme,
   sanitizeCustomSchemes,
   schemeColorsOf,
@@ -200,5 +202,45 @@ describe("schemeExists", () => {
     expect(schemeExists("mine", customs)).toBe(true);
     expect(schemeExists("nope", customs)).toBe(false);
     expect(schemeExists("new", customs)).toBe(false);
+  });
+});
+
+describe("resolveEventColors", () => {
+  it("fills every slot, so the DOM status strip always has a real value", () => {
+    const resolved = resolveEventColors(null, undefined);
+    for (const slot of EVENT_COLOR_SLOTS) {
+      expect(resolved[slot], slot).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it("prefers the user's choice, then the base preset, then the built-in", () => {
+    // dark carries no ANSI map, so an unset slot falls all the way through.
+    expect(resolveEventColors(null, undefined).success).toBe("#3fb950");
+    // parchment darkens its ANSI for a light background; the strip follows.
+    expect(resolveEventColors(SCHEMES.parchment.ansi, undefined).success).toBe(
+      SCHEMES.parchment.ansi?.green,
+    );
+    // and an explicit choice wins over both.
+    expect(resolveEventColors(SCHEMES.parchment.ansi, { success: "#ff00ff" }).success).toBe(
+      "#ff00ff",
+    );
+  });
+
+  it("is exposed on every resolved scheme, preset or custom", () => {
+    for (const name of ["dark", "parchment", "olive", "nonexistent"]) {
+      const resolved = resolveScheme(name, []);
+      for (const slot of EVENT_COLOR_SLOTS) {
+        expect(resolved.events[slot], `${name}/${slot}`).toMatch(/^#[0-9a-f]{6}$/);
+      }
+    }
+    const mine: CustomScheme = { ...custom("mine"), events: { warning: "#123456" } };
+    expect(resolveScheme("mine", [mine]).events.warning).toBe("#123456");
+  });
+
+  it("leaves the terminal ANSI map untouched when no marker was set", () => {
+    // The strip needs concrete values; the transcript is happy with xterm's own
+    // palette, so resolving strip colors must not start overriding ANSI.
+    expect(resolveScheme("dark", []).ansi).toBeNull();
+    expect(resolveScheme("olive", []).ansi).toBeNull();
   });
 });

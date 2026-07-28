@@ -162,7 +162,7 @@ function verifyBundleOrWarn(x: ExecutorInternals, target: Contact, bundle: Bundl
   }
   x.renderer.event(
     "security",
-    `prekey bundle signature verification FAILED for ${target.alias} - the server may be tampering. send aborted.`,
+    `Prekey bundle signature verification FAILED for ${target.alias}. The server may be tampering, so the send was aborted.`,
   );
   return false;
 }
@@ -275,7 +275,7 @@ export function deliverIncoming(
     return;
   }
   x.unread.set(uid, (x.unread.get(uid) ?? 0) + 1);
-  x.renderer.status("info", `new message from ${label} - /chat ${label} to read`);
+  x.renderer.status("info", `New message from ${label}. Run /chat ${label} to read it.`);
   if (x.active === null) {
     x.enqueueRender(() => renderHome(x));
   }
@@ -328,7 +328,7 @@ export async function processEnvelope(
     if (result.reason === "bad-signature") {
       x.renderer.event(
         "security",
-        "received a message with an INVALID identity signature - discarded",
+        "A message arrived with an INVALID identity signature, so it was discarded.",
       );
     } else if (result.reason === "unknown-spk" || result.reason === "unknown-opk") {
       // A real contact attempt against prekeys this device no longer holds
@@ -380,7 +380,7 @@ export async function processEnvelope(
       if (!(await handleKeyChange(x, contact, senderIkB64))) {
         x.renderer.event(
           "security",
-          `message claiming to be ${contact.alias} used the new (unconfirmed) key - DISCARDED`,
+          `A message claiming to be ${contact.alias} used the new, unconfirmed key, so it was DISCARDED.`,
         );
         return "ack";
       }
@@ -407,7 +407,7 @@ export async function processEnvelope(
     if (senderWire.ik_pub !== senderIkB64) {
       x.renderer.event(
         "security",
-        "sender identity does not match its claimed UID - message DISCARDED",
+        "The sender's identity does not match its claimed UID, so the message was DISCARDED.",
       );
       return "ack";
     }
@@ -429,7 +429,7 @@ export async function processEnvelope(
   await refreshEmblemState(x); // an unread request now awaits /add
   x.renderer.event(
     "warning",
-    `new contact request from ${formatUid(senderUid)} - /add ${senderUid} [alias] to accept`,
+    `New contact request from ${formatUid(senderUid)}. Run /add ${senderUid} [alias] to accept.`,
   );
   return "ack";
 }

@@ -126,7 +126,7 @@ describe("/duress set", () => {
     const text = h.output.text();
     expect(text).toContain("[SECURITY]");
     expect(text).toContain("NO warning and NO confirmation");
-    expect(text).toContain("not armed - nothing was changed");
+    expect(text).toContain("not armed. Nothing was changed");
     // Declining leaves the passphrase prompts untouched and nothing sealed.
     expect(h.shell.secrets).toHaveLength(0);
     expect(await h.store.tryDuress(DURESS)).toBeNull();
@@ -136,7 +136,7 @@ describe("/duress set", () => {
     const h = setup();
     await register(h);
     await arm(h);
-    expect(h.output.text()).toContain("duress passphrase armed");
+    expect(h.output.text()).toContain("Duress passphrase armed");
 
     await run(h, "/duress status");
     expect(h.output.text()).toContain("ARMED");
@@ -250,9 +250,12 @@ describe("a duress passphrase at the /login prompt", () => {
     typo.shell.secrets.push("just a typo 8!");
     await run(typo, "/login");
 
-    // Same transcript, and no screen clear to give it away.
-    expect(armed.output.text()).toBe(typo.output.text());
-    expect(armed.output.text()).toContain("[E203] unlock failed");
+    // Same transcript, and no screen clear to give it away. Timestamps are
+    // masked: the two runs are seconds apart on the wall clock, and the clock
+    // is not what the property is about.
+    const withoutClock = (text: string): string => text.replace(/\d\d:\d\d:\d\d/g, "HH:MM:SS");
+    expect(withoutClock(armed.output.text())).toBe(withoutClock(typo.output.text()));
+    expect(armed.output.text()).toContain("[E203] Unlock failed");
     expect(armed.chrome.clears).toBe(0);
   });
 
@@ -270,7 +273,7 @@ describe("a duress passphrase at the /login prompt", () => {
     // The irreversible part does not depend on the network, and the failure is
     // never reported.
     expect(await h.store.exists()).toBe(false);
-    expect(h.output.text()).toContain("[E203] unlock failed");
+    expect(h.output.text()).toContain("[E203] Unlock failed");
     expect(h.output.text()).not.toContain("[E302]");
     expect(h.output.text()).not.toContain("[E599]");
   });
@@ -321,7 +324,7 @@ describe("/rotate passphrase", () => {
     const next = "a different phrase 7?";
     h.shell.secrets.push(REAL, next, next);
     await run(h, "/rotate passphrase");
-    expect(h.output.text()).toContain("passphrase rotated");
+    expect(h.output.text()).toContain("Passphrase rotated");
 
     expect(await h.store.tryDuress(DURESS)).not.toBeNull();
     h.executor.lockLocal();

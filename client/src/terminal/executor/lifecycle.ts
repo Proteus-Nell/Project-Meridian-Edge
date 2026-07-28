@@ -33,8 +33,8 @@ export async function applyIncomingTimer(
   x.renderer.event(
     "info",
     timerSeconds === null
-      ? `${label} turned off disappearing messages`
-      : `${label} set disappearing messages to ${formatDuration(timerSeconds)}`,
+      ? `${label} turned off disappearing messages.`
+      : `${label} set disappearing messages to ${formatDuration(timerSeconds)}.`,
   );
 }
 
@@ -93,13 +93,13 @@ export async function doTimer(
   x.renderer.event(
     "info",
     seconds === null
-      ? `disappearing messages turned off for ${contact.alias} (applies to both sides)`
-      : `disappearing messages set to ${formatDuration(seconds)} for ${contact.alias} - applies to both sides, countdown starts on read`,
+      ? `Disappearing messages turned off for ${contact.alias}. This applies to both sides.`
+      : `Disappearing messages set to ${formatDuration(seconds)} for ${contact.alias}. It applies to both sides, and the countdown starts on read.`,
   );
   if (updated.keyChangeBlocked) {
     x.renderer.event(
       "warning",
-      `sending to ${contact.alias} is blocked by an unacknowledged key change - the peer will get this timer once you /ack and resume`,
+      `Sending to ${contact.alias} is blocked by an unacknowledged key change. They will get this timer once you /ack and resume.`,
     );
     return;
   }
@@ -117,7 +117,7 @@ export async function doTimer(
 /** `/purge set <duration|off>`: local retention cap, never transmitted. */
 export async function doPurgeSet(x: ExecutorInternals, duration: Duration): Promise<void> {
   if (!x.store.isUnlocked()) {
-    x.renderer.event("warning", "locked or not registered - /login or /register");
+    x.renderer.event("warning", "Locked or not registered. Please run /login or /register.");
     return;
   }
   const seconds = durationToSeconds(duration);
@@ -126,20 +126,20 @@ export async function doPurgeSet(x: ExecutorInternals, duration: Duration): Prom
   x.renderer.event(
     "success",
     seconds === null
-      ? "local retention cap cleared - at-rest messages kept until the mutual timer or /purge now"
-      : `local retention cap set to ${formatDuration(seconds)} - local only, never sent, applied to every conversation`,
+      ? "Local retention cap cleared. Stored messages are kept until the mutual timer or /purge now."
+      : `Local retention cap set to ${formatDuration(seconds)}. It is local only, never sent, and applies to every conversation.`,
   );
 }
 
 /** `/purge now [alias]`: immediate local deletion of stored messages. */
 export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined): Promise<void> {
   if (!x.store.isUnlocked()) {
-    x.renderer.event("warning", "locked or not registered - /login or /register");
+    x.renderer.event("warning", "Locked or not registered. Please run /login or /register.");
     return;
   }
   if (alias === undefined) {
     const count = await deleteMessages(x, "msg/");
-    x.renderer.event("success", `purged ${count} stored message(s) across all conversations`);
+    x.renderer.event("success", `Purged ${count} stored message(s) across all conversations.`);
     return;
   }
   const contact = resolveContact(x, alias);
@@ -148,7 +148,7 @@ export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined
     return;
   }
   const count = await deleteMessages(x, `msg/${contact.uid}/`);
-  x.renderer.event("success", `purged ${count} stored message(s) with ${contact.alias}`);
+  x.renderer.event("success", `Purged ${count} stored message(s) with ${contact.alias}.`);
 }
 
 /** `/delete <last|N|all|purge> [/s]`: delete your own (outgoing) messages on
@@ -170,7 +170,7 @@ export async function doDelete(
     }
   };
   if (!x.store.isUnlocked()) {
-    report("warning", "locked or not registered - /login or /register");
+    report("warning", "Locked or not registered. Please run /login or /register.");
     return;
   }
 
@@ -181,7 +181,7 @@ export async function doDelete(
     scopeLabel = "across all conversations";
   } else {
     if (x.active === null) {
-      report("warning", "no active conversation - use /chat <alias|uid> first");
+      report("warning", "No active conversation. Use /chat <alias|uid> first.");
       return;
     }
     const contact = findContactByUid(x, x.active.uid) ?? x.active;
@@ -194,7 +194,7 @@ export async function doDelete(
   }
 
   if (victims.length === 0) {
-    report("info", `no messages of yours to delete ${scopeLabel}`);
+    report("info", `There are no messages of yours to delete ${scopeLabel}.`);
     return;
   }
 
@@ -229,9 +229,9 @@ export async function doDelete(
 
   const tail =
     unreachable === 0
-      ? "cooperative, not forensic erasure"
-      : `${unreachable} could not be signalled to the peer (no live session) - removed locally only; cooperative, not forensic erasure`;
-  report("success", `deleted ${victims.length} of your message(s) ${scopeLabel} - ${tail}`);
+      ? "Deletion is cooperative, not forensic erasure."
+      : `${unreachable} could not be signalled to the peer, because there is no live session, so those were removed locally only. Deletion is cooperative, not forensic erasure.`;
+  report("success", `Deleted ${victims.length} of your message(s) ${scopeLabel}. ${tail}`);
 }
 
 /** Gather your outgoing (`dir: "out"`) messages under `prefix`, tagged with
@@ -304,7 +304,7 @@ export async function applyIncomingDeletion(
   if (!silent && removed > 0) {
     x.renderer.event(
       "info",
-      `${label} deleted ${removed} message(s) they had sent - removed from your history`,
+      `${label} deleted ${removed} message(s) they had sent, so those are gone from your history too.`,
     );
   }
 }

@@ -79,7 +79,7 @@ export class Renderer {
   }
 
   /** A user-facing failure: the catalogued E-code replaces the glyph
-   * (`[E301] rate limit reached - ...`), so every error on screen is
+   * (`[E301] Rate limit reached. ...`), so every error on screen is
    * reportable and looked up in docs/MESSAGES.md. Text comes from the
    * ERRORS catalog; args are the builder's parameters. */
   error<C extends ErrorCode>(code: C, ...args: Parameters<(typeof ERRORS)[C]>): void {

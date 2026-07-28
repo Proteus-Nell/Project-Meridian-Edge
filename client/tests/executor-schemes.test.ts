@@ -51,7 +51,7 @@ describe("presets are immutable", () => {
     expect(prefs.customSchemes[0]?.base).toBe("dark");
     // The untouched slots come from the preset it forked.
     expect(prefs.customSchemes[0]?.colors.accent).toBe(SCHEMES.dark.colors.accent);
-    expect(output.text()).toContain("the 'dark' preset is unchanged");
+    expect(output.text()).toContain("The 'dark' preset is unchanged");
   });
 
   it("gives the pristine preset back when you switch to it", async () => {

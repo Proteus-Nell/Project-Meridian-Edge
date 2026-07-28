@@ -65,7 +65,7 @@ describe("Renderer", () => {
     renderer.error("E301");
     const line = sink.lines[0] ?? "";
     expect(line).toContain("[E301]");
-    expect(line).toContain("rate limit reached - try again later");
+    expect(line).toContain("Rate limit reached. Please wait a few minutes and try again.");
     expect(line).not.toContain("✗");
   });
 
@@ -75,7 +75,7 @@ describe("Renderer", () => {
     renderer.error("E501", "mallory");
     const line = sink.lines[0] ?? "";
     expect(line).toContain("[E501]");
-    expect(line).toContain("unknown contact: mallory - /add <uid> [alias] first");
+    expect(line).toContain("There is no contact called 'mallory'");
   });
 });
 
@@ -106,7 +106,7 @@ describe("Renderer status strip", () => {
     const status = new CaptureStatus();
     const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 0, 0, 0), status);
     renderer.error("E203");
-    expect(status.last).toEqual({ level: "failure", text: "[E203] unlock failed" });
+    expect(status.last).toEqual({ level: "failure", text: "[E203] Unlock failed. Please check your passphrase and try again." });
   });
 
   it("status() updates the strip only, with no transcript line", () => {
@@ -200,7 +200,7 @@ describe("event colour never reaches the message text", () => {
     const sink = new CaptureSink();
     new Renderer(sink).error("E301");
     const line = sink.lines[0] ?? "";
-    expect(uncoloredTail(line)).toContain("rate limit reached");
+    expect(uncoloredTail(line)).toContain("Rate limit reached");
     expect(uncoloredTail(line).match(SGR)).toBeNull();
   });
 

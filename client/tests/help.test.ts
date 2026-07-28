@@ -125,10 +125,16 @@ describe("renderCommandHelp", () => {
       const lines = renderCommandHelp(word, 80);
       const text = lines.join("\n");
       expect(text, `/${word}`).toContain(`usage:`);
-      // The explanation is the point: several sentences of prose beyond the
-      // usage line, so a reader learns what the command is for.
-      const prose = lines.filter((l) => !l.includes("usage:") && l.trim().length > 0);
-      expect(prose.join(" ").length, `/${word} explanation too thin`).toBeGreaterThan(120);
+      // The explanation is the point: real prose above the usage block, so a
+      // reader learns what the command is for. Bounded at both ends, because
+      // an explanation that runs on is as unhelpful in a terminal as one that
+      // says nothing. Measured up to the usage line, since the forms listed
+      // under it are not prose.
+      const usageAt = lines.findIndex((l) => l.includes("usage:"));
+      const prose = lines.slice(1, usageAt).filter((l) => l.trim().length > 0);
+      const length = prose.join(" ").length;
+      expect(length, `/${word} explanation too thin`).toBeGreaterThan(80);
+      expect(length, `/${word} explanation too long for a terminal`).toBeLessThan(400);
     }
   });
 

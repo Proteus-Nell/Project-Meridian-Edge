@@ -39,8 +39,8 @@ describe("/rotate passphrase same-passphrase guard", () => {
     const text = output.lines.join("\n");
     expect(text).toContain("identical to the current one");
     expect(shell.lineQueries).toEqual(["rotate anyway? (y/N): "]);
-    expect(text).toContain("rotation cancelled");
-    expect(text).not.toContain("passphrase rotated");
+    expect(text).toContain("Rotation cancelled");
+    expect(text).not.toContain("Passphrase rotated");
     store.lock();
     expect(await store.unlock("original passphrase 1")).toBe(true);
   });
@@ -50,12 +50,12 @@ describe("/rotate passphrase same-passphrase guard", () => {
     shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = [""];
     await rotate(executor);
-    expect(output.lines.join("\n")).toContain("rotation cancelled");
+    expect(output.lines.join("\n")).toContain("Rotation cancelled");
 
     shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = [null]; // Ctrl+C
     await rotate(executor);
-    expect(output.lines.join("\n")).toContain("rotation cancelled");
+    expect(output.lines.join("\n")).toContain("Rotation cancelled");
   });
 
   it("proceeds when the user explicitly confirms", async () => {
@@ -63,7 +63,7 @@ describe("/rotate passphrase same-passphrase guard", () => {
     shell.secrets = ["original passphrase 1", "original passphrase 1", "original passphrase 1"];
     shell.lines = ["y"];
     await rotate(executor);
-    expect(output.lines.join("\n")).toContain("passphrase rotated");
+    expect(output.lines.join("\n")).toContain("Passphrase rotated");
   });
 
   it("does not prompt when the new passphrase differs", async () => {
@@ -72,7 +72,7 @@ describe("/rotate passphrase same-passphrase guard", () => {
     await rotate(executor);
 
     expect(shell.lineQueries).toEqual([]);
-    expect(output.lines.join("\n")).toContain("passphrase rotated");
+    expect(output.lines.join("\n")).toContain("Passphrase rotated");
     store.lock();
     expect(await store.unlock("original passphrase 1")).toBe(false);
     expect(await store.unlock("different passphrase 2")).toBe(true);
@@ -82,7 +82,7 @@ describe("/rotate passphrase same-passphrase guard", () => {
     const { executor, shell, output, store } = await setup();
     shell.secrets = ["wrong guess!", "different passphrase 2", "different passphrase 2"];
     await rotate(executor);
-    expect(output.lines.join("\n")).toContain("rotation failed");
+    expect(output.lines.join("\n")).toContain("Rotation failed");
     store.lock();
     expect(await store.unlock("original passphrase 1")).toBe(true);
   });
@@ -92,7 +92,7 @@ describe("/rotate passphrase same-passphrase guard", () => {
     shell.secrets = ["original passphrase 1", "short"];
     await rotate(executor);
     expect(output.lines.join("\n")).toContain("at least 12 characters");
-    expect(output.lines.join("\n")).not.toContain("passphrase rotated");
+    expect(output.lines.join("\n")).not.toContain("Passphrase rotated");
     store.lock();
     expect(await store.unlock("original passphrase 1")).toBe(true);
   });
@@ -101,8 +101,8 @@ describe("/rotate passphrase same-passphrase guard", () => {
     const { executor, shell, output, store } = await setup();
     shell.secrets = ["original passphrase 1", "brand new passphrase 3", "different confirmation"];
     await rotate(executor);
-    expect(output.lines.join("\n")).toContain("do not match");
-    expect(output.lines.join("\n")).not.toContain("passphrase rotated");
+    expect(output.lines.join("\n")).toContain("did not match");
+    expect(output.lines.join("\n")).not.toContain("Passphrase rotated");
     store.lock();
     expect(await store.unlock("original passphrase 1")).toBe(true);
   });

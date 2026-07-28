@@ -18,7 +18,7 @@
 
 import { resolveScheme } from "./theme";
 import type { EmblemName, ResolvedScheme } from "./theme";
-import { EMBLEM_NAMES } from "./theme";
+import { EMBLEM_NAMES, EVENT_COLOR_SLOTS } from "./theme";
 import { KeyStore } from "../crypto/store";
 import type { ThemePrefs } from "../crypto/store";
 
@@ -32,6 +32,13 @@ export function applySchemeVars(scheme: ResolvedScheme): void {
   root.setProperty("--panel", scheme.panel);
   root.setProperty("--text", scheme.text);
   root.setProperty("--muted", scheme.muted);
+  // The notification-marker colors, so the footer status strip is tinted from
+  // the same values as the transcript's [✓] [!] [*] [E###] markers. One
+  // /settings color event setting, both surfaces. Every value has already been
+  // through normalizeHex, so nothing but #rrggbb reaches a CSS declaration.
+  for (const slot of EVENT_COLOR_SLOTS) {
+    root.setProperty(`--event-${slot}`, scheme.events[slot]);
+  }
 }
 
 /** Toggle the atmosphere-layer body classes (/settings theme). */

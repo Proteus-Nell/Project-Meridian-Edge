@@ -333,6 +333,6 @@ describe("continued messaging over the ratchet", () => {
 
     const notice = chrome.discarded.find((d) => d.code === "E505");
     expect(notice, "a removed contact's message should raise E505").toBeDefined();
-    expect(notice?.text).toContain("removed contact");
+    expect(notice?.text).toContain("removing a contact");
   });
 });

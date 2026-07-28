@@ -133,6 +133,40 @@ const EVENT_ANSI_KEYS: Record<EventColorSlot, readonly (keyof AnsiOverrides)[]> 
   peer: ["brightCyan"],
 };
 
+/** Concrete fallbacks for the footer status strip, which is DOM rather than
+ * terminal cells and so cannot inherit "whatever xterm's default palette says".
+ * These are the colors the strip has always used, kept as the defaults so a
+ * scheme that never touches its markers looks exactly as it did. */
+const EVENT_FALLBACKS: Record<EventColorSlot, string> = {
+  success: "#3fb950",
+  warning: "#d29922",
+  info: "#58a6ff",
+  failure: "#f85149",
+  peer: "#56d4dd",
+};
+
+/** The five marker colors, fully resolved: the user's choice if they set one,
+ * else whatever the base preset's ANSI map says (parchment darkens these for a
+ * light background), else the strip's built-in default.
+ *
+ * Always complete, unlike `ansi`, which stays null when nothing overrides the
+ * terminal's own palette. The strip needs a real value for every slot; the
+ * terminal does not. */
+export function resolveEventColors(
+  base: AnsiOverrides | null,
+  events: EventColors | undefined,
+): Record<EventColorSlot, string> {
+  const out = {} as Record<EventColorSlot, string>;
+  for (const slot of EVENT_COLOR_SLOTS) {
+    const primary = EVENT_ANSI_KEYS[slot][0];
+    out[slot] =
+      events?.[slot] ??
+      (primary !== undefined ? base?.[primary] : undefined) ??
+      EVENT_FALLBACKS[slot];
+  }
+  return out;
+}
+
 /** A user-defined scheme. `base` is the preset it was derived from: it supplies
  * the ANSI overrides (so a custom light scheme keeps legible terminal output)
  * and is what /settings color reset restores the slots to. */
@@ -213,25 +247,36 @@ export function normalizeHex(raw: string): string | null {
 
 export interface ResolvedScheme extends SchemeColors {
   readonly ansi: AnsiOverrides | null;
+  /** The five notification-marker colors, every slot filled. Drives both the
+   * terminal markers (through `ansi`) and the footer status strip (through the
+   * --event-* CSS variables), so one setting moves both. */
+  readonly events: Record<EventColorSlot, string>;
 }
 
 /** The five slots of whichever scheme `name` refers to, ready to paint. Total:
  * an unknown name falls back to the default preset rather than throwing, so a
  * prefs record naming a scheme that has since been deleted still renders. */
 export function resolveScheme(name: string, customs: readonly CustomScheme[]): ResolvedScheme {
-  if (isSchemeName(name)) {
-    const preset = SCHEMES[name];
-    return { ...preset.colors, ansi: preset.ansi };
-  }
-  const custom = findCustomScheme(customs, name);
+  const custom = isSchemeName(name) ? null : findCustomScheme(customs, name);
   if (custom === null) {
-    const fallback = SCHEMES[DEFAULT_SCHEME];
-    return { ...fallback.colors, ansi: fallback.ansi };
+    // Either a preset, or a name that no longer resolves (deleted, or dropped
+    // by validation), which falls back to the default so the page still paints.
+    const preset = SCHEMES[isSchemeName(name) ? name : DEFAULT_SCHEME];
+    return {
+      ...preset.colors,
+      ansi: preset.ansi,
+      events: resolveEventColors(preset.ansi, undefined),
+    };
   }
   // ANSI comes from the base preset: a custom scheme sets the five slots, and
   // inheriting the base's terminal colors is what keeps a light fork readable.
   // Any marker colors the user set are layered on top of that.
-  return { ...custom.colors, ansi: mergeEventColors(SCHEMES[custom.base].ansi, custom.events) };
+  const baseAnsi = SCHEMES[custom.base].ansi;
+  return {
+    ...custom.colors,
+    ansi: mergeEventColors(baseAnsi, custom.events),
+    events: resolveEventColors(baseAnsi, custom.events),
+  };
 }
 
 /** Fold a scheme's event-marker choices into an ANSI override map. Returns the

@@ -85,8 +85,8 @@ describe("/remove single", () => {
     expect(await h.store.getJson("pending/" + UID_A)).toBeNull();
     // History is retained unless purge is asked for.
     expect(await h.store.listKeys(`msg/${UID_A}/`)).toHaveLength(2);
-    expect(h.output.text()).toContain("removed alice");
-    expect(h.output.text()).toContain("message history kept");
+    expect(h.output.text()).toContain("Removed alice");
+    expect(h.output.text()).toContain("Message history was kept");
     // Persisted: the stored contacts array no longer holds alice.
     const stored = await h.store.getJson<{ alias: string }[]>("contacts");
     expect(stored?.map((c) => c.alias)).toEqual(["bob"]);
@@ -142,7 +142,7 @@ describe("/remove all", () => {
     expect(await h.store.getJson("session/" + UID_B)).toBeNull();
     // Default keeps history.
     expect(await h.store.listKeys(`msg/${UID_A}/`)).toHaveLength(2);
-    expect(h.output.text()).toContain("removed all 2 contact(s)");
+    expect(h.output.text()).toContain("Removed all 2 contact(s)");
   });
 
   it("wipes history too with 'all purge'", async () => {
@@ -157,7 +157,7 @@ describe("/remove all", () => {
     await run(h.executor, "/remove all");
     expect(h.executor.contacts.size).toBe(2);
     expect(await h.store.getJson("session/" + UID_A)).not.toBeNull();
-    expect(h.output.text()).toContain("removal cancelled");
+    expect(h.output.text()).toContain("Removal cancelled");
   });
 });
 
@@ -175,7 +175,7 @@ describe("/rename", () => {
     expect(h.executor.contacts.get("ali")?.uid).toBe(UID_A);
     // History is keyed by UID, so it is untouched by the rename.
     expect(await h.store.listKeys(`msg/${UID_A}/`)).toHaveLength(2);
-    expect(h.output.text()).toContain("renamed alice to ali");
+    expect(h.output.text()).toContain("Renamed alice to ali");
     const stored = await h.store.getJson<{ alias: string }[]>("contacts");
     expect(stored?.map((c) => c.alias).sort()).toEqual(["ali", "bob"]);
   });

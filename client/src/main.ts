@@ -185,7 +185,7 @@ void displayStyleReady.then(() => executor.init());
 for (const row of bannerLines()) {
   transcriptTerm.writeln(row);
 }
-chrome.status("info", "Ready - type /register to get started, or /help to see every command.");
+chrome.status("info", "Ready. Type /register to get started, or /help to see every command.");
 
 shell.attach();
 

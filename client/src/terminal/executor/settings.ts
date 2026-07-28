@@ -48,7 +48,7 @@ export async function doSettingsRotation(
   await x.store.putJson("settings/rotation", next);
   x.renderer.event(
     "success",
-    next.enabled ? `weekly rotation prompt on (${next.day})` : "weekly rotation prompt off",
+    next.enabled ? `Weekly rotation prompt is on, for ${next.day}.` : "Weekly rotation prompt is off.",
   );
 }
 
@@ -63,8 +63,8 @@ export async function doSettingsMask(
   x.renderer.event(
     "success",
     mask === "hidden"
-      ? "passphrase entry hidden - no characters echoed (sudo-style)"
-      : "passphrase entry masked with asterisks",
+      ? "Passphrase entry hidden. No characters are echoed, sudo-style."
+      : "Passphrase entry is masked with asterisks.",
   );
 }
 
@@ -82,12 +82,12 @@ export async function doSettingsTrust(
   if (x.autoTrust) {
     x.renderer.event(
       "success",
-      "trust-on-first-use ON - new contacts are auto-verified, and a key change is auto-accepted with a warning (no /verify, /verified, or /ack needed). Convenient, but it trusts the server not to swap keys; use /settings trust manual for out-of-band verification.",
+      "Trust-on-first-use is ON. New contacts are auto-verified, and a key change is auto-accepted with a warning, so no /verify, /verified or /ack is needed. It is convenient, but it trusts the server not to swap keys. Use /settings trust manual for out-of-band verification.",
     );
   } else {
     x.renderer.event(
       "success",
-      "manual verification ON - compare safety numbers with /verify + /verified, and a key change blocks until /ack (strongest MITM protection).",
+      "Manual verification is ON. Compare safety numbers with /verify and /verified, and a key change blocks until /ack. This is the strongest protection against a machine-in-the-middle.",
     );
   }
 }
@@ -110,8 +110,8 @@ export async function doSettingsTheme(
   x.renderer.event(
     "success",
     element === "all"
-      ? `all theme layers turned ${enabled ? "on" : "off"}`
-      : `theme layer '${element}' turned ${enabled ? "on" : "off"}`,
+      ? `All theme layers turned ${enabled ? "on" : "off"}.`
+      : `Theme layer '${element}' turned ${enabled ? "on" : "off"}.`,
   );
 }
 
@@ -133,8 +133,8 @@ export async function doSettingsScheme(x: ExecutorInternals, scheme: string): Pr
   x.renderer.event(
     "success",
     isSchemeName(scheme)
-      ? `color scheme set to the '${scheme}' preset`
-      : `color scheme set to '${scheme}' (custom)`,
+      ? `Color scheme set to the '${scheme}' preset.`
+      : `Color scheme set to your '${scheme}' scheme.`,
   );
 }
 
@@ -168,7 +168,7 @@ export async function doSettingsSchemeNew(x: ExecutorInternals, name: string): P
   });
   x.renderer.event(
     "success",
-    `created '${name}' from ${prefs.scheme} and switched to it - /settings color <slot> <#rrggbb> to edit it`,
+    `Created '${name}' from ${prefs.scheme} and switched to it. Use /settings color <slot> <#rrggbb> to edit it.`,
   );
 }
 
@@ -193,8 +193,8 @@ export async function doSettingsSchemeDelete(x: ExecutorInternals, name: string)
   x.renderer.event(
     "success",
     prefs.scheme === name
-      ? `deleted '${name}' - back to the '${target.base}' preset`
-      : `deleted '${name}'`,
+      ? `Deleted '${name}'. Back to the '${target.base}' preset.`
+      : `Deleted '${name}'.`,
   );
 }
 
@@ -223,7 +223,7 @@ export async function doSettingsEmblem(x: ExecutorInternals, emblem: EmblemName)
   const prefs = await x.store.getDisplayPrefs();
   await x.store.setDisplayPrefs({ ...prefs, emblemGlyph: emblem });
   x.chrome.applyEmblem(emblem);
-  x.renderer.event("success", `emblem set to '${emblem}'`);
+  x.renderer.event("success", `Emblem set to '${emblem}'.`);
 }
 
 /** `/settings color <slot> <#rrggbb>`: the terminal-native color picker.
@@ -283,7 +283,7 @@ async function editActiveScheme(
       ...prefs,
       customSchemes: prefs.customSchemes.map((s) => (s.name === active.name ? edited : s)),
     });
-    x.renderer.event("success", `${summary} on '${active.name}'`);
+    x.renderer.event("success", `${summary} on '${active.name}'.`);
     return;
   }
 
@@ -305,7 +305,7 @@ async function editActiveScheme(
   });
   x.renderer.event(
     "success",
-    `${summary} on '${name}' - the '${base}' preset is unchanged, /settings scheme ${base} goes back to it`,
+    `${summary} on '${name}'. The '${base}' preset is unchanged, and /settings scheme ${base} goes back to it.`,
   );
 }
 
@@ -318,7 +318,7 @@ export async function doSettingsColorReset(x: ExecutorInternals): Promise<void> 
   if (active === null) {
     x.renderer.event(
       "info",
-      `'${prefs.scheme}' is a preset and carries no custom colors - nothing to reset`,
+      `'${prefs.scheme}' is a preset and carries no custom colors, so there is nothing to reset.`,
     );
     return;
   }
@@ -331,6 +331,6 @@ export async function doSettingsColorReset(x: ExecutorInternals): Promise<void> 
   });
   x.renderer.event(
     "success",
-    `'${active.name}' reset to the '${active.base}' preset colors (/settings scheme ${active.base} switches to the preset itself)`,
+    `'${active.name}' reset to the '${active.base}' preset colors. Use /settings scheme ${active.base} to switch to the preset itself.`,
   );
 }

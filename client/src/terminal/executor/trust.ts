@@ -46,7 +46,7 @@ export async function doVerify(x: ExecutorInternals, alias: string): Promise<voi
   if (!verifyBundle(bundle)) {
     x.renderer.event(
       "security",
-      `prekey bundle signature verification FAILED for ${contact.alias} - the server may be tampering.`,
+      `Prekey bundle signature verification FAILED for ${contact.alias}. The server may be tampering.`,
     );
     return;
   }
@@ -92,7 +92,7 @@ export async function doVerified(x: ExecutorInternals, alias: string): Promise<v
   refreshChatContext(x);
   x.renderer.event(
     "success",
-    `${contact.alias} marked verified - safety number confirmed out-of-band`,
+    `${contact.alias} marked verified. The safety number was confirmed out-of-band.`,
   );
 }
 
@@ -112,7 +112,7 @@ export async function doAck(x: ExecutorInternals, alias: string): Promise<void> 
   await refreshEmblemState(x);
   x.renderer.event(
     "success",
-    `acknowledged - ${contact.alias} remains UNVERIFIED; /verify then /verified to confirm the new key before sending`,
+    `Acknowledged. ${contact.alias} remains UNVERIFIED, so run /verify then /verified to confirm the new key before sending.`,
   );
 }
 
@@ -143,8 +143,8 @@ export async function handleKeyChange(
   x.renderer.event(
     "security",
     blocked
-      ? `IDENTITY KEY CHANGED for ${contact.alias} - this conversation is now blocked and marked UNVERIFIED. /ack ${contact.alias} to acknowledge, then /verify + /verified to confirm the new key before sending.`
-      : `IDENTITY KEY CHANGED for ${contact.alias} - the new key was auto-accepted (trust-on-first-use) and the session reset; ${contact.alias} is now UNVERIFIED. If you did not expect this, treat it as a possible server MITM: /verify ${contact.alias} to compare the new safety number, or /settings trust manual to block on future changes.`,
+      ? `IDENTITY KEY CHANGED for ${contact.alias}. This conversation is now blocked and marked UNVERIFIED. Run /ack ${contact.alias} to acknowledge, then /verify and /verified to confirm the new key before sending.`
+      : `IDENTITY KEY CHANGED for ${contact.alias}. The new key was auto-accepted under trust-on-first-use and the session was reset, so ${contact.alias} is now UNVERIFIED. If you did not expect this, treat it as a possible server MITM: run /verify ${contact.alias} to compare the new safety number, or /settings trust manual to block on future changes.`,
   );
   return !blocked;
 }

@@ -146,7 +146,7 @@ describe("/verify and /verified", () => {
 
     executor.handle(parseLine("/verified bob"));
     await executor.idle();
-    expect(output.text()).toContain("no known identity key");
+    expect(output.text()).toContain("No identity key is known");
   });
 
   it("/chat shows verified once confirmed, UNVERIFIED otherwise", async () => {

@@ -430,7 +430,7 @@ export class Chrome implements SuggestionNav {
   /** /clr and Ctrl+L: wipe the transcript, its tick decorations, the strip, and
    * the discarded-notice panel (the only way to dismiss it, so a screen clear
    * genuinely resets what is on screen).
-   * `announce` (default true) posts a "screen cleared" status; the conversation
+   * `announce` (default true) posts a "Screen cleared." status; the conversation
    * redraw after a /delete passes false so the wipe is silent before it reprints. */
   clearScreen(announce = true): void {
     for (const spec of this.ticks) {
@@ -448,7 +448,7 @@ export class Chrome implements SuggestionNav {
     this.discardedCountEl.textContent = "0";
     this.sidePanelEl.classList.remove("open");
     if (announce) {
-      this.status("info", "screen cleared");
+      this.status("info", "Screen cleared.");
     }
   }
 

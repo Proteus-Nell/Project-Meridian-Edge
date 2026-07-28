@@ -121,7 +121,7 @@ describe("/logout all", () => {
     vi.mocked(api.logoutAll).mockResolvedValue({ revoked: 3 });
     executor.handle(parseLine("/logout all"));
     await executor.idle();
-    expect(output.text()).toContain("signed out 3 other sessions - this device stays logged in");
+    expect(output.text()).toContain("Signed out 3 other sessions. This device stays logged in");
     // Plain logout was not used: the current session survives.
     expect(api.logout).not.toHaveBeenCalled();
   });
@@ -131,7 +131,7 @@ describe("/logout all", () => {
     vi.mocked(api.logoutAll).mockResolvedValue({ revoked: 1 });
     executor.handle(parseLine("/logout all"));
     await executor.idle();
-    expect(output.text()).toContain("signed out 1 other session -");
+    expect(output.text()).toContain("Signed out 1 other session.");
   });
 
   it("says so when there is nothing else to sign out", async () => {

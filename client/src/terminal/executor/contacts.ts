@@ -53,12 +53,12 @@ export async function doAdd(
     x.contacts.set(name, pinKey(x, contact, pending.senderIk));
     await saveContacts(x);
     await refreshEmblemState(x); // the held request is resolved
-    x.renderer.event("success", `added contact ${name} (${formatUid(uid)})`);
+    x.renderer.event("success", `Added contact ${name} (${formatUid(uid)}).`);
     x.renderer.peerMessage(name, pending.text);
     if (pending.session.reducedFs) {
       x.renderer.event(
         "warning",
-        "session has reduced forward secrecy (no one-time prekey was used)",
+        "This session has reduced forward secrecy, because no one-time prekey was used.",
       );
     }
     return;
@@ -66,7 +66,7 @@ export async function doAdd(
   await saveContacts(x);
   x.renderer.event(
     "success",
-    `added contact ${name} (${formatUid(uid)}) - alias is local-only`,
+    `Added contact ${name} (${formatUid(uid)}). The alias is local only.`,
   );
 }
 
@@ -75,19 +75,19 @@ export async function doAdd(
  * informational listing (like /keys status); it does not switch views. */
 export async function doContacts(x: ExecutorInternals): Promise<void> {
   if (!x.store.isUnlocked()) {
-    x.renderer.event("warning", "contacts live in the encrypted store - /login first");
+    x.renderer.event("warning", "Contacts are kept in the encrypted store. Please run /login first.");
     return;
   }
   const contacts = sortContacts([...x.contacts.values()]);
   if (contacts.length === 0) {
-    x.renderer.event("info", "no contacts yet - /add <uid> [alias] to add one");
+    x.renderer.event("info", "No contacts yet. Run /add <uid> [alias] to add one.");
   } else {
-    x.renderer.event("info", `contacts (${contacts.length}):`);
+    x.renderer.event("info", `Contacts (${contacts.length}):`);
     const width = Math.max(...contacts.map((c) => c.alias.length));
     for (const contact of contacts) {
       const flags = [
         contact.verified ? "verified" : "UNVERIFIED",
-        contact.keyChangeBlocked ? "KEY CHANGED - /ack" : "",
+        contact.keyChangeBlocked ? "KEY CHANGED (/ack)" : "",
         contact.timerSeconds === null ? "" : `timer ${formatDuration(contact.timerSeconds)}`,
       ]
         .filter((s) => s.length > 0)
@@ -99,7 +99,7 @@ export async function doContacts(x: ExecutorInternals): Promise<void> {
   }
   const pending = await x.store.listKeys("pending/");
   if (pending.length > 0) {
-    x.renderer.event("info", `contact requests (${pending.length}) - /add to accept:`);
+    x.renderer.event("info", `Contact requests (${pending.length}). Run /add to accept:`);
     for (const key of pending) {
       const uid = key.slice("pending/".length);
       x.renderer.plain(`  ${formatUid(uid)}`);
@@ -144,21 +144,21 @@ export async function doRemove(
   x.renderer.event(
     "success",
     purge
-      ? `removed ${contact.alias} (${formatUid(contact.uid)}) and its message history`
-      : `removed ${contact.alias} (${formatUid(contact.uid)}) - message history kept (add 'purge' to delete it too)`,
+      ? `Removed ${contact.alias} (${formatUid(contact.uid)}) and its message history.`
+      : `Removed ${contact.alias} (${formatUid(contact.uid)}). Message history was kept; add 'purge' to delete it too.`,
   );
 }
 
 async function removeAllContacts(x: ExecutorInternals, purge: boolean): Promise<void> {
   const count = x.contacts.size;
   if (count === 0) {
-    x.renderer.event("info", "no contacts to remove");
+    x.renderer.event("info", "There are no contacts to remove.");
     return;
   }
   const suffix = purge ? " and their message history" : "";
   const answer = await x.shell.readLine(`remove ALL ${count} contact(s)${suffix}? (yes/NO): `);
   if (answer === null || answer.trim().toLowerCase() !== "yes") {
-    x.renderer.event("info", "removal cancelled - nothing was changed");
+    x.renderer.event("info", "Removal cancelled. Nothing was changed.");
     return;
   }
   for (const contact of [...x.contacts.values()]) {
@@ -169,7 +169,7 @@ async function removeAllContacts(x: ExecutorInternals, purge: boolean): Promise<
   await saveContacts(x);
   goHomeAfterRemoval(x);
   await refreshEmblemState(x);
-  x.renderer.event("success", `removed all ${count} contact(s)${suffix}`);
+  x.renderer.event("success", `Removed all ${count} contact(s)${suffix}.`);
 }
 
 /** Tear down a single contact's stored side artifacts: the ratchet session,
@@ -222,8 +222,8 @@ export async function doFavourite(
     x.renderer.event(
       "info",
       on
-        ? `${contact.alias} is already a favourite`
-        : `${contact.alias} is not a favourite`,
+        ? `${contact.alias} is already a favourite.`
+        : `${contact.alias} is not a favourite.`,
     );
     return;
   }
@@ -237,8 +237,8 @@ export async function doFavourite(
   x.renderer.event(
     "success",
     on
-      ? `${contact.alias} favourited - pinned to the top of your contact list`
-      : `${contact.alias} unfavourited`,
+      ? `${contact.alias} favourited. They now sit at the top of your contact list.`
+      : `${contact.alias} unfavourited.`,
   );
 }
 
@@ -261,7 +261,7 @@ export async function doRename(
     return;
   }
   if (contact.alias === newAlias) {
-    x.renderer.event("info", `${contact.alias} already goes by that name`);
+    x.renderer.event("info", `${contact.alias} already goes by that name.`);
     return;
   }
   const clash = x.contacts.get(newAlias);
@@ -279,5 +279,5 @@ export async function doRename(
     x.shell.setPrompt(`[${newAlias}] > `);
   }
   refreshChatContext(x);
-  x.renderer.event("success", `renamed ${oldAlias} to ${newAlias}`);
+  x.renderer.event("success", `Renamed ${oldAlias} to ${newAlias}.`);
 }

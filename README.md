@@ -137,7 +137,7 @@ the local store and deletes the account from the server: prekeys, queued
 ciphertext, sessions, recovery codes, and the account row itself. There is no
 confirmation, no progress, and no undo.
 
-The screen shows `[E203] unlock failed` and nothing else, because that is the
+The screen shows `[E203] Unlock failed.` and nothing else, because that is the
 whole point: it has to look like a typo to anyone standing over your shoulder.
 `/duress set` prints that warning and makes you type `yes` before anything is
 armed, and that warning is the only place the feature ever announces itself.
@@ -239,18 +239,21 @@ erasure.
 | `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
 
 **Notification markers are yours too.** The `[✓]` `[!]` `[*]` `[E###]` prefixes
-in front of every event line, and the `[alias]` on an incoming message, default
-to the ANSI palette. That palette is tuned for the preset, so a custom scheme
-can easily land a green marker on a green background; `/settings color event`
-is the way out.
+in front of every event line, the `[alias]` on an incoming message, and the
+status strip just above the command line all default to the ANSI palette. That
+palette is tuned for the preset, so a custom scheme can easily land a green
+marker on a green background; `/settings color event` is the way out. One
+setting moves both surfaces, since the strip reads the same resolved values the
+terminal does.
 
-Recoloring them is safe, and the design is what makes it safe rather than a
-promise. The renderer tints **only the marker**: every event's message text is
-printed in your scheme's `text` color after the color is closed, so no setting
-here can make the words of a warning unreadable. The markers also carry their
-meaning as literal text, so `[SECURITY]` still reads as `[SECURITY]` in any
-color at all, and the footer status strip mirrors every event using its own CSS
-colors, independent of anything you set here. Three channels; this touches one.
+Recoloring is safe, and the design is what makes it safe rather than a promise.
+In the transcript the renderer tints **only the marker**: every event's message
+text is printed in your scheme's `text` color after the color is closed, so no
+setting here can make the words of a warning unreadable. The markers also carry
+their meaning as literal text, so `[SECURITY]` still reads as `[SECURITY]` in
+any color at all. And the one place where the strip is the only surface a
+message reaches, a `[SECURITY]` event, is deliberately excluded: its
+white-on-red treatment is fixed and not configurable.
 
 **The three presets are immutable.** Running `/settings color` while one is
 active does not modify it: it forks a scheme named `<preset>-custom`, switches
