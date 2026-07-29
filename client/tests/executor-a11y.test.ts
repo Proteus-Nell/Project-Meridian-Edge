@@ -1,7 +1,8 @@
-// Fonts and accessibility: /settings font, /settings fontsize, /settings a11y,
-// and the contrast preset. All display preferences, so all unencrypted and all
-// available before unlock, which is the point: someone who needs a larger face
-// or a screen reader meets the lock screen first.
+// Fonts, spacing and accessibility: /settings font, /settings fontsize,
+// /settings spacing, /settings a11y, and the contrast preset. All display
+// preferences, so all unencrypted and all available before unlock, which is the
+// point: someone who needs a larger face, looser spacing or a screen reader
+// meets the lock screen first.
 
 import { describe, expect, it } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
@@ -12,12 +13,20 @@ import { Renderer } from "../src/terminal/renderer";
 import { KeyStore } from "../src/crypto/store";
 import {
   DEFAULT_FONT_SIZE,
+  DEFAULT_LETTER_SPACING,
+  DEFAULT_LINE_HEIGHT,
   FONT_NAMES,
   FONT_STACKS,
   MAX_FONT_SIZE,
+  MAX_LETTER_SPACING,
+  MAX_LINE_HEIGHT,
   MIN_FONT_SIZE,
+  MIN_LETTER_SPACING,
+  MIN_LINE_HEIGHT,
   SCHEMES,
   clampFontSize,
+  clampLetterSpacing,
+  clampLineHeight,
   resolveScheme,
 } from "../src/terminal/theme";
 import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
@@ -67,7 +76,10 @@ describe("/settings font", () => {
   it("switches the stack, persists it, and applies it while locked", async () => {
     const { executor, chrome, store } = makeExecutor();
     await run(executor, "/settings font classic");
-    expect(chrome.fonts.at(-1)).toEqual({ font: "classic", fontSize: DEFAULT_FONT_SIZE });
+    expect(chrome.textStyles.at(-1)).toMatchObject({
+      font: "classic",
+      fontSize: DEFAULT_FONT_SIZE,
+    });
     expect(store.isUnlocked()).toBe(false);
     expect((await store.getDisplayPrefs()).font).toBe("classic");
   });
@@ -97,7 +109,7 @@ describe("/settings fontsize", () => {
     const { executor, chrome, store } = makeExecutor();
     await run(executor, "/settings font compact");
     await run(executor, "/settings fontsize 22");
-    expect(chrome.fonts.at(-1)).toEqual({ font: "compact", fontSize: 22 });
+    expect(chrome.textStyles.at(-1)).toMatchObject({ font: "compact", fontSize: 22 });
     expect((await store.getDisplayPrefs()).fontSize).toBe(22);
   });
 
@@ -201,3 +213,90 @@ function contrastRatio(a: string, b: string): number {
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+describe("/settings spacing", () => {
+  it("sets letter spacing and re-applies the whole text style", async () => {
+    const { executor, chrome, store } = makeExecutor();
+    await run(executor, "/settings spacing letter 1.5");
+    // The whole style goes to the chrome, not just the changed field: all four
+    // metrics move the cell box together, so they share one application path.
+    expect(chrome.textStyles.at(-1)).toMatchObject({
+      letterSpacing: 1.5,
+      lineHeight: DEFAULT_LINE_HEIGHT,
+      fontSize: DEFAULT_FONT_SIZE,
+    });
+    expect((await store.getDisplayPrefs()).letterSpacing).toBe(1.5);
+  });
+
+  it("sets line height independently of letter spacing", async () => {
+    const { executor, chrome, store } = makeExecutor();
+    await run(executor, "/settings spacing letter 2");
+    await run(executor, "/settings spacing line 1.8");
+    expect(chrome.textStyles.at(-1)).toMatchObject({ letterSpacing: 2, lineHeight: 1.8 });
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.letterSpacing).toBe(2);
+    expect(prefs.lineHeight).toBe(1.8);
+  });
+
+  it("survives a reload, since it lives with the unencrypted display prefs", async () => {
+    const factory = new IDBFactory();
+    const name = "meridian-edge-spacing-persist";
+    const first = makeExecutor(new KeyStore(name, factory));
+    await run(first.executor, "/settings spacing line 2");
+
+    const second = makeExecutor(new KeyStore(name, factory));
+    await second.executor.init();
+    expect(second.store.isUnlocked()).toBe(false);
+    expect(second.chrome.textStyles.at(-1)).toMatchObject({ lineHeight: 2 });
+  });
+
+  it("rejects a value outside its range, and an unknown kind", async () => {
+    const { executor, output, store } = makeExecutor();
+    for (const line of [
+      "/settings spacing letter 9", // above the 4px cap
+      "/settings spacing line 0.5", // below 1x, which would overlap rows
+      "/settings spacing line 9",
+      "/settings spacing letter wide",
+      "/settings spacing word 2", // not a kind
+      "/settings spacing letter",
+      "/settings spacing letter 1.25", // finer than one decimal
+    ]) {
+      await run(executor, line);
+    }
+    expect(output.text()).toContain("[E102]");
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.letterSpacing).toBe(DEFAULT_LETTER_SPACING);
+    expect(prefs.lineHeight).toBe(DEFAULT_LINE_HEIGHT);
+  });
+
+  it("accepts the boundaries", async () => {
+    const { executor, store } = makeExecutor();
+    await run(executor, "/settings spacing letter 0");
+    await run(executor, "/settings spacing line 2.5");
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.letterSpacing).toBe(MIN_LETTER_SPACING);
+    expect(prefs.lineHeight).toBe(MAX_LINE_HEIGHT);
+  });
+
+  it("clamps a tampered stored value rather than trusting it", async () => {
+    const { store } = makeExecutor();
+    await store.setDisplayPrefs({
+      ...(await store.getDisplayPrefs()),
+      letterSpacing: 9999,
+      lineHeight: -3,
+    });
+    const prefs = await store.getDisplayPrefs();
+    expect(prefs.letterSpacing).toBe(MAX_LETTER_SPACING);
+    expect(prefs.lineHeight).toBe(MIN_LINE_HEIGHT);
+    expect(clampLetterSpacing(Number.NaN)).toBe(DEFAULT_LETTER_SPACING);
+    expect(clampLineHeight(Number.NaN)).toBe(DEFAULT_LINE_HEIGHT);
+  });
+
+  it("shows the current spacing in /settings font list", async () => {
+    const { executor, output } = makeExecutor();
+    await run(executor, "/settings spacing letter 1");
+    await run(executor, "/settings font list");
+    expect(output.text()).toContain("letter spacing 1px");
+    expect(output.text()).toContain("line height 1x");
+  });
+});

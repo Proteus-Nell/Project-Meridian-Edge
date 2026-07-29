@@ -303,6 +303,64 @@ export function clampFontSize(size: number): number {
   return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(size)));
 }
 
+// ----- spacing ---------------------------------------------------------------
+//
+// Extra space between letters and between lines, as two independent settings.
+//
+// These are here for readability rather than decoration, and they are the part
+// of the "dyslexia-friendly typography" question with the better evidence
+// behind it. Studies of dyslexia-specific typefaces have generally not found a
+// reading-speed benefit over well-set standard fonts, and where one shows up it
+// tends to track the increased letter and line spacing those faces build in
+// rather than their glyph shapes. Exposing the spacing directly gets at that
+// without shipping a font binary, changing the CSP, or asking anyone to install
+// anything: it works with whichever stack is already selected, and it helps
+// readers who would never describe themselves as needing an accessibility
+// feature.
+//
+// Both move the cell box, so every path that changes them re-fits the
+// terminals, exactly as the font and size do.
+
+/** Extra px between characters. 0 is the font's own spacing. */
+export const MIN_LETTER_SPACING = 0;
+export const MAX_LETTER_SPACING = 4;
+export const DEFAULT_LETTER_SPACING = 0;
+
+/** Line box as a multiple of the font size. 1 is the font's own leading. */
+export const MIN_LINE_HEIGHT = 1;
+export const MAX_LINE_HEIGHT = 2.5;
+export const DEFAULT_LINE_HEIGHT = 1;
+
+/** Round to one decimal, which is the granularity the grammar accepts and
+ * enough to matter visually without inviting 1.4142 into a stored record. */
+function toTenth(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+export function clampLetterSpacing(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_LETTER_SPACING;
+  }
+  return toTenth(Math.min(MAX_LETTER_SPACING, Math.max(MIN_LETTER_SPACING, value)));
+}
+
+export function clampLineHeight(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_LINE_HEIGHT;
+  }
+  return toTenth(Math.min(MAX_LINE_HEIGHT, Math.max(MIN_LINE_HEIGHT, value)));
+}
+
+/** Everything that decides how text is measured and drawn. Grouped because the
+ * four move together: any change to any of them resizes the cell, so they share
+ * one application path and one re-fit. */
+export interface TextStyle {
+  readonly font: FontName;
+  readonly fontSize: number;
+  readonly letterSpacing: number;
+  readonly lineHeight: number;
+}
+
 // ----- accessibility ---------------------------------------------------------
 
 /** Opt-in accessibility switches, stored unencrypted beside the other display

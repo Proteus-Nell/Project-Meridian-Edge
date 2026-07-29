@@ -346,6 +346,8 @@ erasure.
 | `/settings font <name>` | Monospace stack: `default`, `system`, `classic`, `wide`, `compact` |
 | `/settings font list` | The stacks, with what each is for |
 | `/settings fontsize <10-28>` | Terminal size in px; the terminal re-fits itself |
+| `/settings spacing letter <0-4>` | Extra space between characters, in px |
+| `/settings spacing line <1-2.5>` | Line height as a multiple of the font size |
 | `/settings a11y screenreader <on\|off>` | Mirror terminal output into an ARIA live region |
 | `/settings a11y motion <on\|off>` | Force reduced motion without changing your OS setting |
 
@@ -356,6 +358,16 @@ generic `monospace`. Nothing is ever fetched from a remote origin: the CSP
 forbids it, and a webfont is a request to someone else's server on every load.
 The stack is chosen by name from a fixed allowlist, so no stored string reaches
 a CSS declaration.
+
+**Spacing is a readability control**, not decoration. Of the things usually
+offered as dyslexia-friendly typography, spacing is the part with the better
+evidence behind it: studies of dyslexia-specific typefaces have generally not
+found a reading-speed benefit over well-set standard fonts, and where one shows
+up it tends to track the increased letter and line spacing those faces build in
+rather than their glyph shapes. Exposing the spacing directly gets at that
+without shipping a font binary, changing the CSP, or asking anyone to install
+anything, and it works with whichever stack is already selected. Both values
+move the cell box, so changing either re-fits the terminal.
 
 **Accessibility.** The `contrast` scheme is a preset whose every slot, including
 `muted` and the notification markers, clears WCAG AA against its own background;

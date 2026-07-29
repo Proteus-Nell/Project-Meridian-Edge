@@ -7,7 +7,11 @@ import { CROCKFORD_ALPHABET, RECOVERY_CODE_CHARS, UID_CHARS } from "../crypto/co
 import { suggestCommand } from "./suggest";
 import {
   MAX_FONT_SIZE,
+  MAX_LETTER_SPACING,
+  MAX_LINE_HEIGHT,
   MIN_FONT_SIZE,
+  MIN_LETTER_SPACING,
+  MIN_LINE_HEIGHT,
   isColorSlot,
   isEmblemName,
   isEventColorSlot,
@@ -19,6 +23,10 @@ import type { ColorSlot, EmblemName, EventColorSlot, FontName } from "./theme";
 /** The accessibility switches `/settings a11y` can toggle. */
 export const A11Y_FEATURES = ["screenreader", "motion"] as const;
 export type A11yFeature = (typeof A11Y_FEATURES)[number];
+
+/** Which spacing `/settings spacing` adjusts. */
+export const SPACING_KINDS = ["letter", "line"] as const;
+export type SpacingKind = (typeof SPACING_KINDS)[number];
 
 export type DurationUnit = "m" | "h" | "d" | "w";
 
@@ -108,6 +116,7 @@ export type Command =
   | { readonly name: "settings-font"; readonly font: FontName }
   | { readonly name: "settings-font-list" }
   | { readonly name: "settings-fontsize"; readonly size: number }
+  | { readonly name: "settings-spacing"; readonly which: SpacingKind; readonly value: number }
   | { readonly name: "settings-a11y"; readonly feature: A11yFeature; readonly enabled: boolean }
   | { readonly name: "settings-emblem"; readonly emblem: EmblemName }
   | { readonly name: "settings-color"; readonly slot: ColorSlot; readonly hex: string }
@@ -169,7 +178,7 @@ export const COMMAND_USAGE = {
   delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
   rotate: "/rotate passphrase",
   settings:
-    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset  |  /settings font <name>  |  /settings font list  |  /settings fontsize <10-28>  |  /settings a11y <screenreader|motion> <on|off>",
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset  |  /settings font <name>  |  /settings font list  |  /settings fontsize <10-28>  |  /settings spacing <letter|line> <value>  |  /settings a11y <screenreader|motion> <on|off>",
   duress:
     "/duress set  |  /duress off  |  /duress status  (a passphrase that silently destroys this device and the account)",
   keys: "/keys status  |  /keys refill",
@@ -672,6 +681,31 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         }
         return invalid(`expected a size from ${MIN_FONT_SIZE} to ${MAX_FONT_SIZE}`, usage);
       }
+      if (sub === "spacing") {
+        // One decimal place: enough to matter visually, and it keeps a stored
+        // record from collecting values nobody chose deliberately.
+        const which = args[1];
+        const value = args[2];
+        const known = (SPACING_KINDS as readonly string[]).includes(which ?? "");
+        if (known && args.length === 3 && value !== undefined && /^\d{1,2}(\.\d)?$/.test(value)) {
+          const parsed = Number(value);
+          const [min, max] =
+            which === "letter"
+              ? [MIN_LETTER_SPACING, MAX_LETTER_SPACING]
+              : [MIN_LINE_HEIGHT, MAX_LINE_HEIGHT];
+          if (parsed >= min && parsed <= max) {
+            return command({
+              name: "settings-spacing",
+              which: which as SpacingKind,
+              value: parsed,
+            });
+          }
+        }
+        return invalid(
+          `expected 'letter' ${MIN_LETTER_SPACING}-${MAX_LETTER_SPACING} or 'line' ${MIN_LINE_HEIGHT}-${MAX_LINE_HEIGHT}, to one decimal place`,
+          usage,
+        );
+      }
       if (sub === "a11y") {
         const feature = args[1];
         const value = args[2];
@@ -737,7 +771,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         );
       }
       return invalid(
-        "expected 'rotation', 'notify', 'mask', 'trust', 'theme', 'scheme', 'color', 'font', 'fontsize', 'a11y', or 'emblem'",
+        "expected 'rotation', 'notify', 'mask', 'trust', 'theme', 'scheme', 'color', 'font', 'fontsize', 'spacing', 'a11y', or 'emblem'",
         usage,
       );
     }

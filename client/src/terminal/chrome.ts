@@ -17,12 +17,12 @@ import type { EmblemState } from "./executor";
 import {
   applyAccessibilityClasses,
   applyEmblemClass,
-  applyFontVars,
   applySchemeVars,
+  applyTextVars,
   applyThemeClasses,
 } from "./paint";
-import { FONT_STACKS, clampFontSize } from "./theme";
-import type { AccessibilityPrefs, EmblemName, FontName, ResolvedScheme } from "./theme";
+import { FONT_STACKS, clampFontSize, clampLetterSpacing, clampLineHeight } from "./theme";
+import type { AccessibilityPrefs, EmblemName, ResolvedScheme, TextStyle } from "./theme";
 import type { ThemePrefs } from "../crypto/store";
 
 const DIM = "\x1b[2m";
@@ -451,18 +451,22 @@ export class Chrome implements SuggestionNav {
     this.refitCb = refit;
   }
 
-  /** Switch the monospace stack and size everywhere: the DOM custom properties
-   * and both xterm instances. The face and size are the two things that move
-   * the cell box, so this always ends in a re-fit. */
-  applyFont(font: FontName, fontSize: number): void {
-    const size = clampFontSize(fontSize);
-    applyFontVars(font, size);
-    const family = FONT_STACKS[font];
-    this.transcript.options.fontFamily = family;
-    this.transcript.options.fontSize = size;
+  /** Apply the text metrics everywhere: the DOM custom properties and both
+   * xterm instances. Face, size, letter spacing and line height all move the
+   * cell box, so this always ends in a re-fit; skipping it would leave `cols`
+   * measured against the previous metrics and start wrapping long lines outside
+   * the visible area. */
+  applyTextStyle(style: TextStyle): void {
+    applyTextVars(style);
+    const options = {
+      fontFamily: FONT_STACKS[style.font],
+      fontSize: clampFontSize(style.fontSize),
+      letterSpacing: clampLetterSpacing(style.letterSpacing),
+      lineHeight: clampLineHeight(style.lineHeight),
+    };
+    Object.assign(this.transcript.options, options);
     if (this.input !== null) {
-      this.input.options.fontFamily = family;
-      this.input.options.fontSize = size;
+      Object.assign(this.input.options, options);
     }
     this.refitCb?.();
   }

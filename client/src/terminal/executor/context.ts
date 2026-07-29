@@ -11,7 +11,7 @@ import type { WsClient } from "../../net/ws";
 import { DEFAULT_HELP_COLUMNS } from "../help";
 import type { Renderer } from "../renderer";
 import type { ShellIO } from "../shell";
-import type { AccessibilityPrefs, EmblemName, FontName, ResolvedScheme } from "../theme";
+import type { AccessibilityPrefs, EmblemName, ResolvedScheme, TextStyle } from "../theme";
 import { formatDuration } from "./format";
 import { normalizeContact } from "./records";
 import type { Contact, Identity } from "./records";
@@ -42,10 +42,10 @@ export interface UiChrome {
   setEmblemState(state: EmblemState): void;
   applyScheme(scheme: ResolvedScheme): void;
   applyEmblem(name: EmblemName): void;
-  /** Switch the monospace stack and size on both terminals and the DOM. Cell
-   * metrics change, so the implementation must re-fit afterwards or the column
-   * count silently goes stale. */
-  applyFont(font: FontName, fontSize: number): void;
+  /** Apply the text metrics (face, size, letter spacing, line height) to both
+   * terminals and the DOM. All four change the cell box, so the implementation
+   * must re-fit afterwards or the column count silently goes stale. */
+  applyTextStyle(style: TextStyle): void;
   /** Apply the accessibility switches: xterm's screen-reader live region and
    * the forced reduced-motion class. */
   applyAccessibility(prefs: AccessibilityPrefs): void;
@@ -66,7 +66,7 @@ export const NULL_CHROME: UiChrome = {
   setEmblemState() {},
   applyScheme() {},
   applyEmblem() {},
-  applyFont() {},
+  applyTextStyle() {},
   applyAccessibility() {},
   columns: () => DEFAULT_HELP_COLUMNS,
 };

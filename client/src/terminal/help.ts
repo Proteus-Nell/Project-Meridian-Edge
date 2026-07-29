@@ -107,13 +107,18 @@ const SECTIONS: readonly HelpSection[] = [
   {
     title: "Appearance",
     entries: [
-      { cmd: "/settings scheme <name>", blurb: "switch scheme: dark | parchment | olive | one of yours" },
+      { cmd: "/settings scheme <name>", blurb: "switch scheme: dark | parchment | olive | contrast | one of yours" },
       { cmd: "/settings scheme list", blurb: "every scheme you can switch to" },
       { cmd: "/settings scheme new <name>", blurb: "copy the current colors into a scheme of your own" },
       { cmd: "/settings scheme delete <name>", blurb: "delete one of your schemes (presets cannot be)" },
       { cmd: "/settings color <slot> <#hex>", blurb: "edit a color; on a preset this forks it, leaving it intact" },
       { cmd: "/settings color event <slot> <#hex>", blurb: "recolor the [✓] [!] [*] [E###] markers and peer names" },
       { cmd: "/settings color reset", blurb: "put your scheme back to its base preset's colors" },
+      { cmd: "/settings font <name>", blurb: "monospace stack: default | system | classic | wide | compact" },
+      { cmd: "/settings font list", blurb: "the stacks, and what each one is for" },
+      { cmd: "/settings fontsize <10-28>", blurb: "terminal size in px; the terminal re-fits itself" },
+      { cmd: "/settings spacing letter <0-4>", blurb: "extra space between characters, in px" },
+      { cmd: "/settings spacing line <1-2.5>", blurb: "line height as a multiple of the font size" },
       { cmd: "/settings emblem <name>", blurb: "medallion glyph: globe | tree" },
       { cmd: "/settings theme <layer> <on|off>", blurb: "toggle atmosphere layers" },
     ],
@@ -125,6 +130,8 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/settings mask <asterisk|hidden>", blurb: "passphrase echo style" },
       { cmd: "/settings rotation <on|off|day>", blurb: "weekly passphrase-rotation prompt" },
       { cmd: "/settings notify <on|off>", blurb: "toast notifications" },
+      { cmd: "/settings a11y screenreader <on|off>", blurb: "mirror terminal output into an ARIA live region" },
+      { cmd: "/settings a11y motion <on|off>", blurb: "force reduced motion, whatever your OS says" },
     ],
   },
   {

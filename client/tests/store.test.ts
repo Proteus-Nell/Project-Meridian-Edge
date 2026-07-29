@@ -18,6 +18,8 @@ const BASE = {
   emblemGlyph: "globe",
   font: "default",
   fontSize: 15,
+  letterSpacing: 0,
+  lineHeight: 1,
   accessibility: { screenReader: false, reduceMotion: false },
   customSchemes: [],
 } as const;

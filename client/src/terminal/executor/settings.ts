@@ -11,10 +11,16 @@ import {
   FORK_SUFFIX,
   MAX_CUSTOM_SCHEMES,
   MAX_FONT_SIZE,
+  MAX_LETTER_SPACING,
+  MAX_LINE_HEIGHT,
   MIN_FONT_SIZE,
+  MIN_LETTER_SPACING,
+  MIN_LINE_HEIGHT,
   SCHEME_NAMES,
   baseSchemeOf,
   clampFontSize,
+  clampLetterSpacing,
+  clampLineHeight,
   findCustomScheme,
   isSchemeName,
   isValidCustomSchemeName,
@@ -30,7 +36,7 @@ import type {
   EventColorSlot,
   FontName,
 } from "../theme";
-import type { A11yFeature } from "../parser";
+import type { A11yFeature, SpacingKind } from "../parser";
 import type { ThemeElement, Weekday } from "../parser";
 import type { ExecutorInternals } from "./context";
 import { DEFAULT_ROTATION } from "./records";
@@ -236,9 +242,39 @@ export async function doSettingsSchemeList(x: ExecutorInternals): Promise<void> 
  * cells and every aligned listing in the app is built from padded columns. */
 export async function doSettingsFont(x: ExecutorInternals, font: FontName): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
-  await x.store.setDisplayPrefs({ ...prefs, font });
-  x.chrome.applyFont(font, prefs.fontSize);
+  const next = { ...prefs, font };
+  await x.store.setDisplayPrefs(next);
+  x.chrome.applyTextStyle(next);
   x.renderer.event("success", `Font set to '${font}': ${FONT_BLURBS[font]}.`);
+}
+
+/** `/settings spacing <letter|line> <value>`: space between characters, and the
+ * line box as a multiple of the font size.
+ *
+ * A readability control rather than a decorative one. Of the things commonly
+ * offered as dyslexia-friendly typography, spacing is the part with the better
+ * evidence behind it, and unlike a special typeface it needs no font binary, no
+ * CSP change, and nothing installed. It applies to whichever stack is already
+ * selected and helps plenty of readers who would never go looking for an
+ * accessibility setting. */
+export async function doSettingsSpacing(
+  x: ExecutorInternals,
+  which: SpacingKind,
+  value: number,
+): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  const next =
+    which === "letter"
+      ? { ...prefs, letterSpacing: clampLetterSpacing(value) }
+      : { ...prefs, lineHeight: clampLineHeight(value) };
+  await x.store.setDisplayPrefs(next);
+  x.chrome.applyTextStyle(next);
+  x.renderer.event(
+    "success",
+    which === "letter"
+      ? `Letter spacing set to ${next.letterSpacing}px. The terminal was re-fitted to the new cell size.`
+      : `Line height set to ${next.lineHeight}x the font size. The terminal was re-fitted to the new cell size.`,
+  );
 }
 
 /** `/settings font list`: the available stacks, marking the active one. */
@@ -250,15 +286,21 @@ export async function doSettingsFontList(x: ExecutorInternals): Promise<void> {
     const mark = name === prefs.font ? "*" : " ";
     x.renderer.plain(`  ${mark} ${name.padEnd(width)}  ${FONT_BLURBS[name]}`);
   }
-  x.renderer.plain(`  (size ${prefs.fontSize}px · /settings fontsize <${MIN_FONT_SIZE}-${MAX_FONT_SIZE}>)`);
+  x.renderer.plain(
+    `  (size ${prefs.fontSize}px · letter spacing ${prefs.letterSpacing}px · line height ${prefs.lineHeight}x)`,
+  );
+  x.renderer.plain(
+    `  /settings fontsize <${MIN_FONT_SIZE}-${MAX_FONT_SIZE}> · /settings spacing letter <${MIN_LETTER_SPACING}-${MAX_LETTER_SPACING}> · /settings spacing line <${MIN_LINE_HEIGHT}-${MAX_LINE_HEIGHT}>`,
+  );
 }
 
 /** `/settings fontsize <n>`: scale both terminals. */
 export async function doSettingsFontSize(x: ExecutorInternals, size: number): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
   const fontSize = clampFontSize(size);
-  await x.store.setDisplayPrefs({ ...prefs, fontSize });
-  x.chrome.applyFont(prefs.font, fontSize);
+  const next = { ...prefs, fontSize };
+  await x.store.setDisplayPrefs(next);
+  x.chrome.applyTextStyle(next);
   x.renderer.event(
     "success",
     `Font size set to ${fontSize}px. The terminal was re-fitted to the new cell size.`,

@@ -15,8 +15,8 @@ import type { ThemePrefs } from "../../src/crypto/store";
 import type {
   AccessibilityPrefs,
   EmblemName,
-  FontName,
   ResolvedScheme,
+  TextStyle,
 } from "../../src/terminal/theme";
 
 /** Scripted shell: push answers onto `secrets` (passphrases) and `lines`
@@ -79,7 +79,9 @@ export class FakeChrome implements UiChrome {
   /** Transcript width reported to width-aware output (/help). Assignable so a
    * test can render the same command at a phone width and a desktop one. */
   width = 80;
-  fonts: Array<{ font: FontName; fontSize: number }> = [];
+  /** Every text-metric application, so a test can assert both what was applied
+   * and that a change actually reached the terminals. */
+  textStyles: TextStyle[] = [];
   accessibility: AccessibilityPrefs[] = [];
   echoInput(line: string, kind: "command" | "message" = "command"): void {
     this.echoes.push({ line, kind });
@@ -114,8 +116,8 @@ export class FakeChrome implements UiChrome {
   columns(): number {
     return this.width;
   }
-  applyFont(font: FontName, fontSize: number): void {
-    this.fonts.push({ font, fontSize });
+  applyTextStyle(style: TextStyle): void {
+    this.textStyles.push(style);
   }
   applyAccessibility(prefs: AccessibilityPrefs): void {
     this.accessibility.push(prefs);

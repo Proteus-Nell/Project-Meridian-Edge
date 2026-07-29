@@ -5,7 +5,7 @@
 // (`COMMAND_USAGE`) the parser gates on, so suggestions can never name a command
 // the parser would reject.
 
-import { A11Y_FEATURES, COMMAND_USAGE, WEEKDAYS, isCommandWord } from "./parser";
+import { A11Y_FEATURES, COMMAND_USAGE, SPACING_KINDS, WEEKDAYS, isCommandWord } from "./parser";
 import type { CommandWord } from "./parser";
 import { EVENT_COLOR_SLOTS, FONT_NAMES, SCHEME_NAMES } from "./theme";
 
@@ -73,6 +73,7 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           "trust",
           "font",
           "fontsize",
+          "spacing",
           "a11y",
         ];
       }
@@ -99,6 +100,10 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           return n === 1 ? ["globe", "tree"] : [];
         case "font":
           return n === 1 ? [...FONT_NAMES, "list"] : [];
+        case "spacing":
+          // The value is free-form (a number), so only the first argument has
+          // fixed choices worth offering.
+          return n === 1 ? [...SPACING_KINDS] : [];
         case "a11y":
           if (n === 1) return [...A11Y_FEATURES];
           if (n === 2) return ["on", "off"];

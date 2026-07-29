@@ -25,6 +25,13 @@
      which the CSP forbids and which would be a privacy beacon besides. */
   --font-mono: "Cascadia Mono", "Fira Mono", Menlo, Consolas, monospace;
   --font-size: 15px;
+
+  /* Readability spacing (/settings spacing). Applied to the DOM chrome as well
+     as the terminals: the status strip and the undelivered panel are read by
+     the same eyes, and a readability setting that stopped at the terminal edge
+     would be half a setting. */
+  --letter-spacing: 0px;
+  --line-height: 1;
 }
 
 html,
@@ -35,6 +42,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
+  letter-spacing: var(--letter-spacing);
 }
 
 /* App shell: the transcript fills the space above a fixed footer that holds the
@@ -322,9 +330,13 @@ body.th-vignette #vignette {
   font-weight: 700;
 }
 
+/* The one multi-line block of DOM prose in the app, so it takes the line-height
+   setting; every other DOM text surface is a single line where it would do
+   nothing. */
 .dropped-text {
   color: var(--text);
   overflow-wrap: anywhere;
+  line-height: max(1.35, var(--line-height));
 }
 
 #side-panel-hint {

@@ -61,6 +61,7 @@ import {
   doSettingsFont,
   doSettingsFontList,
   doSettingsFontSize,
+  doSettingsSpacing,
   doSettingsMask,
   doSettingsRotation,
   doSettingsScheme,
@@ -130,7 +131,7 @@ export class Executor implements ExecutorInternals {
       this.chrome.applyTheme(prefs.theme);
       this.chrome.applyScheme(resolveScheme(prefs.scheme, prefs.customSchemes));
       this.chrome.applyEmblem(prefs.emblemGlyph);
-      this.chrome.applyFont(prefs.font, prefs.fontSize);
+      this.chrome.applyTextStyle(prefs);
       this.chrome.applyAccessibility(prefs.accessibility);
     } catch {
       // ignore: defaults remain
@@ -271,6 +272,9 @@ export class Executor implements ExecutorInternals {
         return;
       case "settings-fontsize":
         this.run(() => doSettingsFontSize(this, cmd.size));
+        return;
+      case "settings-spacing":
+        this.run(() => doSettingsSpacing(this, cmd.which, cmd.value));
         return;
       case "settings-a11y":
         this.run(() => doSettingsA11y(this, cmd.feature, cmd.enabled));

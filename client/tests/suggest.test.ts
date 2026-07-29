@@ -43,6 +43,7 @@ describe("commandSuggestions", () => {
       "/settings trust",
       "/settings font",
       "/settings fontsize",
+      "/settings spacing",
       "/settings a11y",
     ]);
     expect(commandSuggestions("/keys ")).toEqual(["/keys status", "/keys refill"]);

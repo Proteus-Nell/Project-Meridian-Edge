@@ -116,9 +116,13 @@ import {
   DEFAULT_ACCESSIBILITY,
   DEFAULT_FONT,
   DEFAULT_FONT_SIZE,
+  DEFAULT_LETTER_SPACING,
+  DEFAULT_LINE_HEIGHT,
   DEFAULT_SCHEME,
   FORK_SUFFIX,
   clampFontSize,
+  clampLetterSpacing,
+  clampLineHeight,
   isEmblemName,
   isFontName,
   isValidCustomSchemeName,
@@ -161,6 +165,10 @@ export interface DisplayPrefs {
    * A name from the fixed allowlist, never a raw family string. */
   readonly font: FontName;
   readonly fontSize: number;
+  /** Extra px between characters, and the line box as a multiple of the font
+   * size (/settings spacing). Readability controls; see theme.ts. */
+  readonly letterSpacing: number;
+  readonly lineHeight: number;
   /** Opt-in accessibility switches (/settings a11y). */
   readonly accessibility: AccessibilityPrefs;
   /** User-defined schemes (/settings scheme new, /settings color). An array,
@@ -184,6 +192,8 @@ const DEFAULT_PREFS: DisplayPrefs = {
   emblemGlyph: "globe",
   font: DEFAULT_FONT,
   fontSize: DEFAULT_FONT_SIZE,
+  letterSpacing: DEFAULT_LETTER_SPACING,
+  lineHeight: DEFAULT_LINE_HEIGHT,
   accessibility: DEFAULT_ACCESSIBILITY,
   customSchemes: [],
 };
@@ -305,6 +315,8 @@ export class KeyStore {
           emblemGlyph?: unknown;
           font?: unknown;
           fontSize?: unknown;
+          letterSpacing?: unknown;
+          lineHeight?: unknown;
           accessibility?: Partial<Record<keyof AccessibilityPrefs, unknown>>;
           customSchemes?: unknown;
           /** Retired in favour of customSchemes; still read once, to migrate. */
@@ -340,6 +352,12 @@ export class KeyStore {
       typeof raw.font === "string" && isFontName(raw.font) ? raw.font : DEFAULT_FONT;
     const fontSize =
       typeof raw.fontSize === "number" ? clampFontSize(raw.fontSize) : DEFAULT_FONT_SIZE;
+    const letterSpacing =
+      typeof raw.letterSpacing === "number"
+        ? clampLetterSpacing(raw.letterSpacing)
+        : DEFAULT_LETTER_SPACING;
+    const lineHeight =
+      typeof raw.lineHeight === "number" ? clampLineHeight(raw.lineHeight) : DEFAULT_LINE_HEIGHT;
     const accessibility: AccessibilityPrefs = {
       screenReader:
         typeof raw.accessibility?.screenReader === "boolean"
@@ -359,6 +377,8 @@ export class KeyStore {
       emblemGlyph,
       font,
       fontSize,
+      letterSpacing,
+      lineHeight,
       accessibility,
       customSchemes,
     };
