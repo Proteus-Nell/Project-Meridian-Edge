@@ -32,6 +32,7 @@ import {
   doGroupOpen,
   doGroupPurge,
   doGroupRemove,
+  doGroupSync,
   sendGroupText,
 } from "./group-commands";
 import type { Group } from "./groups";
@@ -318,6 +319,9 @@ export class Executor implements ExecutorInternals {
         return;
       case "group-leave":
         this.run(() => doGroupLeave(this, cmd.group));
+        return;
+      case "group-sync":
+        this.run(() => doGroupSync(this, cmd.group));
         return;
       case "group-purge":
         this.run(() => doGroupPurge(this, cmd.group));

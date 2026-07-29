@@ -223,6 +223,7 @@ again.
 | `/group add <name> <contact>` | Add a member. Everyone is told, and they can see it was you |
 | `/group remove <name> <contact>` | Remove a member. Everyone is told, including them |
 | `/group leave <name>` | Leave, telling the others |
+| `/group sync <name>` | Add the members you have no contact entry for, after showing you the list and asking |
 | `/group purge <name>` | Delete the group and its local history from this device |
 
 **How it works, and why.** A group message is not a new kind of message. It is N
@@ -242,9 +243,33 @@ trade at the scale this app operates at.
 *Why not sender keys:* they save bandwidth but add a key-distribution mechanism,
 weaken post-compromise security (a leaked sender key exposes everything from
 that sender until a rekey), and turn removal into a rekey that is easy to get
-wrong. *Why not MLS:* it is the correct answer at scale and the documented
-upgrade path, but TreeKEM is a protocol stack in its own right and would dwarf
-this codebase.
+wrong.
+
+*Why not MLS.* MLS ([RFC 9420](https://www.rfc-editor.org/rfc/rfc9420.html)) is
+the standardised answer, and it fixes the exact limitation below: its ratchet
+tree, and the signed group context and confirmed transcript hash carried with
+every commit, give members cryptographic *agreement* on who is in the group.
+TreeKEM is the continuous group key agreement inside it, arranging members as
+leaves of a binary tree so an add, remove or key update costs O(log n) instead
+of O(n).
+
+Two things stop it being a drop-in here, and the first matters more than the
+size:
+
+- **Every ciphersuite RFC 9420 defines is classical.** They are built on HPKE
+  with X25519 or the NIST P-curves, and signatures with Ed25519 or ECDSA.
+  Adopting MLS as specified would put classical asymmetric cryptography on the
+  message path, which contradicts this project's central invariant and is
+  grepped for by `scripts/audit.py`. The alternative, inventing a post-quantum
+  ciphersuite, runs into the other rule: primitives here are composed, never
+  invented. IETF work on PQ and hybrid MLS ciphersuites is ongoing but not
+  something to ship against yet.
+- **Size.** This whole client is about 11,000 lines. A production MLS stack is
+  several times that on its own, before any integration.
+
+So MLS is the direction, not a plan on a shelf: there is no migration design
+written for it here beyond this paragraph, and it is blocked on a
+post-quantum ciphersuite existing to standardise against.
 
 **What this does not give you.** Two limitations are real, and neither is
 papered over in the UI:
@@ -273,6 +298,25 @@ contact is discarded (`E513`), the contact-request gate applies to groups
 exactly as it does to direct messages, and a group is only created on an
 explicit invite that lists you. Ordinary traffic for a group this device does
 not know is reported, never silently joined.
+
+Two consequences of that worth knowing before you use it:
+
+- **You can only send to members you have added.** Encrypting to someone needs a
+  session, and a session needs a pinned key. `/group sync` prints the members
+  you are missing and adds them once you confirm; it is a command rather than an
+  automatic step because adding a contact means accepting a key on trust, and
+  doing that silently would let anyone who can invite you write into your
+  contact list. Synced contacts are `UNVERIFIED` until you `/verify` them, like
+  any other.
+- **A roster is never adopted wholesale.** An incoming message can announce a
+  change (an add, a removal, a departure) and this device applies exactly that
+  change to its own roster. It never copies the sender's list over. A member who
+  lies about the roster can therefore disagree with you, which is reported, but
+  cannot rewrite what you hold.
+- **An invite carrying a name you already use is renamed on arrival**, and the
+  rename is announced. Group names are how every `/group` subcommand addresses a
+  group, and the name comes from whoever invited you, so a collision would
+  otherwise decide where your next message went.
 
 ### Message lifecycle
 

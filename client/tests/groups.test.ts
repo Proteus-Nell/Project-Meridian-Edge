@@ -18,7 +18,12 @@ import {
   sanitizeRoster,
 } from "../src/terminal/executor/payload";
 import type { AppPayload, GroupEnvelope } from "../src/terminal/executor/payload";
-import { newGroupId, rosterDelta, rosterDigest } from "../src/terminal/executor/groups";
+import {
+  applyAnnouncedChange,
+  newGroupId,
+  rosterDelta,
+  rosterDigest,
+} from "../src/terminal/executor/groups";
 
 const UID_A = "A".repeat(26);
 const UID_B = "B".repeat(26);
@@ -169,5 +174,83 @@ describe("rosterDelta", () => {
     const delta = rosterDelta([UID_A, UID_B], [UID_B, UID_A]);
     expect(delta.onlyTheirs).toEqual([]);
     expect(delta.onlyMine).toEqual([]);
+  });
+});
+
+describe("announced-change application", () => {
+  // The receiver never adopts a sender's roster wholesale: it applies only the
+  // change that was announced, to its own roster. That is what stops one
+  // message from rewriting who you think is in a group.
+  const envelope = (over: Partial<GroupEnvelope>): GroupEnvelope => ({
+    ...GROUP,
+    ...over,
+  });
+
+  it("leaves the roster untouched for ordinary traffic", () => {
+    expect(applyAnnouncedChange([UID_A, UID_B], envelope({ action: "msg" }), UID_A)).toEqual([
+      UID_A,
+      UID_B,
+    ]);
+  });
+
+  it("applies exactly the announced add or removal, and nothing else", () => {
+    // The envelope claims a roster of [A, B] while announcing "add C". Only the
+    // announced delta lands; the claimed roster is not copied over.
+    const added = applyAnnouncedChange(
+      [UID_A, UID_B],
+      envelope({ action: "add", subject: UID_C, members: [UID_A] }),
+      UID_A,
+    );
+    expect(added).toEqual([UID_A, UID_B, UID_C]);
+
+    const removed = applyAnnouncedChange(
+      [UID_A, UID_B, UID_C],
+      envelope({ action: "remove", subject: UID_C, members: [UID_A, UID_B, UID_C] }),
+      UID_A,
+    );
+    expect(removed).toEqual([UID_A, UID_B]);
+  });
+
+  it("drops the sender on a leave", () => {
+    expect(
+      applyAnnouncedChange([UID_A, UID_B, UID_C], envelope({ action: "leave" }), UID_B),
+    ).toEqual([UID_A, UID_C]);
+  });
+});
+
+describe("divergence is measured after the announced change", () => {
+  // A warning that fires on every legitimate operation is a warning people
+  // learn to ignore, so a normal add or removal must produce no divergence.
+  it("sees no divergence for a legitimate add", () => {
+    const mine = [UID_A, UID_B];
+    const theirs = [UID_A, UID_B, UID_C]; // sender already applied the add
+    const applied = applyAnnouncedChange(
+      mine,
+      { ...GROUP, action: "add", subject: UID_C, members: theirs },
+      UID_A,
+    );
+    const delta = rosterDelta(applied, theirs);
+    expect(delta.onlyMine).toEqual([]);
+    expect(delta.onlyTheirs).toEqual([]);
+  });
+
+  it("sees no divergence for a legitimate removal", () => {
+    const mine = [UID_A, UID_B, UID_C];
+    const theirs = [UID_A, UID_B];
+    const applied = applyAnnouncedChange(
+      mine,
+      { ...GROUP, action: "remove", subject: UID_C, members: theirs },
+      UID_A,
+    );
+    expect(rosterDelta(applied, theirs).onlyMine).toEqual([]);
+  });
+
+  it("still sees a divergence when a plain message carries a different roster", () => {
+    // The case the warning exists for: no change announced, but the rosters
+    // disagree anyway.
+    const mine = [UID_A, UID_B];
+    const theirs = [UID_A, UID_B, UID_C];
+    const applied = applyAnnouncedChange(mine, { ...GROUP, action: "msg", members: theirs }, UID_A);
+    expect(rosterDelta(applied, theirs).onlyTheirs).toEqual([UID_C]);
   });
 });

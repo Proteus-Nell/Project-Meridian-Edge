@@ -84,6 +84,7 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/group add <name> <who>", blurb: "add a member (everyone is told)" },
       { cmd: "/group remove <name> <who>", blurb: "remove a member (everyone is told)" },
       { cmd: "/group leave <name>", blurb: "leave a group" },
+      { cmd: "/group sync <name>", blurb: "add members you have no contact for, so you can reach them" },
       { cmd: "/group purge <name>", blurb: "delete a group and its local history" },
       { cmd: "/chat <alias|uid>", blurb: "open a conversation (a focused view that hides everything else)" },
       { cmd: "/home", blurb: "back to the home dashboard of all conversations" },

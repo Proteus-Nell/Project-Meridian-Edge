@@ -12,6 +12,7 @@
 // groups.ts for the full statement of what fan-out does and does not give you.
 
 import { formatUid, normalizeUid } from "../parser";
+import { doAdd } from "./contacts";
 import { findContactByUid, resolveContact } from "./context";
 import type { ExecutorInternals } from "./context";
 import {
@@ -206,20 +207,17 @@ export async function doGroupAdd(
     "security",
     `Added ${contact.alias} to '${group.name}'. Everyone in the group is being told, and they can see it was you. ${contact.alias} cannot read anything sent before now.`,
   );
-  // The new member gets the invite; everyone else gets the add notice.
-  const invite = await fanOutToGroup(
-    x,
-    { ...updated, members: [x.identity?.uid ?? "", contact.uid].filter((u) => u.length > 0) },
-    null,
-    "invite",
-    null,
-  );
+  // Both fan-outs advertise the FULL new roster; only the recipient list
+  // differs. The new member gets an invite (which is what creates the group on
+  // their device), everyone else gets the add notice.
+  const invite = await fanOutToGroup(x, updated, null, "invite", null, [contact.uid]);
   const notice = await fanOutToGroup(
     x,
-    { ...updated, members: updated.members.filter((uid) => uid !== contact.uid) },
+    updated,
     null,
     "add",
     contact.uid,
+    updated.members.filter((uid) => uid !== contact.uid),
   );
   reportFanOut(x, updated, {
     delivered: invite.delivered + notice.delivered,
@@ -253,15 +251,10 @@ export async function doGroupRemove(
     "security",
     `Removed ${label} from '${group.name}'. They keep every message they already received, and there is no group key to rotate, so removal stops future messages and nothing else.`,
   );
-  // The notice goes to the remaining members AND to the person removed, so they
-  // learn it from the group rather than from silence.
-  const result = await fanOutToGroup(
-    x,
-    { ...group, members: group.members },
-    null,
-    "remove",
-    uid,
-  );
+  // The notice advertises the roster WITHOUT the removed member, which is what
+  // every recipient will end up holding, but it is sent to the old roster so
+  // the person removed learns it from the group rather than from silence.
+  const result = await fanOutToGroup(x, updated, null, "remove", uid, group.members);
   reportFanOut(x, updated, result, "The removal notice");
 }
 
@@ -314,6 +307,59 @@ export async function doGroupOpen(x: ExecutorInternals, name: string): Promise<v
     x.renderer.event("warning", `You have left '${group.name}'. This is history only.`);
   }
   x.enqueueRender(() => renderGroupConversation(x, group));
+}
+
+/** `/group sync <name>`: add the group's members you have no contact entry for.
+ *
+ * This is the answer to a gap that is inherent to fan-out: you can only encrypt
+ * to someone you have a session with, and a session needs a pinned key, so a
+ * member you have never added is unreachable. Without this, a five-person group
+ * would need every member to add every other member by hand before anyone could
+ * talk to more than the person who invited them.
+ *
+ * It is a command rather than an automatic step, and that is the security
+ * decision. Adding a contact means accepting a UID's key on trust, and doing it
+ * silently would mean anyone who can invite you to a group can also write into
+ * your contact list. Here the roster is printed, the user runs the command, and
+ * the additions are theirs. Keys are still pinned through the ordinary path, so
+ * /verify and safety numbers apply to a synced contact exactly as to any
+ * other. */
+export async function doGroupSync(x: ExecutorInternals, name: string): Promise<void> {
+  if (!x.store.isUnlocked() || x.identity === null) {
+    x.renderer.error("E403");
+    return;
+  }
+  const group = await requireGroup(x, name);
+  if (group === null) {
+    return;
+  }
+  const self = x.identity.uid;
+  const missing = group.members.filter(
+    (uid) => uid !== self && findContactByUid(x, uid) === null,
+  );
+  if (missing.length === 0) {
+    x.renderer.event("info", `Every member of '${group.name}' is already in your contacts.`);
+    return;
+  }
+  x.renderer.event(
+    "security",
+    `'${group.name}' has ${missing.length} member(s) you have never added. Adding them saves their UID as a contact so you can send to them; their identity keys are pinned on first contact and are UNVERIFIED until you /verify each one.`,
+  );
+  for (const uid of missing) {
+    x.renderer.plain(`  ${formatUid(uid)}`);
+  }
+  const answer = await x.shell.readLine(`add ${missing.length} contact(s)? (yes/NO): `);
+  if (answer === null || answer.trim().toLowerCase() !== "yes") {
+    x.renderer.event("info", "Nothing was added.");
+    return;
+  }
+  for (const uid of missing) {
+    await doAdd(x, uid, undefined);
+  }
+  x.renderer.event(
+    "success",
+    `Added ${missing.length} member(s) of '${group.name}'. Run /verify on each before treating them as confirmed.`,
+  );
 }
 
 /** `/group purge <name>`: delete a group's stored history, and the group with

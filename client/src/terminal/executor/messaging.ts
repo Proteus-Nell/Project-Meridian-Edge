@@ -32,8 +32,10 @@ import { decodeAppPayload, encodeAppPayload } from "./payload";
 import type { GroupAction, GroupEnvelope } from "./payload";
 import {
   GROUP_MSG_PREFIX,
+  applyAnnouncedChange,
   loadGroup,
   saveGroup,
+  uniqueGroupName,
   warnOnRosterDivergence,
 } from "./groups";
 import type { Group } from "./groups";
@@ -100,12 +102,31 @@ export async function sendActiveMessage(
  * success: a group message that reached four of six people is not a message
  * that was sent, and the sender is the only person who can act on the
  * difference. */
+/** How many fan-out legs are in flight at once.
+ *
+ * Kept small on purpose. The legs are independent (each advances its own
+ * pairwise ratchet, and the store writes never touch the same key), so this is
+ * safe to raise, but the server's per-account send budget is 60 messages a
+ * minute and a burst is what a rate limiter is built to notice. Four keeps a
+ * large group responsive without looking like a flood. */
+const FAN_OUT_CONCURRENCY = 4;
+
+/** Fan one group message out as N independent pairwise messages.
+ *
+ * `recipients` and `roster` are separate parameters and that separation is
+ * load-bearing. Who receives a copy is not always who the group contains: the
+ * invite that goes to a newly added member has one recipient but must advertise
+ * the WHOLE roster, and a removal notice goes to the person being removed but
+ * must advertise the roster without them. Deriving one from the other, as an
+ * earlier version of this function did, silently told a new member their group
+ * had two people in it. */
 export async function fanOutToGroup(
   x: ExecutorInternals,
   group: Group,
   text: string | null,
   action: GroupAction,
   subject: string | null,
+  recipients?: readonly string[],
 ): Promise<{ delivered: number; failed: string[] }> {
   const envelope: GroupEnvelope = {
     gid: group.gid,
@@ -114,22 +135,18 @@ export async function fanOutToGroup(
     action,
     subject,
   };
-  const failed: string[] = [];
-  let delivered = 0;
-  for (const uid of group.members) {
-    if (uid === x.identity?.uid) {
-      continue; // never send to yourself
-    }
+  const targets = (recipients ?? group.members).filter((uid) => uid !== x.identity?.uid);
+
+  const send = async (uid: string): Promise<string | null> => {
     const contact = findContactByUid(x, uid);
     if (contact === null) {
-      // A member we have no contact entry for cannot be reached: there is no
-      // alias, no pinned key, and no session. Named rather than skipped.
-      failed.push(formatUid(uid));
-      continue;
+      // A member with no contact entry has no pinned key and no session, so
+      // there is nothing to encrypt to. Named rather than skipped, and
+      // /group sync is what resolves it.
+      return formatUid(uid);
     }
     if (contact.keyChangeBlocked) {
-      failed.push(`${contact.alias} (unacknowledged key change)`);
-      continue;
+      return `${contact.alias} (unacknowledged key change)`;
     }
     try {
       const stored = await x.store.getJson<StoredSession>(`session/${uid}`);
@@ -137,14 +154,23 @@ export async function fanOutToGroup(
         stored === null
           ? await sendFirstMessage(x, contact, text ?? "", envelope)
           : await sendRatchetMessage(x, contact, stored, text, { group: envelope });
-      if (ok) {
-        delivered += 1;
-      } else {
-        failed.push(contact.alias);
-      }
+      return ok ? null : contact.alias;
     } catch {
       // One member's network failure must not abandon the rest of the fan-out.
-      failed.push(contact.alias);
+      return contact.alias;
+    }
+  };
+
+  const failed: string[] = [];
+  let delivered = 0;
+  for (let i = 0; i < targets.length; i += FAN_OUT_CONCURRENCY) {
+    const batch = targets.slice(i, i + FAN_OUT_CONCURRENCY);
+    for (const result of await Promise.all(batch.map(send))) {
+      if (result === null) {
+        delivered += 1;
+      } else {
+        failed.push(result);
+      }
     }
   }
   return { delivered, failed };
@@ -697,9 +723,13 @@ export async function applyIncomingGroup(
       );
       return;
     }
+    // The name comes from the sender, and every /group subcommand addresses a
+    // group by name, so a collision with a group already here would decide
+    // where a later message goes. Disambiguate and say so.
+    const name = await uniqueGroupName(x, envelope.name);
     const group: Group = {
       gid: envelope.gid,
-      name: envelope.name,
+      name,
       members: envelope.members,
       createdAt: timestamp,
       active: true,
@@ -709,6 +739,12 @@ export async function applyIncomingGroup(
       "success",
       `${senderLabel} added you to the group '${group.name}' with ${group.members.length} members. /group info ${group.name} shows who is in it.`,
     );
+    if (name !== envelope.name) {
+      x.renderer.event(
+        "warning",
+        `They called it '${envelope.name}', which is the name of a group you already have, so this one is '${name}' here. Check with them that you are in the group you think you are.`,
+      );
+    }
     await noteUnknownMembers(x, group);
     if (text !== null) {
       await recordGroupMessage(x, group.gid, "in", senderLabel, text, timestamp);
@@ -717,9 +753,19 @@ export async function applyIncomingGroup(
     return;
   }
 
-  // The group is known. Any disagreement about who is in it gets said out loud
-  // before anything else is done with the message.
-  warnOnRosterDivergence(x, existing, envelope, senderLabel);
+  // The group is known. Work out the roster this device will hold once the
+  // ANNOUNCED change is applied, and only then compare against what the sender
+  // claims. Comparing before applying meant every legitimate add and removal
+  // raised a divergence warning, which is the fastest way to teach someone to
+  // ignore a security warning.
+  //
+  // Note what is NOT done here: the sender's roster is never adopted wholesale.
+  // This device applies only the delta the sender announced, to its own roster.
+  // A member who lies about the roster therefore cannot rewrite it with one
+  // message; the most they can do is disagree, and disagreement is what the
+  // warning below reports.
+  const applied = applyAnnouncedChange(existing.members, envelope, senderUid);
+  warnOnRosterDivergence(x, { ...existing, members: applied }, envelope, senderLabel);
 
   switch (envelope.action) {
     case "add":
@@ -728,18 +774,21 @@ export async function applyIncomingGroup(
       if (subject === null) {
         return;
       }
-      const members =
-        envelope.action === "add"
-          ? [...new Set([...existing.members, subject])].sort()
-          : existing.members.filter((uid) => uid !== subject);
       const subjectLabel = findContactByUid(x, subject)?.alias ?? formatUid(subject);
-      const updated: Group = { ...existing, members, active: subject === self && envelope.action === "remove" ? false : existing.active };
+      const leftBehind = envelope.action === "remove" && subject === self;
+      const updated: Group = {
+        ...existing,
+        members: applied,
+        active: leftBehind ? false : existing.active,
+      };
       await saveGroup(x, updated);
       x.renderer.event(
         "security",
         envelope.action === "add"
-          ? `${senderLabel} added ${subjectLabel} to '${existing.name}'. Anyone already in a group can add someone, and membership is not cryptographically agreed, so check unexpected additions with the others.`
-          : `${senderLabel} removed ${subjectLabel} from '${existing.name}'. They keep every message they already received; there is no group key to rotate.`,
+          ? `${senderLabel} added ${subjectLabel} to '${existing.name}'. Anyone already in a group can add someone, and membership is not cryptographically agreed, so check an unexpected addition with the others.`
+          : leftBehind
+            ? `${senderLabel} removed you from '${existing.name}'. Nothing more will arrive; the history stays on this device until you /group purge it.`
+            : `${senderLabel} removed ${subjectLabel} from '${existing.name}'. They keep every message they already received; there is no group key to rotate.`,
       );
       if (envelope.action === "add") {
         await noteUnknownMembers(x, updated);
@@ -747,8 +796,7 @@ export async function applyIncomingGroup(
       return;
     }
     case "leave": {
-      const members = existing.members.filter((uid) => uid !== senderUid);
-      await saveGroup(x, { ...existing, members });
+      await saveGroup(x, { ...existing, members: applied });
       x.renderer.event("info", `${senderLabel} left '${existing.name}'.`);
       return;
     }
@@ -763,6 +811,7 @@ export async function applyIncomingGroup(
     }
   }
 }
+
 
 /** Point out members this device has no contact entry for. They are in the
  * group and will receive everything sent to it, but nothing here has verified

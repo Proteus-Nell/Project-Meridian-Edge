@@ -137,6 +137,64 @@ export async function findGroupByName(
   return matches[0] ?? null;
 }
 
+/** A name for an incoming group that does not collide with one already here.
+ *
+ * Group names are local labels and every /group subcommand addresses a group by
+ * name, so two groups sharing one is not cosmetic: it decides where the next
+ * message goes. An invite carries a name the SENDER chose, which makes the
+ * collision reachable by anyone who can invite you. Someone who knows you have
+ * a group called "book club" could invite you to their own "book club" and
+ * hope a later /group open lands on theirs.
+ *
+ * Disambiguating rather than rejecting keeps the invite usable while making the
+ * duplicate impossible to confuse; the caller says out loud that it renamed. */
+export async function uniqueGroupName(x: ExecutorInternals, wanted: string): Promise<string> {
+  const taken = new Set((await loadGroups(x)).map((g) => g.name.toLowerCase()));
+  if (!taken.has(wanted.toLowerCase())) {
+    return wanted;
+  }
+  for (let n = 2; n < 100; n += 1) {
+    // Keep the result inside the name rules even when `wanted` is at the cap.
+    const suffix = `-${n}`;
+    const base = wanted.slice(0, 32 - suffix.length);
+    const candidate = `${base}${suffix}`;
+    if (!taken.has(candidate.toLowerCase()) && isGroupName(candidate)) {
+      return candidate;
+    }
+  }
+  return wanted;
+}
+
+/** The roster a device holds after applying ONLY the change a sender announced,
+ * to its own roster.
+ *
+ * This is the rule that keeps a lying member from rewriting your view of a
+ * group: the roster carried in their envelope is never copied over. It is
+ * compared against this result, and any difference is reported. Ordinary
+ * traffic announces no change at all, which is what makes a mismatch on a plain
+ * message worth warning about. */
+export function applyAnnouncedChange(
+  members: readonly string[],
+  envelope: GroupEnvelope,
+  senderUid: string,
+): string[] {
+  switch (envelope.action) {
+    case "add":
+      return envelope.subject === null
+        ? [...members]
+        : [...new Set([...members, envelope.subject])].sort();
+    case "remove":
+      return envelope.subject === null
+        ? [...members]
+        : members.filter((uid) => uid !== envelope.subject);
+    case "leave":
+      return members.filter((uid) => uid !== senderUid);
+    case "msg":
+    case "invite":
+      return [...members];
+  }
+}
+
 /** The difference between two rosters, as the two directions a human cares
  * about. Used to describe a divergence rather than just flag one. */
 export function rosterDelta(

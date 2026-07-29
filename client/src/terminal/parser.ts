@@ -80,6 +80,7 @@ export type Command =
   | { readonly name: "group-add"; readonly group: string; readonly target: string }
   | { readonly name: "group-remove"; readonly group: string; readonly target: string }
   | { readonly name: "group-leave"; readonly group: string }
+  | { readonly name: "group-sync"; readonly group: string }
   | { readonly name: "group-purge"; readonly group: string }
   | { readonly name: "chat"; readonly target: string; readonly message: string | undefined }
   | { readonly name: "home" }
@@ -155,7 +156,7 @@ export const COMMAND_USAGE = {
   rename: "/rename <alias|uid> <new-alias>",
   favourite: "/favourite <alias|uid> [off]  (favourites sort to the top of your contact list)",
   group:
-    "/group new <name> <contact>...  |  /group list  |  /group info <name>  |  /group open <name>  |  /group add <name> <contact>  |  /group remove <name> <contact>  |  /group leave <name>  |  /group purge <name>",
+    "/group new <name> <contact>...  |  /group list  |  /group info <name>  |  /group open <name>  |  /group add <name> <contact>  |  /group remove <name> <contact>  |  /group leave <name>  |  /group sync <name>  |  /group purge <name>",
   contacts: "/contacts",
   chat: "/chat <alias|uid> [message]",
   home: "/home",
@@ -806,7 +807,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         }
         return command({ name: "group-new", group: name, targets });
       }
-      if (sub === "info" || sub === "open" || sub === "leave" || sub === "purge") {
+      if (sub === "info" || sub === "open" || sub === "leave" || sub === "purge" || sub === "sync") {
         const name = named();
         if (name === null || rest.length !== 1) {
           return invalid(`expected a group name after '${sub}'`, usage);
@@ -818,6 +819,8 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
             return command({ name: "group-open", group: name });
           case "leave":
             return command({ name: "group-leave", group: name });
+          case "sync":
+            return command({ name: "group-sync", group: name });
           default:
             return command({ name: "group-purge", group: name });
         }
