@@ -9,7 +9,8 @@ import type { ExecutorInternals } from "./context";
 import { durationToSeconds, formatDuration } from "./format";
 import type { DeleteScope, Duration } from "../parser";
 import type { GlyphLevel } from "../renderer";
-import type { PurgeSettings, StoredMessage, StoredSession } from "./records";
+import type { PurgeSettings, StoredGroupMessage, StoredMessage, StoredSession } from "./records";
+import { GROUP_MSG_PREFIX } from "./groups";
 import { saveContacts } from "./context";
 import { sendRatchetMessage } from "./messaging";
 import { renderActiveConversation } from "./views";
@@ -47,14 +48,22 @@ export async function purgeExpired(x: ExecutorInternals): Promise<void> {
   }
   const cap = (await x.store.getJson<PurgeSettings>("settings/purge"))?.seconds ?? null;
   const now = x.now();
+  const expired = (record: { ts: number; tmrExpiresAt?: number }): boolean => {
+    const timerExpired = record.tmrExpiresAt !== undefined && now >= record.tmrExpiresAt;
+    return timerExpired || (cap !== null && now >= record.ts + cap * 1000);
+  };
   for (const msgKey of await x.store.listKeys("msg/")) {
     const record = await x.store.getJson<StoredMessage>(msgKey);
-    if (record === null) {
-      continue;
+    if (record !== null && expired(record)) {
+      await x.store.deleteKey(msgKey);
     }
-    const timerExpired = record.tmrExpiresAt !== undefined && now >= record.tmrExpiresAt;
-    const capExpired = cap !== null && now >= record.ts + cap * 1000;
-    if (timerExpired || capExpired) {
+  }
+  // Group history lives in its own namespace and would otherwise escape the
+  // retention cap entirely, which would make the cap quietly untrue rather
+  // than merely incomplete.
+  for (const msgKey of await x.store.listKeys(GROUP_MSG_PREFIX)) {
+    const record = await x.store.getJson<StoredGroupMessage>(msgKey);
+    if (record !== null && expired(record)) {
       await x.store.deleteKey(msgKey);
     }
   }

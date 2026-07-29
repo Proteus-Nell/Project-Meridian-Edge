@@ -17,6 +17,14 @@
   /* The medallion's two colors (spec requirement 2), derived from the scheme. */
   --emblem: var(--accent);
   --emblem-dim: color-mix(in srgb, var(--accent) 55%, var(--bg));
+
+  /* Monospace stack and base size (/settings font, /settings fontsize).
+     paint.ts::applyFontVars overwrites both from the persisted prefs, choosing
+     the stack by name from a fixed allowlist. Every stack is local and ends in
+     the generic `monospace`: nothing here is ever fetched from a remote origin,
+     which the CSP forbids and which would be a privacy beacon besides. */
+  --font-mono: "Cascadia Mono", "Fira Mono", Menlo, Consolas, monospace;
+  --font-size: 15px;
 }
 
 html,
@@ -26,7 +34,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "Cascadia Mono", "Fira Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 /* App shell: the transcript fills the space above a fixed footer that holds the
@@ -184,6 +192,9 @@ body.is-tx .medallion-pulse {
   }
 }
 
+/* Reduced motion, from either direction: the OS preference, or the in-app
+   switch (/settings a11y motion on) for someone whose system setting does not
+   reflect what they need right now. Both resolve to the same rules. */
 @media (prefers-reduced-motion: reduce) {
   .emblem-svg,
   body.is-tx .emblem-svg {
@@ -192,6 +203,16 @@ body.is-tx .medallion-pulse {
   body.is-tx .medallion-pulse {
     animation: none;
   }
+}
+
+body.a11y-reduce-motion .emblem-svg,
+body.a11y-reduce-motion.is-tx .emblem-svg,
+body.a11y-reduce-motion.is-tx .medallion-pulse {
+  animation: none;
+}
+
+body.a11y-reduce-motion .status-event {
+  transition: none;
 }
 
 /* Scanlines: a whisper of CRT texture over the transcript (text-derived so it

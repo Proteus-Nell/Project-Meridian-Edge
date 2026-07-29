@@ -11,10 +11,11 @@ import type { WsClient } from "../../net/ws";
 import { DEFAULT_HELP_COLUMNS } from "../help";
 import type { Renderer } from "../renderer";
 import type { ShellIO } from "../shell";
-import type { EmblemName, ResolvedScheme } from "../theme";
+import type { AccessibilityPrefs, EmblemName, FontName, ResolvedScheme } from "../theme";
 import { formatDuration } from "./format";
 import { normalizeContact } from "./records";
 import type { Contact, Identity } from "./records";
+import type { Group } from "./groups";
 import { normalizeUid } from "../parser";
 
 /** Animation state of the background emblem medallion: paused when idle
@@ -41,6 +42,13 @@ export interface UiChrome {
   setEmblemState(state: EmblemState): void;
   applyScheme(scheme: ResolvedScheme): void;
   applyEmblem(name: EmblemName): void;
+  /** Switch the monospace stack and size on both terminals and the DOM. Cell
+   * metrics change, so the implementation must re-fit afterwards or the column
+   * count silently goes stale. */
+  applyFont(font: FontName, fontSize: number): void;
+  /** Apply the accessibility switches: xterm's screen-reader live region and
+   * the forced reduced-motion class. */
+  applyAccessibility(prefs: AccessibilityPrefs): void;
   /** Current width of the transcript in character cells, so output that has to
    * be laid out (/help) can fit the screen it is printed on instead of assuming
    * a desktop terminal. */
@@ -58,6 +66,8 @@ export const NULL_CHROME: UiChrome = {
   setEmblemState() {},
   applyScheme() {},
   applyEmblem() {},
+  applyFont() {},
+  applyAccessibility() {},
   columns: () => DEFAULT_HELP_COLUMNS,
 };
 
@@ -84,6 +94,10 @@ export interface ExecutorInternals {
   /** The conversation the terminal is focused on. null = the home
    * view. Set via /chat; cleared by /home. */
   active: Contact | null;
+  /** The group conversation the terminal is focused on, if any. Held beside
+   * `active` rather than folded into it: at most one of the two is ever set,
+   * and every existing one-to-one code path keeps reading `active` unchanged. */
+  activeGroup: Group | null;
   /** Per-contact (by uid) count of messages that arrived while their
    * conversation was not the focused view. In-memory only. */
   unread: Map<string, number>;

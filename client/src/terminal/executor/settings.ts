@@ -6,10 +6,15 @@
 
 import type { DisplayPrefs, ThemePrefs } from "../../crypto/store";
 import {
+  FONT_BLURBS,
+  FONT_NAMES,
   FORK_SUFFIX,
   MAX_CUSTOM_SCHEMES,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
   SCHEME_NAMES,
   baseSchemeOf,
+  clampFontSize,
   findCustomScheme,
   isSchemeName,
   isValidCustomSchemeName,
@@ -17,7 +22,15 @@ import {
   schemeColorsOf,
   schemeExists,
 } from "../theme";
-import type { ColorSlot, CustomScheme, EmblemName, EventColorSlot } from "../theme";
+import type {
+  AccessibilityPrefs,
+  ColorSlot,
+  CustomScheme,
+  EmblemName,
+  EventColorSlot,
+  FontName,
+} from "../theme";
+import type { A11yFeature } from "../parser";
 import type { ThemeElement, Weekday } from "../parser";
 import type { ExecutorInternals } from "./context";
 import { DEFAULT_ROTATION } from "./records";
@@ -215,6 +228,72 @@ export async function doSettingsSchemeList(x: ExecutorInternals): Promise<void> 
   }
   x.renderer.plain(
     `  (${prefs.customSchemes.length}/${MAX_CUSTOM_SCHEMES} custom · /settings scheme new <name> to add one)`,
+  );
+}
+
+/** `/settings font <name>`: switch the monospace stack. Every option is
+ * monospace by necessity, not preference: the transcript is laid out in fixed
+ * cells and every aligned listing in the app is built from padded columns. */
+export async function doSettingsFont(x: ExecutorInternals, font: FontName): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  await x.store.setDisplayPrefs({ ...prefs, font });
+  x.chrome.applyFont(font, prefs.fontSize);
+  x.renderer.event("success", `Font set to '${font}': ${FONT_BLURBS[font]}.`);
+}
+
+/** `/settings font list`: the available stacks, marking the active one. */
+export async function doSettingsFontList(x: ExecutorInternals): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  x.renderer.event("info", "fonts (all monospace, all local, none fetched from anywhere):");
+  const width = Math.max(...FONT_NAMES.map((name) => name.length));
+  for (const name of FONT_NAMES) {
+    const mark = name === prefs.font ? "*" : " ";
+    x.renderer.plain(`  ${mark} ${name.padEnd(width)}  ${FONT_BLURBS[name]}`);
+  }
+  x.renderer.plain(`  (size ${prefs.fontSize}px · /settings fontsize <${MIN_FONT_SIZE}-${MAX_FONT_SIZE}>)`);
+}
+
+/** `/settings fontsize <n>`: scale both terminals. */
+export async function doSettingsFontSize(x: ExecutorInternals, size: number): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  const fontSize = clampFontSize(size);
+  await x.store.setDisplayPrefs({ ...prefs, fontSize });
+  x.chrome.applyFont(prefs.font, fontSize);
+  x.renderer.event(
+    "success",
+    `Font size set to ${fontSize}px. The terminal was re-fitted to the new cell size.`,
+  );
+}
+
+/** `/settings a11y <screenreader|motion> <on|off>`. Both live unencrypted with
+ * the other display preferences, so they are already in effect at the lock
+ * screen, which is where someone who needs them meets the app first. */
+export async function doSettingsA11y(
+  x: ExecutorInternals,
+  feature: A11yFeature,
+  enabled: boolean,
+): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  const accessibility: AccessibilityPrefs =
+    feature === "screenreader"
+      ? { ...prefs.accessibility, screenReader: enabled }
+      : { ...prefs.accessibility, reduceMotion: enabled };
+  await x.store.setDisplayPrefs({ ...prefs, accessibility });
+  x.chrome.applyAccessibility(accessibility);
+  if (feature === "screenreader") {
+    x.renderer.event(
+      "success",
+      enabled
+        ? "Screen reader mode on. The terminal now mirrors its output into an ARIA live region, which costs some rendering speed."
+        : "Screen reader mode off.",
+    );
+    return;
+  }
+  x.renderer.event(
+    "success",
+    enabled
+      ? "Reduced motion on. The medallion no longer spins or pulses."
+      : "Reduced motion off. Your system setting still applies on its own.",
   );
 }
 

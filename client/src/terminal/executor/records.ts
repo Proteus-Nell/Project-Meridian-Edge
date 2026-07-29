@@ -129,6 +129,19 @@ export interface StoredMessage {
   readonly mid?: string;
 }
 
+/** A stored group message, under `gmsg/<gid>/<ts>`. Unlike a one-to-one record
+ * it keeps the sender's label, because a group transcript has to say who is
+ * speaking. There is no `mid`: cooperative /delete is a pairwise directive and
+ * a group has no shared transcript to reconcile, which is one of the honest
+ * limitations of fan-out groups (see executor/groups.ts). */
+export interface StoredGroupMessage {
+  readonly dir: "in" | "out";
+  readonly sender: string;
+  readonly text: string;
+  readonly ts: number;
+  readonly tmrExpiresAt?: number;
+}
+
 /** Local retention cap: personal, never transmitted, may be
  * stricter than the mutual timer. null = off. */
 export interface PurgeSettings {

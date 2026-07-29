@@ -5,9 +5,9 @@
 // (`COMMAND_USAGE`) the parser gates on, so suggestions can never name a command
 // the parser would reject.
 
-import { COMMAND_USAGE, WEEKDAYS, isCommandWord } from "./parser";
+import { A11Y_FEATURES, COMMAND_USAGE, WEEKDAYS, isCommandWord } from "./parser";
 import type { CommandWord } from "./parser";
-import { EVENT_COLOR_SLOTS, SCHEME_NAMES } from "./theme";
+import { EVENT_COLOR_SLOTS, FONT_NAMES, SCHEME_NAMES } from "./theme";
 
 // Resolved lazily, not at module load: parser.ts imports this module and this
 // module imports parser.ts, so touching COMMAND_USAGE at top level would read it
@@ -62,7 +62,19 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
   switch (word) {
     case "settings": {
       if (n === 0) {
-        return ["rotation", "notify", "mask", "theme", "scheme", "emblem", "color", "trust"];
+        return [
+          "rotation",
+          "notify",
+          "mask",
+          "theme",
+          "scheme",
+          "emblem",
+          "color",
+          "trust",
+          "font",
+          "fontsize",
+          "a11y",
+        ];
       }
       switch (first) {
         case "rotation":
@@ -85,6 +97,12 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           return n === 1 ? [...SCHEME_NAMES, "new", "delete", "list"] : [];
         case "emblem":
           return n === 1 ? ["globe", "tree"] : [];
+        case "font":
+          return n === 1 ? [...FONT_NAMES, "list"] : [];
+        case "a11y":
+          if (n === 1) return [...A11Y_FEATURES];
+          if (n === 2) return ["on", "off"];
+          return [];
         case "color":
           if (n === 1) {
             return ["accent", "background", "panel", "text", "muted", "event", "reset"];

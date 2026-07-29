@@ -5,8 +5,20 @@
 
 import { CROCKFORD_ALPHABET, RECOVERY_CODE_CHARS, UID_CHARS } from "../crypto/constants";
 import { suggestCommand } from "./suggest";
-import { isColorSlot, isEmblemName, isEventColorSlot, normalizeHex } from "./theme";
-import type { ColorSlot, EmblemName, EventColorSlot } from "./theme";
+import {
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
+  isColorSlot,
+  isEmblemName,
+  isEventColorSlot,
+  isFontName,
+  normalizeHex,
+} from "./theme";
+import type { ColorSlot, EmblemName, EventColorSlot, FontName } from "./theme";
+
+/** The accessibility switches `/settings a11y` can toggle. */
+export const A11Y_FEATURES = ["screenreader", "motion"] as const;
+export type A11yFeature = (typeof A11Y_FEATURES)[number];
 
 export type DurationUnit = "m" | "h" | "d" | "w";
 
@@ -61,6 +73,14 @@ export type Command =
   | { readonly name: "remove"; readonly target: RemoveTarget; readonly purge: boolean }
   | { readonly name: "rename"; readonly target: string; readonly alias: string }
   | { readonly name: "favourite"; readonly target: string; readonly on: boolean }
+  | { readonly name: "group-new"; readonly group: string; readonly targets: readonly string[] }
+  | { readonly name: "group-list" }
+  | { readonly name: "group-info"; readonly group: string }
+  | { readonly name: "group-open"; readonly group: string }
+  | { readonly name: "group-add"; readonly group: string; readonly target: string }
+  | { readonly name: "group-remove"; readonly group: string; readonly target: string }
+  | { readonly name: "group-leave"; readonly group: string }
+  | { readonly name: "group-purge"; readonly group: string }
   | { readonly name: "chat"; readonly target: string; readonly message: string | undefined }
   | { readonly name: "home" }
   | { readonly name: "return" }
@@ -84,6 +104,10 @@ export type Command =
   | { readonly name: "settings-scheme-new"; readonly scheme: string }
   | { readonly name: "settings-scheme-delete"; readonly scheme: string }
   | { readonly name: "settings-scheme-list" }
+  | { readonly name: "settings-font"; readonly font: FontName }
+  | { readonly name: "settings-font-list" }
+  | { readonly name: "settings-fontsize"; readonly size: number }
+  | { readonly name: "settings-a11y"; readonly feature: A11yFeature; readonly enabled: boolean }
   | { readonly name: "settings-emblem"; readonly emblem: EmblemName }
   | { readonly name: "settings-color"; readonly slot: ColorSlot; readonly hex: string }
   | { readonly name: "settings-color-event"; readonly slot: EventColorSlot; readonly hex: string }
@@ -130,6 +154,8 @@ export const COMMAND_USAGE = {
   remove: "/remove <alias|uid> [purge]  |  /remove all [purge]  (purge = also delete message history)",
   rename: "/rename <alias|uid> <new-alias>",
   favourite: "/favourite <alias|uid> [off]  (favourites sort to the top of your contact list)",
+  group:
+    "/group new <name> <contact>...  |  /group list  |  /group info <name>  |  /group open <name>  |  /group add <name> <contact>  |  /group remove <name> <contact>  |  /group leave <name>  |  /group purge <name>",
   contacts: "/contacts",
   chat: "/chat <alias|uid> [message]",
   home: "/home",
@@ -142,7 +168,7 @@ export const COMMAND_USAGE = {
   delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
   rotate: "/rotate passphrase",
   settings:
-    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset",
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset  |  /settings font <name>  |  /settings font list  |  /settings fontsize <10-28>  |  /settings a11y <screenreader|motion> <on|off>",
   duress:
     "/duress set  |  /duress off  |  /duress status  (a passphrase that silently destroys this device and the account)",
   keys: "/keys status  |  /keys refill",
@@ -202,6 +228,11 @@ const SUITE_RE = /^[A-Za-z0-9_-]{1,16}$/;
  * rules); this only keeps junk - whitespace, escapes, absurd lengths - from
  * travelling any further. */
 const SCHEME_NAME_RE = /^[A-Za-z][A-Za-z0-9-]{0,23}$/;
+/** A group name as typed on the command line: one whitespace-free token, so
+ * `/group add <name> <contact>` never has to guess where the name ends. The
+ * stored form allows spaces (payload.ts), which arrive from a peer rather than
+ * from this grammar. */
+const GROUP_NAME_TOKEN_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
 /** Canonicalize a UID: strip dashes, uppercase, Crockford ambiguity mapping
  * (O→0, I/L→1). Returns null unless exactly 26 canonical chars remain. */
@@ -617,6 +648,42 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         }
         return invalid("expected a scheme name, or 'list', 'new <name>', 'delete <name>'", usage);
       }
+      if (sub === "font") {
+        if (args[1] === "list" && args.length === 2) {
+          return command({ name: "settings-font-list" });
+        }
+        const value = args[1];
+        if (value !== undefined && isFontName(value) && args.length === 2) {
+          return command({ name: "settings-font", font: value });
+        }
+        return invalid(
+          "expected a font name, or 'list' to see them (all are monospace)",
+          usage,
+        );
+      }
+      if (sub === "fontsize") {
+        const value = args[1];
+        if (args.length === 2 && value !== undefined && /^\d{1,3}$/.test(value)) {
+          const size = Number(value);
+          if (size >= MIN_FONT_SIZE && size <= MAX_FONT_SIZE) {
+            return command({ name: "settings-fontsize", size });
+          }
+        }
+        return invalid(`expected a size from ${MIN_FONT_SIZE} to ${MAX_FONT_SIZE}`, usage);
+      }
+      if (sub === "a11y") {
+        const feature = args[1];
+        const value = args[2];
+        const known = (A11Y_FEATURES as readonly string[]).includes(feature ?? "");
+        if (known && (value === "on" || value === "off") && args.length === 3) {
+          return command({
+            name: "settings-a11y",
+            feature: feature as A11yFeature,
+            enabled: value === "on",
+          });
+        }
+        return invalid("expected <screenreader|motion> <on|off>", usage);
+      }
       if (sub === "emblem") {
         const value = args[1];
         if (value !== undefined && isEmblemName(value) && args.length === 2) {
@@ -669,7 +736,7 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         );
       }
       return invalid(
-        "expected 'rotation', 'notify', 'mask', 'trust', 'theme', 'scheme', 'emblem', or 'color'",
+        "expected 'rotation', 'notify', 'mask', 'trust', 'theme', 'scheme', 'color', 'font', 'fontsize', 'a11y', or 'emblem'",
         usage,
       );
     }
@@ -705,6 +772,76 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
         return invalid("not a valid alias or UID", usage);
       }
       return command({ name: "favourite", target, on });
+    }
+    case "group": {
+      // Group names may contain spaces, which would make `/group add my team
+      // bob` ambiguous. Rather than guess, the grammar takes the name as a
+      // single token everywhere; a name with spaces is addressed by quoting it
+      // out of the picture at creation time (GROUP_NAME_TOKEN_RE excludes
+      // spaces, so a typed name is always one token).
+      const sub = args[0];
+      const rest = args.slice(1);
+      const groupToken = rest[0];
+      const named = (): string | null =>
+        groupToken !== undefined && GROUP_NAME_TOKEN_RE.test(groupToken) ? groupToken : null;
+
+      if (sub === "list") {
+        if (args.length !== 1) {
+          return invalid("/group list takes no arguments", usage);
+        }
+        return command({ name: "group-list" });
+      }
+      if (sub === "new") {
+        const name = named();
+        if (name === null || rest.length < 2) {
+          return invalid("expected a group name and at least one contact", usage);
+        }
+        const targets: string[] = [];
+        for (const token of rest.slice(1)) {
+          const target = normalizeUid(token) ?? parseAlias(token);
+          if (target === null) {
+            return invalid("every member must be an alias or a UID", usage);
+          }
+          targets.push(target);
+        }
+        return command({ name: "group-new", group: name, targets });
+      }
+      if (sub === "info" || sub === "open" || sub === "leave" || sub === "purge") {
+        const name = named();
+        if (name === null || rest.length !== 1) {
+          return invalid(`expected a group name after '${sub}'`, usage);
+        }
+        switch (sub) {
+          case "info":
+            return command({ name: "group-info", group: name });
+          case "open":
+            return command({ name: "group-open", group: name });
+          case "leave":
+            return command({ name: "group-leave", group: name });
+          default:
+            return command({ name: "group-purge", group: name });
+        }
+      }
+      if (sub === "add" || sub === "remove") {
+        const name = named();
+        const targetToken = rest[1];
+        if (name === null || rest.length !== 2 || targetToken === undefined) {
+          return invalid(`expected a group name and a contact after '${sub}'`, usage);
+        }
+        const target = normalizeUid(targetToken) ?? parseAlias(targetToken);
+        if (target === null) {
+          return invalid("not a valid alias or UID", usage);
+        }
+        return command(
+          sub === "add"
+            ? { name: "group-add", group: name, target }
+            : { name: "group-remove", group: name, target },
+        );
+      }
+      return invalid(
+        "expected 'new', 'list', 'info', 'open', 'add', 'remove', 'leave', or 'purge'",
+        usage,
+      );
     }
     case "keys": {
       const sub = args[0];

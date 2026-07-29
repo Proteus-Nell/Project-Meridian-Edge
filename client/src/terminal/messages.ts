@@ -111,6 +111,20 @@ export const ERRORS = {
   E511: () =>
     "Someone is trying to start a conversation using sign-up keys this device no longer has, which usually follows a /recover or /wipe. Ask them to /remove you and message again so their app picks up your current keys.",
   E512: () => "A damaged or tampered message was discarded.",
+  E513: () =>
+    "A group message was discarded because it did not add up: it came from someone who is not a contact, or its member list did not include both you and the sender.",
+
+  // E514-E519 cover the /group surface.
+  E514: (name: string) =>
+    `There is no group called '${name}' on this device. Run /group list to see the ones you have.`,
+  E515: (name: string) =>
+    `'${name}' cannot be used as a group name. Use 1 to 32 characters: letters, digits, spaces, underscores or hyphens.`,
+  E516: (name: string) =>
+    `You already have a group called '${name}'. Choose another name so the two can be told apart.`,
+  E517: () => "A group needs at least one other member. Name the contacts to include.",
+  E518: (max: number) =>
+    `A group can hold at most ${max} members. Every message is sent separately to each one, so the limit keeps a single message from becoming a flood.`,
+  E519: (target: string, group: string) => `${target} is not a member of '${group}'.`,
 
   // E599 the last-resort catch-all for anything unclassified
   E599: () => "Something went wrong. Please try again.",

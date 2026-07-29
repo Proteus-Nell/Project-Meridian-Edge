@@ -113,9 +113,14 @@ function unpadDuressPayload(padded: Uint8Array): Uint8Array | null {
 
 import {
   COLOR_SLOTS,
+  DEFAULT_ACCESSIBILITY,
+  DEFAULT_FONT,
+  DEFAULT_FONT_SIZE,
   DEFAULT_SCHEME,
   FORK_SUFFIX,
+  clampFontSize,
   isEmblemName,
+  isFontName,
   isValidCustomSchemeName,
   isSchemeName,
   normalizeHex,
@@ -123,7 +128,13 @@ import {
   schemeColorsOf,
   schemeExists,
 } from "../terminal/theme";
-import type { CustomScheme, EmblemName, SchemeColors } from "../terminal/theme";
+import type {
+  AccessibilityPrefs,
+  CustomScheme,
+  EmblemName,
+  FontName,
+  SchemeColors,
+} from "../terminal/theme";
 
 /** Toggleable visual atmosphere layers (/settings theme). Purely cosmetic. */
 export interface ThemePrefs {
@@ -146,6 +157,12 @@ export interface DisplayPrefs {
   readonly scheme: string;
   /** Medallion glyph (/settings emblem). */
   readonly emblemGlyph: EmblemName;
+  /** Monospace stack (/settings font) and its size in px (/settings fontsize).
+   * A name from the fixed allowlist, never a raw family string. */
+  readonly font: FontName;
+  readonly fontSize: number;
+  /** Opt-in accessibility switches (/settings a11y). */
+  readonly accessibility: AccessibilityPrefs;
   /** User-defined schemes (/settings scheme new, /settings color). An array,
    * not a name-keyed object: this record is untrusted input and a keyed one
    * would give a hand-written "__proto__" entry a path into Object.prototype.
@@ -165,6 +182,9 @@ const DEFAULT_PREFS: DisplayPrefs = {
   theme: DEFAULT_THEME,
   scheme: DEFAULT_SCHEME,
   emblemGlyph: "globe",
+  font: DEFAULT_FONT,
+  fontSize: DEFAULT_FONT_SIZE,
+  accessibility: DEFAULT_ACCESSIBILITY,
   customSchemes: [],
 };
 
@@ -283,6 +303,9 @@ export class KeyStore {
           theme?: Partial<Record<keyof ThemePrefs, unknown>>;
           scheme?: unknown;
           emblemGlyph?: unknown;
+          font?: unknown;
+          fontSize?: unknown;
+          accessibility?: Partial<Record<keyof AccessibilityPrefs, unknown>>;
           customSchemes?: unknown;
           /** Retired in favour of customSchemes; still read once, to migrate. */
           colorOverrides?: Record<string, unknown>;
@@ -313,6 +336,20 @@ export class KeyStore {
         ({ scheme, customSchemes } = migrated);
       }
     }
+    const font =
+      typeof raw.font === "string" && isFontName(raw.font) ? raw.font : DEFAULT_FONT;
+    const fontSize =
+      typeof raw.fontSize === "number" ? clampFontSize(raw.fontSize) : DEFAULT_FONT_SIZE;
+    const accessibility: AccessibilityPrefs = {
+      screenReader:
+        typeof raw.accessibility?.screenReader === "boolean"
+          ? raw.accessibility.screenReader
+          : DEFAULT_ACCESSIBILITY.screenReader,
+      reduceMotion:
+        typeof raw.accessibility?.reduceMotion === "boolean"
+          ? raw.accessibility.reduceMotion
+          : DEFAULT_ACCESSIBILITY.reduceMotion,
+    };
     // A scheme that no longer exists (deleted, or dropped by validation) must
     // not leave the page unpainted.
     return {
@@ -320,6 +357,9 @@ export class KeyStore {
       theme,
       scheme: schemeExists(scheme, customSchemes) ? scheme : DEFAULT_SCHEME,
       emblemGlyph,
+      font,
+      fontSize,
+      accessibility,
       customSchemes,
     };
   }

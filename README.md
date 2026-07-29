@@ -212,6 +212,68 @@ before. `/ack <alias>` clears the block so you can act on it; sending stays
 honestly marked `UNVERIFIED` until you `/verify` the new key and `/verified` it
 again.
 
+### Groups
+
+| Command | What it does |
+|---|---|
+| `/group new <name> <contact>...` | Create a group and invite the named contacts |
+| `/group list` | Every group on this device |
+| `/group open <name>` | Focus a group; typed text goes to all of it |
+| `/group info <name>` | The full roster, each member's trust state, and the member-list fingerprint |
+| `/group add <name> <contact>` | Add a member. Everyone is told, and they can see it was you |
+| `/group remove <name> <contact>` | Remove a member. Everyone is told, including them |
+| `/group leave <name>` | Leave, telling the others |
+| `/group purge <name>` | Delete the group and its local history from this device |
+
+**How it works, and why.** A group message is not a new kind of message. It is N
+ordinary messages, each encrypted to one member over the KEM double-ratchet
+already established with them, carrying a small group envelope inside the
+encrypted payload. There is no group key. The server stores no group object and
+sees only what it always sees: opaque envelopes addressed to individual
+recipients.
+
+That buys three things for free. Forward secrecy and post-compromise security
+are the pairwise ratchet's, unchanged. There is no group key to leak or to
+rotate on removal. And sender authentication is inherited: every envelope is
+authenticated by its own pairwise ratchet, so **no member can forge a message as
+another member**. The cost is O(n) bandwidth per message, which is the right
+trade at the scale this app operates at.
+
+*Why not sender keys:* they save bandwidth but add a key-distribution mechanism,
+weaken post-compromise security (a leaked sender key exposes everything from
+that sender until a rekey), and turn removal into a rekey that is easy to get
+wrong. *Why not MLS:* it is the correct answer at scale and the documented
+upgrade path, but TreeKEM is a protocol stack in its own right and would dwarf
+this codebase.
+
+**What this does not give you.** Two limitations are real, and neither is
+papered over in the UI:
+
+1. **Membership is not cryptographically agreed.** Nothing signs the roster, so
+   a malicious member can show different member lists to different people. This
+   design does not prevent that; it makes it *detectable*. Every message carries
+   the sender's full roster, and a recipient whose own roster disagrees gets a
+   `[SECURITY]` warning naming exactly who was added or dropped. `/group info`
+   prints a short fingerprint of your roster to read out to the others. That
+   fingerprint is a convenience for comparing lists, **not** a proof that a list
+   is right, and the app says so on screen.
+2. **There is no transcript consistency.** A member can send different text to
+   different members. Fan-out cannot fix this and neither can sender keys; only
+   a protocol with a shared ordered transcript can.
+
+Smaller ones, stated rather than discovered: removing someone stops future
+messages and **takes back nothing** they already received; a group discloses
+every member's UID to every other member; a fan-out of N sends in quick
+succession lets the server infer that those N accounts are probably a group,
+which no cheap countermeasure honestly fixes; and group history is swept by
+`/purge set` alongside one-to-one history, so the retention cap stays true.
+
+Groups cannot be forced onto you. A group message from someone who is not a
+contact is discarded (`E513`), the contact-request gate applies to groups
+exactly as it does to direct messages, and a group is only created on an
+explicit invite that lists you. Ordinary traffic for a group this device does
+not know is reported, never silently joined.
+
 ### Message lifecycle
 
 | Command | What it does |
@@ -237,6 +299,31 @@ erasure.
 | `/settings color reset` | Put your scheme's colors and markers back to its base preset's |
 | `/settings emblem <globe\|tree>` | Medallion glyph |
 | `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
+| `/settings font <name>` | Monospace stack: `default`, `system`, `classic`, `wide`, `compact` |
+| `/settings font list` | The stacks, with what each is for |
+| `/settings fontsize <10-28>` | Terminal size in px; the terminal re-fits itself |
+| `/settings a11y screenreader <on\|off>` | Mirror terminal output into an ARIA live region |
+| `/settings a11y motion <on\|off>` | Force reduced motion without changing your OS setting |
+
+**Fonts are monospace-only**, and that is a constraint rather than a taste:
+xterm lays the transcript out in fixed cells, and every aligned listing here is
+built from padded columns. Each option is a stack of *local* faces ending in the
+generic `monospace`. Nothing is ever fetched from a remote origin: the CSP
+forbids it, and a webfont is a request to someone else's server on every load.
+The stack is chosen by name from a fixed allowlist, so no stored string reaches
+a CSS declaration.
+
+**Accessibility.** The `contrast` scheme is a preset whose every slot, including
+`muted` and the notification markers, clears WCAG AA against its own background;
+the other schemes deliberately let `muted` recede, which is exactly what fails
+for a low-vision reader. The footer status strip is a live region, so every
+event is announced as a short sentence without following the scrolling
+transcript, and a `[SECURITY]` event escalates to assertive so it interrupts
+rather than queueing. `screenreader` turns on xterm's own live-region mirror; it
+is off by default for the rendering cost, not for any exposure reason, since the
+same text is already in the DOM as terminal cells. All of these live with the
+unencrypted display preferences, so they apply to the lock screen, which is
+where someone who needs them meets the app first.
 
 **Notification markers are yours too.** The `[✓]` `[!]` `[*]` `[E###]` prefixes
 in front of every event line, the `[alias]` on an incoming message, and the

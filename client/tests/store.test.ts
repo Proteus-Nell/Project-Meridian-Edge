@@ -16,6 +16,9 @@ const BASE = {
   theme: { emblem: true, scanlines: true, vignette: true, dock: true },
   scheme: "dark",
   emblemGlyph: "globe",
+  font: "default",
+  fontSize: 15,
+  accessibility: { screenReader: false, reduceMotion: false },
   customSchemes: [],
 } as const;
 

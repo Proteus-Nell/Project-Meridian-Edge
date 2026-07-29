@@ -24,6 +24,18 @@ import { doBench } from "./bench";
 import { doAdd, doContacts, doFavourite, doRemove, doRename } from "./contacts";
 import { doDuressOff, doDuressSet, doDuressStatus, maybeTriggerDuress } from "./duress";
 import {
+  doGroupAdd,
+  doGroupInfo,
+  doGroupLeave,
+  doGroupList,
+  doGroupNew,
+  doGroupOpen,
+  doGroupPurge,
+  doGroupRemove,
+  sendGroupText,
+} from "./group-commands";
+import type { Group } from "./groups";
+import {
   doKeysRefill,
   doKeysStatus,
   doLock,
@@ -40,10 +52,14 @@ import {
 import { doDelete, doPurgeNow, doPurgeSet, doTimer } from "./lifecycle";
 import { processEnvelope, sendActiveMessage } from "./messaging";
 import {
+  doSettingsA11y,
   doSettingsColor,
   doSettingsColorEvent,
   doSettingsColorReset,
   doSettingsEmblem,
+  doSettingsFont,
+  doSettingsFontList,
+  doSettingsFontSize,
   doSettingsMask,
   doSettingsRotation,
   doSettingsScheme,
@@ -66,6 +82,7 @@ export class Executor implements ExecutorInternals {
   token: string | null = null;
   contacts = new Map<string, Contact>();
   active: Contact | null = null;
+  activeGroup: Group | null = null;
   unread = new Map<string, number>();
   previousView: ViewRef | null = null;
   autoTrust = true;
@@ -112,6 +129,8 @@ export class Executor implements ExecutorInternals {
       this.chrome.applyTheme(prefs.theme);
       this.chrome.applyScheme(resolveScheme(prefs.scheme, prefs.customSchemes));
       this.chrome.applyEmblem(prefs.emblemGlyph);
+      this.chrome.applyFont(prefs.font, prefs.fontSize);
+      this.chrome.applyAccessibility(prefs.accessibility);
     } catch {
       // ignore: defaults remain
     }
@@ -154,6 +173,11 @@ export class Executor implements ExecutorInternals {
   }
 
   private handleMessage(text: string): void {
+    if (this.activeGroup !== null) {
+      const group = this.activeGroup;
+      this.run(() => sendGroupText(this, group, text));
+      return;
+    }
     if (this.active === null) {
       this.renderer.event("warning", "No active conversation. Use /chat <alias|uid> first.");
       return;
@@ -238,6 +262,18 @@ export class Executor implements ExecutorInternals {
       case "settings-emblem":
         this.run(() => doSettingsEmblem(this, cmd.emblem));
         return;
+      case "settings-font":
+        this.run(() => doSettingsFont(this, cmd.font));
+        return;
+      case "settings-font-list":
+        this.run(() => doSettingsFontList(this));
+        return;
+      case "settings-fontsize":
+        this.run(() => doSettingsFontSize(this, cmd.size));
+        return;
+      case "settings-a11y":
+        this.run(() => doSettingsA11y(this, cmd.feature, cmd.enabled));
+        return;
       case "settings-color":
         this.run(() => doSettingsColor(this, cmd.slot, cmd.hex));
         return;
@@ -262,6 +298,30 @@ export class Executor implements ExecutorInternals {
       case "favourite":
         this.run(() => doFavourite(this, cmd.target, cmd.on));
         return;
+      case "group-new":
+        this.run(() => doGroupNew(this, cmd.group, cmd.targets));
+        return;
+      case "group-list":
+        this.run(() => doGroupList(this));
+        return;
+      case "group-info":
+        this.run(() => doGroupInfo(this, cmd.group));
+        return;
+      case "group-open":
+        this.run(() => doGroupOpen(this, cmd.group));
+        return;
+      case "group-add":
+        this.run(() => doGroupAdd(this, cmd.group, cmd.target));
+        return;
+      case "group-remove":
+        this.run(() => doGroupRemove(this, cmd.group, cmd.target));
+        return;
+      case "group-leave":
+        this.run(() => doGroupLeave(this, cmd.group));
+        return;
+      case "group-purge":
+        this.run(() => doGroupPurge(this, cmd.group));
+        return;
       case "verify":
         this.run(() => doVerify(this, cmd.alias));
         return;
@@ -280,6 +340,7 @@ export class Executor implements ExecutorInternals {
           this.previousView = previousBeforeHome; // remember for /return
         }
         this.active = null;
+        this.activeGroup = null;
         this.shell.setPrompt("> ");
         refreshChatContext(this); // clears the context line
         this.enqueueRender(() => renderHome(this));
@@ -334,6 +395,7 @@ export class Executor implements ExecutorInternals {
       this.previousView = previousBeforeChat; // remember for /return
     }
     this.active = contact;
+    this.activeGroup = null; // at most one conversation is focused at a time
     this.unread.delete(contact.uid); // opening the conversation clears its unread mark
     const trust = contact.verified ? "verified" : "UNVERIFIED";
     this.renderer.event("info", `chatting with: ${contact.alias} (${trust})`);
@@ -455,6 +517,9 @@ export class Executor implements ExecutorInternals {
     // so an unlocked session resumes where it was.
     this.unread.clear();
     this.previousView = null;
+    // The focused group holds a roster read from the now-locked store; it is
+    // reloaded on the next /group open rather than kept stale across a lock.
+    this.activeGroup = null;
     this.chrome.setChatContext(null);
     this.chrome.setEmblemState("idle");
     this.store.lock();

@@ -12,7 +12,12 @@ import type { LineSink } from "../../src/terminal/renderer";
 import type { ShellIO } from "../../src/terminal/shell";
 import type { EmblemState, UiChrome } from "../../src/terminal/executor/context";
 import type { ThemePrefs } from "../../src/crypto/store";
-import type { EmblemName, ResolvedScheme } from "../../src/terminal/theme";
+import type {
+  AccessibilityPrefs,
+  EmblemName,
+  FontName,
+  ResolvedScheme,
+} from "../../src/terminal/theme";
 
 /** Scripted shell: push answers onto `secrets` (passphrases) and `lines`
  * (confirmations) in the order the flow consumes them; an empty queue yields
@@ -74,6 +79,8 @@ export class FakeChrome implements UiChrome {
   /** Transcript width reported to width-aware output (/help). Assignable so a
    * test can render the same command at a phone width and a desktop one. */
   width = 80;
+  fonts: Array<{ font: FontName; fontSize: number }> = [];
+  accessibility: AccessibilityPrefs[] = [];
   echoInput(line: string, kind: "command" | "message" = "command"): void {
     this.echoes.push({ line, kind });
   }
@@ -106,5 +113,11 @@ export class FakeChrome implements UiChrome {
   }
   columns(): number {
     return this.width;
+  }
+  applyFont(font: FontName, fontSize: number): void {
+    this.fonts.push({ font, fontSize });
+  }
+  applyAccessibility(prefs: AccessibilityPrefs): void {
+    this.accessibility.push(prefs);
   }
 }

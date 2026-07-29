@@ -29,6 +29,14 @@ import {
 } from "./context";
 import type { ExecutorInternals } from "./context";
 import { decodeAppPayload, encodeAppPayload } from "./payload";
+import type { GroupAction, GroupEnvelope } from "./payload";
+import {
+  GROUP_MSG_PREFIX,
+  loadGroup,
+  saveGroup,
+  warnOnRosterDivergence,
+} from "./groups";
+import type { Group } from "./groups";
 import {
   deserializeRatchet,
   serializeRatchet,
@@ -38,6 +46,7 @@ import {
 import type {
   Contact,
   PendingRequest,
+  StoredGroupMessage,
   StoredMessage,
   StoredOpk,
   StoredSession,
@@ -78,6 +87,69 @@ export async function sendActiveMessage(
   }
 }
 
+/** Fan one group message out to every other member, as N independent pairwise
+ * messages over the ratchets already established with them.
+ *
+ * There is no group key and no broadcast: each member gets their own envelope,
+ * encrypted to them alone, carrying the same group envelope in its payload. The
+ * server sees N ordinary sends. See groups.ts for why this design was chosen
+ * over sender keys and what it does not guarantee.
+ *
+ * Delivery is reported honestly. A member with no contact entry, a blocked key
+ * change, or a failed send is named in `failed` rather than folded into a
+ * success: a group message that reached four of six people is not a message
+ * that was sent, and the sender is the only person who can act on the
+ * difference. */
+export async function fanOutToGroup(
+  x: ExecutorInternals,
+  group: Group,
+  text: string | null,
+  action: GroupAction,
+  subject: string | null,
+): Promise<{ delivered: number; failed: string[] }> {
+  const envelope: GroupEnvelope = {
+    gid: group.gid,
+    name: group.name,
+    members: group.members,
+    action,
+    subject,
+  };
+  const failed: string[] = [];
+  let delivered = 0;
+  for (const uid of group.members) {
+    if (uid === x.identity?.uid) {
+      continue; // never send to yourself
+    }
+    const contact = findContactByUid(x, uid);
+    if (contact === null) {
+      // A member we have no contact entry for cannot be reached: there is no
+      // alias, no pinned key, and no session. Named rather than skipped.
+      failed.push(formatUid(uid));
+      continue;
+    }
+    if (contact.keyChangeBlocked) {
+      failed.push(`${contact.alias} (unacknowledged key change)`);
+      continue;
+    }
+    try {
+      const stored = await x.store.getJson<StoredSession>(`session/${uid}`);
+      const ok =
+        stored === null
+          ? await sendFirstMessage(x, contact, text ?? "", envelope)
+          : await sendRatchetMessage(x, contact, stored, text, { group: envelope });
+      if (ok) {
+        delivered += 1;
+      } else {
+        failed.push(contact.alias);
+      }
+    } catch {
+      // One member's network failure must not abandon the rest of the fan-out.
+      failed.push(contact.alias);
+    }
+  }
+  return { delivered, failed };
+}
+
 /** Send to `target`, running the PQ-KX handshake first if no session exists
  * yet; an established session rides the ratchet instead. Returns
  * true only when an envelope was accepted by the server. */
@@ -85,6 +157,7 @@ export async function sendFirstMessage(
   x: ExecutorInternals,
   target: Contact,
   text: string,
+  group: GroupEnvelope | null = null,
 ): Promise<boolean> {
   if (x.identity === null || x.token === null) {
     x.renderer.error("E201");
@@ -99,7 +172,7 @@ export async function sendFirstMessage(
   }
   const existing = await x.store.getJson<StoredSession>(`session/${target.uid}`);
   if (existing !== null) {
-    return sendRatchetMessage(x, target, existing, text);
+    return sendRatchetMessage(x, target, existing, text, group === null ? undefined : { group });
   }
 
   let wire: api.WireBundle;
@@ -130,15 +203,36 @@ export async function sendFirstMessage(
   }
 
   const mid = newMessageId();
+  // The KX first message predates the AppPayload format and stays its own small
+  // JSON record, but it carries the same group fields under the same key names,
+  // so a group's very first message to a member does not need a second round
+  // trip to establish a session first.
   const payload = new TextEncoder().encode(
-    JSON.stringify({ u: x.identity.uid, m: text, id: mid }),
+    JSON.stringify(
+      group === null
+        ? { u: x.identity.uid, m: text, id: mid }
+        : {
+            u: x.identity.uid,
+            m: text,
+            id: mid,
+            g: group.gid,
+            gn: group.name,
+            gm: group.members,
+            ga: group.action,
+            ...(group.subject === null ? {} : { gs: group.subject }),
+          },
+    ),
   );
   const { envelope, session } = initiateKx(x.identity.pub, x.identity.sec, bundle, payload);
   await api.sendMessage(x.token, target.uid, envelope);
 
   const timestamp = x.now();
   await x.store.putJson(`session/${target.uid}`, serializeSession(session, timestamp));
-  await recordMessage(x, target.uid, "out", text, timestamp, mid);
+  // A group send stores its copy once, under the group, rather than once per
+  // member: the fan-out is a transport detail, not six conversations.
+  if (group === null) {
+    await recordMessage(x, target.uid, "out", text, timestamp, mid);
+  }
   if (target.ik === null) {
     x.contacts.set(target.alias, pinKey(x, target, bundleIk));
     await saveContacts(x);
@@ -177,7 +271,11 @@ export async function sendRatchetMessage(
   target: Contact,
   stored: StoredSession,
   text: string | null,
-  control?: { readonly deletes?: readonly string[]; readonly deleteSilent?: boolean },
+  control?: {
+    readonly deletes?: readonly string[];
+    readonly deleteSilent?: boolean;
+    readonly group?: GroupEnvelope;
+  },
 ): Promise<boolean> {
   if (x.token === null) {
     x.renderer.error("E201");
@@ -196,6 +294,7 @@ export async function sendRatchetMessage(
     mid,
     deletes: control?.deletes ?? null,
     deleteSilent: control?.deleteSilent ?? false,
+    group: control?.group ?? null,
   });
   const body = ratchetEncrypt(ratchet, payload);
   const envelope = encodeMsgEnvelope(body);
@@ -215,7 +314,9 @@ export async function sendRatchetMessage(
   // A real message is recorded at rest; the delivery tick and "sent" status
   // are raised by the caller. A pure timer/delete-control message carries no
   // user text, so it neither records nor confirms.
-  if (text !== null) {
+  // A group copy is stored once under the group by the caller, not once per
+  // member, so the per-contact record is skipped for a fan-out leg.
+  if (text !== null && control?.group === undefined) {
     await recordMessage(x, target.uid, "out", text, timestamp, mid);
   }
   await purgeExpired(x);
@@ -250,6 +351,50 @@ export async function recordMessage(
     key = `${key}.${n}`;
   }
   await x.store.putJson(key, record);
+}
+
+/** Store one group message under `gmsg/<gid>/<ts>`, a namespace of its own so
+ * it can never collide with the per-contact `msg/<uid>/` history and so the
+ * retention machinery can sweep both explicitly rather than by accident.
+ * Incoming records keep the sender's label, since a group transcript has to say
+ * who is speaking. */
+export async function recordGroupMessage(
+  x: ExecutorInternals,
+  gid: string,
+  dir: "in" | "out",
+  sender: string,
+  text: string,
+  ts: number,
+): Promise<void> {
+  const record: StoredGroupMessage = { dir, sender, text, ts };
+  let key = `${GROUP_MSG_PREFIX}${gid}/${ts}`;
+  if ((await x.store.getJson<StoredGroupMessage>(key)) !== null) {
+    let n = 1;
+    while ((await x.store.getJson<StoredGroupMessage>(`${key}.${n}`)) !== null) {
+      n += 1;
+    }
+    key = `${key}.${n}`;
+  }
+  await x.store.putJson(key, record);
+}
+
+/** Render an incoming group message according to the focused view, mirroring
+ * deliverIncoming for one-to-one traffic. */
+export function deliverIncomingGroup(
+  x: ExecutorInternals,
+  group: Group,
+  senderLabel: string,
+  text: string,
+): void {
+  if (x.activeGroup?.gid === group.gid) {
+    x.renderer.peerMessage(`${group.name}/${senderLabel}`, text);
+    return;
+  }
+  x.unread.set(group.gid, (x.unread.get(group.gid) ?? 0) + 1);
+  x.renderer.status("info", `New message in '${group.name}'. Run /group open ${group.name} to read it.`);
+  if (x.active === null && x.activeGroup === null) {
+    x.enqueueRender(() => renderHome(x));
+  }
 }
 
 /** A fresh shared message id: random 128-bit, hex. Stamped on outgoing
@@ -482,6 +627,14 @@ export async function processRatchetMessage(
     if (payload.deletes !== null) {
       await applyIncomingDeletion(x, uid, label, payload.deletes, payload.deleteSilent);
     }
+    if (payload.group !== null) {
+      // A group message is still an ordinary pairwise message; only its
+      // handling differs, and only after the pairwise ratchet has already
+      // authenticated who sent it.
+      await applyIncomingGroup(x, uid, label, payload.group, payload.text, timestamp);
+      await purgeExpired(x);
+      return "ack";
+    }
     if (payload.text !== null) {
       await recordMessage(x, uid, "in", payload.text, timestamp, payload.mid);
       deliverIncoming(x, uid, label, payload.text);
@@ -491,6 +644,142 @@ export async function processRatchetMessage(
   }
   x.renderer.discarded("E505");
   return "ack";
+}
+
+/** Handle a group-bearing payload that has already been authenticated by the
+ * pairwise ratchet it arrived on.
+ *
+ * `senderUid` is the crucial input and it does NOT come from the message: it is
+ * the session the envelope decrypted under, so a member cannot claim to be
+ * someone else. Every membership decision below is attributed to that UID.
+ *
+ * Three rules keep an unwanted group from materialising on this device:
+ *   - A group from someone who is not a contact is ignored entirely. The
+ *     first-contact gate already governs whether a stranger can reach you;
+ *     groups do not get to bypass it.
+ *   - A sender who is not in the roster they are sending is ignored. That is
+ *     either a bug or a forgery, and neither deserves state.
+ *   - An unknown group is only created when the sender says so explicitly with
+ *     an invite, and only when it lists us. Ordinary traffic for a group we do
+ *     not have is reported, never silently joined. */
+export async function applyIncomingGroup(
+  x: ExecutorInternals,
+  senderUid: string,
+  senderLabel: string,
+  envelope: GroupEnvelope,
+  text: string | null,
+  timestamp: number,
+): Promise<void> {
+  const self = x.identity?.uid ?? null;
+  if (self === null) {
+    return;
+  }
+  if (findContactByUid(x, senderUid) === null) {
+    // Not a contact: no group state, no notice beyond the discard panel. The
+    // contact-request gate is the only way a stranger reaches this device.
+    x.renderer.discarded("E513");
+    return;
+  }
+  if (!envelope.members.includes(senderUid) || !envelope.members.includes(self)) {
+    x.renderer.discarded("E513");
+    return;
+  }
+
+  const existing = await loadGroup(x, envelope.gid);
+  if (existing === null) {
+    if (envelope.action !== "invite") {
+      // Traffic for a group this device does not know. Reported rather than
+      // joined: adopting a roster from an unsolicited message is exactly how a
+      // silent add would work.
+      x.renderer.event(
+        "warning",
+        `${senderLabel} sent a message for a group this device does not know ('${envelope.name}'). Ask them to invite you again if you should be in it.`,
+      );
+      return;
+    }
+    const group: Group = {
+      gid: envelope.gid,
+      name: envelope.name,
+      members: envelope.members,
+      createdAt: timestamp,
+      active: true,
+    };
+    await saveGroup(x, group);
+    x.renderer.event(
+      "success",
+      `${senderLabel} added you to the group '${group.name}' with ${group.members.length} members. /group info ${group.name} shows who is in it.`,
+    );
+    await noteUnknownMembers(x, group);
+    if (text !== null) {
+      await recordGroupMessage(x, group.gid, "in", senderLabel, text, timestamp);
+      deliverIncomingGroup(x, group, senderLabel, text);
+    }
+    return;
+  }
+
+  // The group is known. Any disagreement about who is in it gets said out loud
+  // before anything else is done with the message.
+  warnOnRosterDivergence(x, existing, envelope, senderLabel);
+
+  switch (envelope.action) {
+    case "add":
+    case "remove": {
+      const subject = envelope.subject;
+      if (subject === null) {
+        return;
+      }
+      const members =
+        envelope.action === "add"
+          ? [...new Set([...existing.members, subject])].sort()
+          : existing.members.filter((uid) => uid !== subject);
+      const subjectLabel = findContactByUid(x, subject)?.alias ?? formatUid(subject);
+      const updated: Group = { ...existing, members, active: subject === self && envelope.action === "remove" ? false : existing.active };
+      await saveGroup(x, updated);
+      x.renderer.event(
+        "security",
+        envelope.action === "add"
+          ? `${senderLabel} added ${subjectLabel} to '${existing.name}'. Anyone already in a group can add someone, and membership is not cryptographically agreed, so check unexpected additions with the others.`
+          : `${senderLabel} removed ${subjectLabel} from '${existing.name}'. They keep every message they already received; there is no group key to rotate.`,
+      );
+      if (envelope.action === "add") {
+        await noteUnknownMembers(x, updated);
+      }
+      return;
+    }
+    case "leave": {
+      const members = existing.members.filter((uid) => uid !== senderUid);
+      await saveGroup(x, { ...existing, members });
+      x.renderer.event("info", `${senderLabel} left '${existing.name}'.`);
+      return;
+    }
+    case "invite":
+    case "msg": {
+      if (text === null) {
+        return;
+      }
+      await recordGroupMessage(x, existing.gid, "in", senderLabel, text, timestamp);
+      deliverIncomingGroup(x, existing, senderLabel, text);
+      return;
+    }
+  }
+}
+
+/** Point out members this device has no contact entry for. They are in the
+ * group and will receive everything sent to it, but nothing here has verified
+ * their key, so naming them is more useful than a silent roster entry. */
+async function noteUnknownMembers(x: ExecutorInternals, group: Group): Promise<void> {
+  const self = x.identity?.uid ?? null;
+  const unknown = group.members.filter(
+    (uid) => uid !== self && findContactByUid(x, uid) === null,
+  );
+  if (unknown.length === 0) {
+    return;
+  }
+  x.renderer.event(
+    "warning",
+    `${unknown.length} member(s) of '${group.name}' are not in your contacts, so their keys are unverified and you cannot send to them: ${unknown.map(formatUid).join(", ")}. /add each UID to include them.`,
+  );
+  await Promise.resolve();
 }
 
 export async function drainInbox(x: ExecutorInternals): Promise<void> {

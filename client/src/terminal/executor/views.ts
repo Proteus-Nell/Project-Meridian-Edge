@@ -14,6 +14,9 @@ import type { ExecutorInternals } from "./context";
 import { formatDuration } from "./format";
 import { favouriteMark, sortContacts } from "./records";
 import type { StoredMessage } from "./records";
+import { loadGroups, rosterDigest } from "./groups";
+import type { Group } from "./groups";
+import { loadGroupHistory } from "./group-commands";
 
 /** Rebuild the transcript as the focused conversation view: clear the screen
  * and reprint only the active conversation's stored history, oldest first.
@@ -56,6 +59,35 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
   }
 }
 
+/** Rebuild the transcript as a group conversation: the roster header, then the
+ * stored history with each line attributed to its sender. Attribution matters
+ * more here than in a one-to-one view, because a group transcript is assembled
+ * from N independently authenticated pairwise streams and the sender label is
+ * the only thing carrying who said what. */
+export async function renderGroupConversation(
+  x: ExecutorInternals,
+  group: Group,
+): Promise<void> {
+  if (!x.store.isUnlocked()) {
+    return;
+  }
+  const records = await loadGroupHistory(x, group.gid);
+  x.chrome.clearScreen(false);
+  x.renderer.divider(
+    `-- ${group.name} · ${group.members.length} members · fingerprint ${rosterDigest(group.members)} --`,
+  );
+  if (records.length === 0) {
+    x.renderer.plain("  (no messages yet - type to send the first one · /home to go back)");
+  }
+  for (const record of records) {
+    if (record.dir === "in") {
+      x.renderer.peerMessage(`${group.name}/${record.sender}`, record.text);
+    } else {
+      x.renderer.ownMessage(record.text);
+    }
+  }
+}
+
 /** Rebuild the transcript as the home view: the dashboard of every
  * conversation (the "everything else" that /chat hides and /home brings
  * back). Lists contacts with their trust, unread count, timer and any
@@ -88,6 +120,23 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
         .filter((s) => s.length > 0)
         .join(" · ");
       x.renderer.plain(`  ${favouriteMark(contact)} ${contact.alias.padEnd(width)}  ${flags}`);
+    }
+  }
+  const groups = await loadGroups(x);
+  if (groups.length > 0) {
+    x.renderer.plain("");
+    x.renderer.plain("  groups:");
+    const gwidth = Math.max(...groups.map((g) => g.name.length));
+    for (const group of groups) {
+      const unread = x.unread.get(group.gid) ?? 0;
+      const flags = [
+        `${group.members.length} members`,
+        group.active ? "" : "left",
+        unread > 0 ? `${unread} unread` : "",
+      ]
+        .filter((s) => s.length > 0)
+        .join(" · ");
+      x.renderer.plain(`    ${group.name.padEnd(gwidth)}  ${flags}`);
     }
   }
   const pending = await x.store.listKeys("pending/");

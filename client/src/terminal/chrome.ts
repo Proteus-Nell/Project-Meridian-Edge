@@ -14,8 +14,15 @@ import { COMMAND_USAGE, isCommandWord } from "./parser";
 import type { EventLevel } from "./renderer";
 import type { SuggestionNav } from "./shell";
 import type { EmblemState } from "./executor";
-import { applyEmblemClass, applySchemeVars, applyThemeClasses } from "./paint";
-import type { EmblemName, ResolvedScheme } from "./theme";
+import {
+  applyAccessibilityClasses,
+  applyEmblemClass,
+  applyFontVars,
+  applySchemeVars,
+  applyThemeClasses,
+} from "./paint";
+import { FONT_STACKS, clampFontSize } from "./theme";
+import type { AccessibilityPrefs, EmblemName, FontName, ResolvedScheme } from "./theme";
 import type { ThemePrefs } from "../crypto/store";
 
 const DIM = "\x1b[2m";
@@ -77,6 +84,8 @@ export class Chrome implements SuggestionNav {
   // handle, replaced whenever we re-register.
   private readonly ticks: TickSpec[] = [];
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Re-fits both terminals; set by main.ts, which owns the fit addons. */
+  private refitCb: (() => void) | null = null;
 
   // Autosuggest state: the words currently shown, the highlighted row
   // (-1 = none, so Enter still submits the typed line), the input the list was
@@ -153,6 +162,13 @@ export class Chrome implements SuggestionNav {
     this.clearChildren(this.statusEventEl);
     this.statusEventEl.classList.remove("stale");
     this.statusEventEl.className = `status-event status-${level}`;
+    // The strip is a live region (index.html). A security event interrupts;
+    // everything else waits its turn, so ordinary chatter does not talk over
+    // whatever the user is reading.
+    this.statusEventEl.setAttribute(
+      "aria-live",
+      level === "security" ? "assertive" : "polite",
+    );
 
     const time = document.createElement("span");
     time.className = "status-time";
@@ -423,6 +439,45 @@ export class Chrome implements SuggestionNav {
    * part of resize. */
   columns(): number {
     return this.transcript.cols;
+  }
+
+  // ----- fonts and accessibility ----------------------------------------------
+
+  /** Register the callback that re-fits both terminals. Wired by main.ts, which
+   * owns the FitAddon instances. Anything here that changes cell metrics has to
+   * call it, or `cols` keeps a value measured against the previous face and
+   * long lines start wrapping outside the visible area. */
+  setRefit(refit: () => void): void {
+    this.refitCb = refit;
+  }
+
+  /** Switch the monospace stack and size everywhere: the DOM custom properties
+   * and both xterm instances. The face and size are the two things that move
+   * the cell box, so this always ends in a re-fit. */
+  applyFont(font: FontName, fontSize: number): void {
+    const size = clampFontSize(fontSize);
+    applyFontVars(font, size);
+    const family = FONT_STACKS[font];
+    this.transcript.options.fontFamily = family;
+    this.transcript.options.fontSize = size;
+    if (this.input !== null) {
+      this.input.options.fontFamily = family;
+      this.input.options.fontSize = size;
+    }
+    this.refitCb?.();
+  }
+
+  /** Apply the accessibility switches. xterm's screenReaderMode maintains its
+   * own ARIA live region mirroring the terminal, which is the only way a screen
+   * reader can follow canvas-free terminal output; it is off by default for the
+   * render cost, not for any exposure reason (the same text is already in the
+   * DOM as cells). */
+  applyAccessibility(prefs: AccessibilityPrefs): void {
+    applyAccessibilityClasses(prefs);
+    this.transcript.options.screenReaderMode = prefs.screenReader;
+    if (this.input !== null) {
+      this.input.options.screenReaderMode = prefs.screenReader;
+    }
   }
 
   // ----- screen clear ---------------------------------------------------------

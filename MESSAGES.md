@@ -23,7 +23,7 @@ strip; the `[SECURITY]` strip treatment is fixed white-on-red and is not
 configurable.
 
 **Where errors appear.** Most errors print inline in the transcript. The
-inbound-discard family (**E505, E506, E507, E508, E511, E512**) is the
+inbound-discard family (**E505, E506, E507, E508, E511, E512, E513**) is the
 exception: those describe a message that arrived and could not be read, not a
 command you ran, so they collect in the **discarded-notice panel on the right**
 of the screen (and the status strip) instead of interrupting the conversation.
@@ -38,7 +38,7 @@ Code families:
 | E2xx | Authentication, session, identity |
 | E3xx | Network and server responses |
 | E4xx | Local encrypted store |
-| E5xx | Contacts, messaging, decryption |
+| E5xx | Contacts, messaging, groups, decryption |
 | E599 | Unclassified catch-all |
 
 ## Errors
@@ -87,6 +87,13 @@ Code families:
 | E510 | `The name '<alias>' already belongs to another contact. Please choose a different one.` | `/rename` targeted a name already held by a different contact, and aliases are unique locally. | Pick an unused alias, or `/rename` the other contact first. |
 | E511 | `Someone is trying to start a conversation using sign-up keys this device no longer has, which usually follows a /recover or /wipe. Ask them to /remove you and message again so their app picks up your current keys.` | A handshake arrived encapsulated to a signed prekey or one-time prekey this device no longer holds. Almost always because `/recover` or `/wipe` replaced your published prekeys while the sender still had the old bundle cached. | Nothing on this side can decrypt it. The sender must re-fetch your current bundle, so ask them to `/remove` you and message again. `/keys status` confirms your current prekeys are published. |
 | E512 | `A damaged or tampered message was discarded.` | A handshake envelope was malformed or failed its AEAD check, from corruption in transit or a deliberately tampered envelope. Not a legitimate contact attempt. | None. Isolated occurrences are noise, but a steady stream is worth reporting, since the server should not be able to alter envelopes undetected. |
+| E513 | `A group message was discarded because it did not add up: it came from someone who is not a contact, or its member list did not include both you and the sender.` | A group-bearing payload arrived that failed one of the three admission rules in `messaging.ts::applyIncomingGroup`: the sender is not a contact, the sender is not in the roster they sent, or you are not in it. Each of those is either a bug or a forgery, and neither is worth creating group state for. | None. If someone should be able to reach you, `/add` them first; the contact-request gate governs groups exactly as it governs one-to-one messages. |
+| E514 | `There is no group called '<name>' on this device. Run /group list to see the ones you have.` | A `/group` subcommand named a group this device does not hold. | `/group list` shows what exists. If you were invited and it is missing, ask the inviter to invite you again. |
+| E515 | `'<name>' cannot be used as a group name. Use 1 to 32 characters: letters, digits, spaces, underscores or hyphens.` | The name would not survive an aligned listing, or could carry an escape sequence. | Rename with the allowed characters. |
+| E516 | `You already have a group called '<name>'. Choose another name so the two can be told apart.` | Group names are the handle every `/group` subcommand takes, so two groups sharing one would be unaddressable. | Pick a different name. |
+| E517 | `A group needs at least one other member. Name the contacts to include.` | `/group new` was given no members, or only yourself. | Name the contacts to add. |
+| E518 | `A group can hold at most <n> members. Every message is sent separately to each one, so the limit keeps a single message from becoming a flood.` | The roster hit the fan-out cap. Each member costs one send against the per-UID rate limit, so an unbounded roster is a way to turn one keystroke into a burst. | Remove someone, or split the group. |
+| E519 | `<target> is not a member of '<group>'.` | `/group remove` named someone the roster does not contain. | `/group info <name>` shows the roster. |
 | E599 | `Something went wrong. Please try again.` | The catch-all for an unclassified internal error. | Retry. If it repeats, capture the browser console and file an issue. |
 
 ## Warnings `[!]`

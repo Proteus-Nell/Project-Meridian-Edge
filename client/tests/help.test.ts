@@ -78,8 +78,10 @@ describe("renderHelp", () => {
     const i = lines.findIndex((l) => l.trim() === "/lock");
     expect(i).toBeGreaterThan(-1);
     expect(lines[i + 1]?.trim()).toBe("lock the store now");
-    // No leaders in the stacked layout: there is no gap left to bridge.
-    expect(lines.join("\n")).not.toContain("...");
+    // No dot leaders in the stacked layout: there is no gap left to bridge.
+    // Matched as a run of dots between spaces, so a literal "..." inside a
+    // command's own text (`/group new <name> <who>...`) is not mistaken for one.
+    expect(lines.some((l) => / \.{2,} /.test(l))).toBe(false);
   });
 
   it("sizes the command column per section, not across all of them", () => {

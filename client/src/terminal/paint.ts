@@ -16,9 +16,9 @@
 //      is ever painted in the wrong scheme - only the page backdrop, briefly,
 //      and only for someone whose chosen scheme differs from the default.
 
-import { resolveScheme } from "./theme";
-import type { EmblemName, ResolvedScheme } from "./theme";
-import { EMBLEM_NAMES, EVENT_COLOR_SLOTS } from "./theme";
+import { clampFontSize, resolveScheme } from "./theme";
+import type { AccessibilityPrefs, EmblemName, FontName, ResolvedScheme } from "./theme";
+import { EMBLEM_NAMES, EVENT_COLOR_SLOTS, FONT_STACKS } from "./theme";
 import { KeyStore } from "../crypto/store";
 import type { ThemePrefs } from "../crypto/store";
 
@@ -39,6 +39,25 @@ export function applySchemeVars(scheme: ResolvedScheme): void {
   for (const slot of EVENT_COLOR_SLOTS) {
     root.setProperty(`--event-${slot}`, scheme.events[slot]);
   }
+}
+
+/** Push the chosen monospace stack and size into the CSS custom properties the
+ * DOM chrome derives from. The terminals are themed separately by Chrome, which
+ * owns the xterm instances; both read the same two prefs, so the transcript and
+ * the furniture around it never disagree about the face. */
+export function applyFontVars(font: FontName, fontSize: number): void {
+  const root = document.documentElement.style;
+  // From a fixed allowlist keyed by name, so no stored string is ever
+  // interpolated into a CSS declaration (theme.ts::FONT_STACKS).
+  root.setProperty("--font-mono", FONT_STACKS[font]);
+  root.setProperty("--font-size", `${clampFontSize(fontSize)}px`);
+}
+
+/** Reflect the accessibility switches as body classes. `a11y-reduce-motion`
+ * mirrors what the prefers-reduced-motion media query already does, so a user
+ * whose OS setting does not match what they need can force it here. */
+export function applyAccessibilityClasses(prefs: AccessibilityPrefs): void {
+  document.body.classList.toggle("a11y-reduce-motion", prefs.reduceMotion);
 }
 
 /** Toggle the atmosphere-layer body classes (/settings theme). */
@@ -76,6 +95,8 @@ export async function preloadDisplayStyle(store: KeyStore = new KeyStore()): Pro
     applySchemeVars(resolveScheme(prefs.scheme, prefs.customSchemes));
     applyThemeClasses(prefs.theme);
     applyEmblemClass(prefs.emblemGlyph);
+    applyFontVars(prefs.font, prefs.fontSize);
+    applyAccessibilityClasses(prefs.accessibility);
   } catch {
     // No store yet, or it could not be read: the CSS defaults stand.
   } finally {

@@ -12,6 +12,7 @@ import { Shell } from "./terminal/shell";
 import { Executor } from "./terminal/executor";
 import { Chrome } from "./terminal/chrome";
 import { commandSuggestions, longestCommonPrefix } from "./terminal/suggest";
+import { DEFAULT_FONT, DEFAULT_FONT_SIZE, FONT_STACKS } from "./terminal/theme";
 
 // FIRST statement of the app: start reading the saved colour scheme before
 // anything else, so the IndexedDB round-trip overlaps xterm's construction and
@@ -33,9 +34,12 @@ function mount(id: string): HTMLElement {
 // layers). The page background remains the same #0d1117.
 const TRANSPARENT = "#0d111700";
 
+// The face and size here are only the pre-preferences default: executor.init()
+// re-applies the stored /settings font and /settings fontsize once the display
+// prefs have been read, and re-fits afterwards because both move the cell box.
 const SHARED: ITerminalOptions = {
-  fontFamily: "'Cascadia Mono', 'Fira Mono', Menlo, Consolas, monospace",
-  fontSize: 15,
+  fontFamily: FONT_STACKS[DEFAULT_FONT],
+  fontSize: DEFAULT_FONT_SIZE,
   allowTransparency: true,
   theme: {
     background: TRANSPARENT,
@@ -115,6 +119,9 @@ const refit = (): void => {
     fitTerminals();
   }, 120);
 };
+// A font or size change moves the cell box exactly as a resize does, so the
+// chrome re-fits through the same debounced path rather than its own.
+chrome.setRefit(refit);
 const resizeObserver = new ResizeObserver(refit);
 resizeObserver.observe(mount("transcript-pane"));
 resizeObserver.observe(mount("command-line"));

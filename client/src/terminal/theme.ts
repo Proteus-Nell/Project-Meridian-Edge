@@ -42,7 +42,7 @@ export interface Scheme {
   readonly ansi: AnsiOverrides | null;
 }
 
-export const SCHEME_NAMES = ["dark", "parchment", "olive"] as const;
+export const SCHEME_NAMES = ["dark", "parchment", "olive", "contrast"] as const;
 export type SchemeName = (typeof SCHEME_NAMES)[number];
 
 export const DEFAULT_SCHEME: SchemeName = "dark";
@@ -94,6 +94,30 @@ export const SCHEMES: Record<SchemeName, Scheme> = {
       muted: "#9aa982",
     },
     ansi: null,
+  },
+  // Accessibility preset. Pure black ground with every slot chosen to clear
+  // WCAG AA (4.5:1) against it, including `muted`, which the other schemes
+  // deliberately let recede: dimmed furniture is exactly what fails for a
+  // low-vision reader. The ANSI map is set explicitly rather than left to the
+  // terminal default, since those defaults are not contrast-checked.
+  contrast: {
+    colors: {
+      accent: "#00d7ff",
+      background: "#000000",
+      panel: "#1a1a1a",
+      text: "#ffffff",
+      muted: "#c6c6c6",
+    },
+    ansi: {
+      red: "#ff6b6b",
+      green: "#5fff87",
+      yellow: "#ffd75f",
+      cyan: "#5fffff",
+      brightRed: "#ff8787",
+      brightGreen: "#87ffaf",
+      brightYellow: "#ffff87",
+      brightCyan: "#afffff",
+    },
   },
 };
 
@@ -224,6 +248,82 @@ export function findCustomScheme(
 export function schemeExists(name: string, customs: readonly CustomScheme[]): boolean {
   return isSchemeName(name) || findCustomScheme(customs, name) !== null;
 }
+
+// ----- fonts ----------------------------------------------------------------
+//
+// Monospace only, and that is a constraint rather than a taste: xterm lays the
+// transcript out in fixed cells, and every aligned listing in the app (/help,
+// /contacts, the home dashboard) is built from padded columns. A proportional
+// face breaks both.
+//
+// The stacks are a fixed allowlist for the same reason the colors go through
+// normalizeHex: a font-family string is a CSS declaration, and the value comes
+// from the unencrypted display prefs, which anything with database access can
+// write. Nothing here is ever built from user input. No stack names a webfont
+// either: a remote font is a request to somebody else's server on every page
+// load, which the CSP forbids and which would be a privacy beacon regardless.
+
+export const FONT_NAMES = ["default", "system", "classic", "wide", "compact"] as const;
+export type FontName = (typeof FONT_NAMES)[number];
+
+export function isFontName(word: string): word is FontName {
+  return (FONT_NAMES as readonly string[]).includes(word);
+}
+
+export const DEFAULT_FONT: FontName = "default";
+
+/** Each entry is a local-font stack ending in the generic `monospace`, so a
+ * machine with none of the named faces still gets a fixed-width one. */
+export const FONT_STACKS: Record<FontName, string> = {
+  default: "'Cascadia Mono', 'Fira Mono', Menlo, Consolas, monospace",
+  system: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+  classic: "'Courier New', Courier, monospace",
+  wide: "'DejaVu Sans Mono', 'Liberation Mono', 'Lucida Console', Consolas, monospace",
+  compact: "Iosevka, 'Roboto Mono', 'Fira Mono', 'Droid Sans Mono', monospace",
+};
+
+/** Short human descriptions for `/settings font list`. */
+export const FONT_BLURBS: Record<FontName, string> = {
+  default: "the shipped stack: Cascadia Mono, then Fira Mono, Menlo, Consolas",
+  system: "your platform's own UI monospace face",
+  classic: "Courier New, the widest-available typewriter face",
+  wide: "DejaVu Sans Mono and friends: roomier, easier to read at small sizes",
+  compact: "Iosevka and friends: narrow, fits more columns on a phone",
+};
+
+export const MIN_FONT_SIZE = 10;
+export const MAX_FONT_SIZE = 28;
+export const DEFAULT_FONT_SIZE = 15;
+
+/** Clamp a stored or typed size into the supported range. */
+export function clampFontSize(size: number): number {
+  if (!Number.isFinite(size)) {
+    return DEFAULT_FONT_SIZE;
+  }
+  return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(size)));
+}
+
+// ----- accessibility ---------------------------------------------------------
+
+/** Opt-in accessibility switches, stored unencrypted beside the other display
+ * preferences so they apply to the lock screen too, which is exactly where
+ * someone who needs them meets the app first. */
+export interface AccessibilityPrefs {
+  /** xterm's screenReaderMode: maintains an ARIA live region mirroring the
+   * terminal so a screen reader can follow output. Off by default because it
+   * costs render performance, not because it exposes anything: the same text is
+   * already in the DOM as terminal cells. */
+  readonly screenReader: boolean;
+  /** Force the reduced-motion treatment on, for someone whose OS setting does
+   * not reflect what they need right now. The `prefers-reduced-motion` media
+   * query still applies independently. */
+  readonly reduceMotion: boolean;
+}
+
+export const DEFAULT_ACCESSIBILITY: AccessibilityPrefs = {
+  screenReader: false,
+  reduceMotion: false,
+};
 
 export const EMBLEM_NAMES = ["globe", "tree"] as const;
 export type EmblemName = (typeof EMBLEM_NAMES)[number];

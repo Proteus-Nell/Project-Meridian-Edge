@@ -77,6 +77,14 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/rename <alias|uid> <new>", blurb: "give a contact a new local alias" },
       { cmd: "/favourite <alias|uid> [off]", blurb: "pin a contact to the top of your contact list" },
       { cmd: "/contacts", blurb: "list saved contacts with their UIDs and trust state" },
+      { cmd: "/group new <name> <who>...", blurb: "create a group and invite its members" },
+      { cmd: "/group list", blurb: "every group on this device" },
+      { cmd: "/group open <name>", blurb: "focus a group conversation" },
+      { cmd: "/group info <name>", blurb: "its roster and member-list fingerprint" },
+      { cmd: "/group add <name> <who>", blurb: "add a member (everyone is told)" },
+      { cmd: "/group remove <name> <who>", blurb: "remove a member (everyone is told)" },
+      { cmd: "/group leave <name>", blurb: "leave a group" },
+      { cmd: "/group purge <name>", blurb: "delete a group and its local history" },
       { cmd: "/chat <alias|uid>", blurb: "open a conversation (a focused view that hides everything else)" },
       { cmd: "/home", blurb: "back to the home dashboard of all conversations" },
       { cmd: "/return", blurb: "toggle back to the previous screen" },
@@ -157,6 +165,8 @@ const EXPLANATIONS: Record<CommandWord, string> = {
     "Pins a contact to the top of `/contacts` and the home dashboard, marked with an asterisk. Local only, and the contact is never told.",
   contacts:
     "Lists every saved contact with its alias, full UID and trust state, plus any contact requests still waiting for `/add`.",
+  group:
+    "Group conversations. Each message is sent separately to every member over the ratchet you already share with them, so there is no group key and the server sees only ordinary traffic. Membership is not cryptographically agreed: a member list that disagrees with yours is reported, not prevented. Removing someone stops future messages and takes back nothing.",
   chat: "Focuses one conversation: the transcript shows only its history, and plain text you type is sent to them. `/chat <alias> <message>` does both at once.",
   home: "Returns to the home dashboard: every conversation at a glance, with unread counts, trust state, timers and waiting contact requests.",
   return:

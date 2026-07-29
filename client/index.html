@@ -99,8 +99,22 @@
       <div id="vignette"></div>
       <div id="footer">
         <div id="divider"></div>
+        <!-- The status strip is the app's one-line summary of the latest event,
+             and it doubles as the announcement channel for assistive tech: it
+             is a live region, so every event reaches a screen reader as a short
+             sentence without having to follow the scrolling transcript.
+             chrome.status() raises aria-live to "assertive" for a [SECURITY]
+             event and drops it back to "polite" afterwards, so a security
+             warning interrupts rather than queueing behind chatter. It carries
+             only app-generated text, assigned through textContent. -->
         <div id="status-strip">
-          <span id="status-event" class="status-event status-info"></span>
+          <span
+            id="status-event"
+            class="status-event status-info"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          ></span>
           <span id="status-context"></span>
         </div>
         <div id="autosuggest"></div>

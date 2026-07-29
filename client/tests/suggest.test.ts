@@ -41,6 +41,9 @@ describe("commandSuggestions", () => {
       "/settings emblem",
       "/settings color",
       "/settings trust",
+      "/settings font",
+      "/settings fontsize",
+      "/settings a11y",
     ]);
     expect(commandSuggestions("/keys ")).toEqual(["/keys status", "/keys refill"]);
     expect(commandSuggestions("/delete ")).toEqual([
