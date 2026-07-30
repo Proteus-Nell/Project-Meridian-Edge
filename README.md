@@ -121,7 +121,7 @@ trusting the new one.
 | `/settings rotation on\|off\|day <weekday>` | Configure the weekly rotation reminder |
 | `/settings mask asterisk\|hidden` | Passphrase echo: `asterisk` shows `*` per character (default); `hidden` shows nothing at all, sudo-style, so it leaks no length to a shoulder-surfer. Persists across reloads and applies from the first login prompt |
 | `/settings trust auto\|manual` | Trust-on-first-use mode: `auto` (default) verifies new contacts and accepts a key change automatically, with a loud warning; `manual` blocks on any key change until you `/ack` it, the stronger defence against a machine-in-the-middle |
-| `/settings notify on\|off` | Toggle toast notifications. Parses today but is not yet wired up: running it reports that the feature is scheduled for a future release |
+| `/settings notify on\|off` | Raise a desktop notification when a message arrives while this tab is in the background. The notification says only that something arrived: **no sender, no alias, no text**, because it is handed to the operating system, which may log it, mirror it to a paired device, or paint it on a lock screen. Needs an unlocked store, and the setting is stored encrypted rather than with the display preferences, since it governs what escapes the browser rather than how the app looks |
 | `/keys status` | Signed-prekey age and one-time-prekey count on the server |
 | `/keys refill` | Manually top one-time prekeys back up to 50 |
 | `/wipe` | Destroys the local store (identity, keys, everything). Asks you to repeat it within 30 s to confirm |

@@ -83,6 +83,13 @@ export class FakeChrome implements UiChrome {
    * and that a change actually reached the terminals. */
   textStyles: TextStyle[] = [];
   accessibility: AccessibilityPrefs[] = [];
+  /** What the browser is pretending to answer for a permission request; set it
+   * to exercise the denied and unsupported paths of /settings notify. */
+  notifyPermission: "granted" | "denied" | "unsupported" = "granted";
+  /** How many desktop notifications were raised. A count rather than a list of
+   * payloads on purpose: notifyMessage takes no arguments, and asserting on the
+   * count is what keeps it that way. */
+  notifications = 0;
   echoInput(line: string, kind: "command" | "message" = "command"): void {
     this.echoes.push({ line, kind });
   }
@@ -121,5 +128,11 @@ export class FakeChrome implements UiChrome {
   }
   applyAccessibility(prefs: AccessibilityPrefs): void {
     this.accessibility.push(prefs);
+  }
+  requestNotifyPermission(): Promise<"granted" | "denied" | "unsupported"> {
+    return Promise.resolve(this.notifyPermission);
+  }
+  notifyMessage(): void {
+    this.notifications += 1;
   }
 }

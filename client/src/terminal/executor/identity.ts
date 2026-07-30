@@ -23,6 +23,7 @@ import { secretStringsEqual } from "../../util/secret";
 import { formatUid, normalizeRecoveryCode, normalizeUid } from "../parser";
 import {
   loadContacts,
+  loadNotifyMode,
   loadTrustMode,
   refreshChatContext,
   refreshEmblemState,
@@ -403,6 +404,7 @@ export async function doLogin(
   };
   await loadContacts(x);
   await loadTrustMode(x);
+  await loadNotifyMode(x);
   try {
     await loginWithIdentity(x);
   } catch (err) {

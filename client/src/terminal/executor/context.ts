@@ -50,6 +50,19 @@ export interface UiChrome {
   /** Apply the accessibility switches: xterm's screen-reader live region and
    * the forced reduced-motion class. */
   applyAccessibility(prefs: AccessibilityPrefs): void;
+  /** Ask the browser for notification permission. Returns what the user (or a
+   * previous decision, or the platform) settled on, so /settings notify can
+   * report the truth instead of assuming it worked. */
+  requestNotifyPermission(): Promise<"granted" | "denied" | "unsupported">;
+  /** Raise a desktop notification that a message arrived.
+   *
+   * Deliberately takes no arguments: it carries no sender, no alias and no
+   * text. A notification leaves the browser for the operating system's
+   * notification centre, which may log it, mirror it to other devices, or show
+   * it on a lock screen, none of which this app controls. Saying only that
+   * something arrived keeps the metadata this project is careful about inside
+   * the app that is careful about it. */
+  notifyMessage(): void;
   /** Current width of the transcript in character cells, so output that has to
    * be laid out (/help) can fit the screen it is printed on instead of assuming
    * a desktop terminal. */
@@ -69,6 +82,8 @@ export const NULL_CHROME: UiChrome = {
   applyEmblem() {},
   applyTextStyle() {},
   applyAccessibility() {},
+  requestNotifyPermission: () => Promise.resolve("unsupported" as const),
+  notifyMessage() {},
   columns: () => DEFAULT_HELP_COLUMNS,
 };
 
@@ -113,6 +128,10 @@ export interface ExecutorInternals {
    * later key change is auto-re-pinned with a loud warning instead of
    * blocking behind /ack. */
   autoTrust: boolean;
+  /** Desktop-notification preference (/settings notify), cached from the
+   * encrypted store on unlock. Off until loaded, so a message arriving mid-
+   * login never notifies against a preference nobody has read yet. */
+  notify: boolean;
   /** Bumped on every lock/logout/wipe; in-flight receive continuations check
    * it and bail instead of writing to torn-down state. */
   epoch: number;
@@ -158,6 +177,27 @@ export function resolveContact(x: ExecutorInternals, target: string): Contact | 
 export async function loadTrustMode(x: ExecutorInternals): Promise<void> {
   const stored = await x.store.getJson<{ auto: boolean }>("settings/trust");
   x.autoTrust = stored?.auto ?? true;
+}
+
+/** Load the desktop-notification preference from the encrypted store (defaults
+ * off). Cached on the executor for the same reason the trust mode is: the
+ * receive path consults it per message and should not hit the store each
+ * time. */
+export async function loadNotifyMode(x: ExecutorInternals): Promise<void> {
+  const stored = await x.store.getJson<NotifySettings>(NOTIFY_SETTINGS_KEY);
+  x.notify = stored?.enabled ?? false;
+}
+
+export const NOTIFY_SETTINGS_KEY = "settings/notify";
+
+/** Whether a desktop notification is raised for a message that arrives while
+ * the tab is in the background. Stored ENCRYPTED beside the trust mode rather
+ * than with the display preferences: it is not a look-and-feel choice, it
+ * decides whether the existence of your conversations escapes the browser into
+ * the operating system's notification centre. Nothing needs to read it before
+ * unlock, because notifications only ever fire for a logged-in session. */
+export interface NotifySettings {
+  readonly enabled: boolean;
 }
 
 /** Pin a contact's identity key, adopting it as verified when trust-on-first-

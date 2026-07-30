@@ -300,3 +300,76 @@ describe("/settings spacing", () => {
     expect(output.text()).toContain("line height 1x");
   });
 });
+
+describe("/settings notify", () => {
+  /** Notifications need an unlocked store, so these use a real created store. */
+  async function unlocked(): Promise<ReturnType<typeof makeExecutor>> {
+    const h = makeExecutor();
+    await h.store.create("passphrase 1!", { mKib: 64, t: 1, p: 1 });
+    return h;
+  }
+
+  it("is off until asked for, and stores the choice encrypted", async () => {
+    const h = await unlocked();
+    expect(h.executor.notify).toBe(false);
+
+    await run(h.executor, "/settings notify on");
+    expect(h.executor.notify).toBe(true);
+    // Encrypted store, not display prefs: this decides what escapes the
+    // browser, which is posture rather than look-and-feel.
+    expect(await h.store.getJson("settings/notify")).toEqual({ enabled: true });
+
+    await run(h.executor, "/settings notify off");
+    expect(h.executor.notify).toBe(false);
+    expect(await h.store.getJson("settings/notify")).toEqual({ enabled: false });
+  });
+
+  it("needs an unlocked store", async () => {
+    const { executor, output } = makeExecutor();
+    await run(executor, "/settings notify on");
+    expect(output.text()).toContain("[E404]");
+  });
+
+  it("reports a browser refusal instead of pretending it worked", async () => {
+    const h = await unlocked();
+    h.chrome.notifyPermission = "denied";
+    await run(h.executor, "/settings notify on");
+    expect(h.output.text()).toContain("blocking notifications");
+    // Nothing was stored, so the next login does not believe it is on.
+    expect(h.executor.notify).toBe(false);
+    expect(await h.store.getJson("settings/notify")).toBeNull();
+  });
+
+  it("reports a browser with no notification support at all", async () => {
+    const h = await unlocked();
+    h.chrome.notifyPermission = "unsupported";
+    await run(h.executor, "/settings notify on");
+    expect(h.output.text()).toContain("does not support notifications");
+    expect(h.executor.notify).toBe(false);
+  });
+
+  it("turning it off never asks for permission", async () => {
+    const h = await unlocked();
+    h.chrome.notifyPermission = "denied";
+    await run(h.executor, "/settings notify off");
+    // A refusal must not stop someone disabling a feature they never had.
+    expect(h.output.text()).toContain("Notifications off");
+    expect(await h.store.getJson("settings/notify")).toEqual({ enabled: false });
+  });
+
+  it("says the notification carries no sender or text", async () => {
+    const h = await unlocked();
+    await run(h.executor, "/settings notify on");
+    const text = h.output.text();
+    expect(text).toContain("no sender");
+    expect(text).toContain("no text");
+  });
+
+  it("rejects anything that is not on or off", async () => {
+    const h = await unlocked();
+    for (const line of ["/settings notify", "/settings notify yes", "/settings notify on off"]) {
+      await run(h.executor, line);
+    }
+    expect(h.output.text()).toContain("[E102]");
+  });
+});

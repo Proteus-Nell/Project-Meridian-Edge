@@ -418,6 +418,11 @@ export function deliverIncomingGroup(
   }
   x.unread.set(group.gid, (x.unread.get(group.gid) ?? 0) + 1);
   x.renderer.status("info", `New message in '${group.name}'. Run /group open ${group.name} to read it.`);
+  // Same content-free notification a one-to-one message raises: the group name
+  // is no more shareable with the operating system than a contact's alias.
+  if (x.notify) {
+    x.chrome.notifyMessage();
+  }
   if (x.active === null && x.activeGroup === null) {
     x.enqueueRender(() => renderHome(x));
   }
@@ -447,6 +452,11 @@ export function deliverIncoming(
   }
   x.unread.set(uid, (x.unread.get(uid) ?? 0) + 1);
   x.renderer.status("info", `New message from ${label}. Run /chat ${label} to read it.`);
+  // The status line names the sender because it stays inside the app; the
+  // notification does not, so it says nothing (/settings notify).
+  if (x.notify) {
+    x.chrome.notifyMessage();
+  }
   if (x.active === null) {
     x.enqueueRender(() => renderHome(x));
   }

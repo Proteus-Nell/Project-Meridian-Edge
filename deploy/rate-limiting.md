@@ -19,21 +19,21 @@ consequences:
 
 **2. The app must be told which proxy to trust before it sees real client IPs.**
 The per-IP limiters (register, login-challenge, recover) and the security log key
-on `request.client.host`, which is the **socket peer** - with nginx or Caddy in
+on `request.client.host`, which is the **socket peer**. With nginx or Caddy in
 front, that is the proxy, not the browser. uvicorn reads `X-Forwarded-For` only
 from peers listed in `FORWARDED_ALLOW_IPS`, which defaults to `127.0.0.1`.
 
 The shipped compose files set that variable to the proxy's network, so this is
 handled on Routes A and B; Route C is unaffected because uvicorn binds to
 localhost and Caddy connects from `127.0.0.1`, already the default. If you build
-your own topology, set it yourself - otherwise every request looks like it came
+your own topology, set it yourself, otherwise every request looks like it came
 from one address and the per-IP limits collapse into a single shared bucket. See
 the last section for the exact knob.
 
 The edge is the right place to fix both: it is one durable component that sees
 the genuine client address before the request is multiplexed to any worker.
 
-Keep the app limits **as well** - they are defence in depth (they still bound a
+Keep the app limits **as well**, as defence in depth (they still bound a
 single authenticated UID's message/bundle rate, which the edge cannot see inside
 the encrypted session), and they are the only limiter in local development where
 there is no proxy.
@@ -50,7 +50,7 @@ there is no proxy.
 | `POST /v1/keys/spk` and `POST /v1/keys/opks` (shared bucket) | UID | 10 / hour |
 
 `login/verify`, `logout`, `logout/all`, `sessions`, `keys/status`,
-`messages/ack`, and `account/delete` have no dedicated app limiter - they
+`messages/ack`, and `account/delete` have no dedicated app limiter. They
 either require a valid single-use nonce or an authenticated session first, and
 none of them writes an unbounded row. A blanket edge limit on `/v1/` covers
 them.
@@ -66,7 +66,7 @@ on the same reasoning.
 
 ## nginx (Route A)
 
-nginx has `limit_req` built in. Add two zones in the `http { }` block - a general
+nginx has `limit_req` built in. Add two zones in the `http { }` block, a general
 one for all of `/v1/`, and a stricter one for the unauthenticated auth endpoints
 that are the brute-force surface:
 
@@ -111,7 +111,7 @@ Two cautions:
   upgrade, not a stream of requests; a per-request limiter would throttle or drop
   the socket. Use `limit_conn` there if you want to cap sockets per client.
 - **A CDN or load balancer in front of nginx** makes `$binary_remote_addr` that
-  intermediary, not the client - the same problem described above, one hop out.
+  intermediary, not the client. That is the same problem described above, one hop out.
   Restore the real address with the realip module, trusting only your own edge:
 
   ```nginx
@@ -124,7 +124,7 @@ Two cautions:
 ## Caddy (Routes B and C)
 
 **Stock Caddy has no built-in rate limiting.** Do not assume a `rate_limit`
-directive exists on a default binary - it does not. You have three honest
+directive exists on a default binary. It does not, so you have three honest
 options:
 
 1. **Build Caddy with the community rate-limit module.** `caddy-ratelimit`
@@ -181,13 +181,13 @@ uvicorn reads straight from the environment and defaults to `127.0.0.1`:
 | Route | Trusted peers | Set where |
 |---|---|---|
 | A (nginx) and B (Caddy), containers | the Compose network's private ranges | `FORWARDED_ALLOW_IPS` in the compose file, overridable with `MERIDIAN_EDGE_TRUSTED_PROXY_IPS` in `.env` |
-| C (single box) | `127.0.0.1` | nothing to do - uvicorn binds to localhost and Caddy connects from there, which is already the default |
+| C (single box) | `127.0.0.1` | nothing to do, since uvicorn binds to localhost and Caddy connects from there, which is already the default |
 
 Narrow it to your actual subnet if you know it; both exact addresses and CIDR
 ranges are accepted, comma-separated.
 
 **Never set it to `*`.** That trusts every peer, so any client can send its own
-`X-Forwarded-For` and be believed - which would let one attacker spend an
+`X-Forwarded-For` and be believed, which would let one attacker spend an
 unlimited number of per-IP budgets and write false addresses into the security
 log. The production boot guard refuses to start with `FORWARDED_ALLOW_IPS="*"`
 rather than let that ship silently.

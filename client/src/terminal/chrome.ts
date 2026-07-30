@@ -471,6 +471,54 @@ export class Chrome implements SuggestionNav {
     this.refitCb?.();
   }
 
+  // ----- desktop notifications -------------------------------------------------
+
+  /** Ask for notification permission, reporting honestly what came back. The
+   * browser only shows its prompt in response to a user gesture, which
+   * /settings notify is, so this is the one place it can be asked. */
+  async requestNotifyPermission(): Promise<"granted" | "denied" | "unsupported"> {
+    if (typeof Notification === "undefined") {
+      return "unsupported";
+    }
+    if (Notification.permission === "granted") {
+      return "granted";
+    }
+    if (Notification.permission === "denied") {
+      // Already refused at the browser level: asking again does nothing, and
+      // pretending otherwise would leave the user waiting for a prompt that
+      // will never appear.
+      return "denied";
+    }
+    return (await Notification.requestPermission()) === "granted" ? "granted" : "denied";
+  }
+
+  /** Say only that a message arrived. No sender, no alias, no text.
+   *
+   * The notification leaves the browser for the operating system, which may log
+   * it, mirror it to a paired device, or paint it on a lock screen. None of
+   * that is under this app's control, so nothing worth protecting goes into it.
+   * Skipped entirely while the tab is focused, where the transcript has already
+   * shown the message. */
+  notifyMessage(): void {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      return;
+    }
+    if (typeof document !== "undefined" && !document.hidden) {
+      return;
+    }
+    try {
+      // `tag` collapses a burst into one entry rather than stacking a row per
+      // message, which would itself leak how much traffic arrived.
+      new Notification("Meridian Edge", {
+        body: "New message.",
+        tag: "meridian-edge-message",
+      });
+    } catch {
+      // Some platforms throw for notifications outside a service worker.
+      // A missing notification is not worth surfacing as an error.
+    }
+  }
+
   /** Apply the accessibility switches. xterm's screenReaderMode maintains its
    * own ARIA live region mirroring the terminal, which is the only way a screen
    * reader can follow canvas-free terminal output; it is off by default for the

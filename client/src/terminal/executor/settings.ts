@@ -38,7 +38,8 @@ import type {
 } from "../theme";
 import type { A11yFeature, SpacingKind } from "../parser";
 import type { ThemeElement, Weekday } from "../parser";
-import type { ExecutorInternals } from "./context";
+import { NOTIFY_SETTINGS_KEY } from "./context";
+import type { ExecutorInternals, NotifySettings } from "./context";
 import { DEFAULT_ROTATION } from "./records";
 import type { RotationSettings } from "./records";
 
@@ -68,6 +69,53 @@ export async function doSettingsRotation(
   x.renderer.event(
     "success",
     next.enabled ? `Weekly rotation prompt is on, for ${next.day}.` : "Weekly rotation prompt is off.",
+  );
+}
+
+/** `/settings notify <on|off>`: raise a desktop notification when a message
+ * arrives while this tab is in the background.
+ *
+ * Stored encrypted beside the trust mode rather than with the display
+ * preferences, because it is not a look-and-feel choice: it decides whether the
+ * existence of your conversations escapes the browser into the operating
+ * system. The notification itself carries no sender and no text for the same
+ * reason (see chrome.ts::notifyMessage).
+ *
+ * Permission is requested here and nowhere else, since a browser only shows its
+ * prompt in response to a user gesture, and the outcome is reported rather than
+ * assumed: a refusal at the browser level cannot be undone from inside the page
+ * and the user needs to know that is where it now stands. */
+export async function doSettingsNotify(x: ExecutorInternals, enabled: boolean): Promise<void> {
+  if (!x.store.isUnlocked()) {
+    x.renderer.error("E404");
+    return;
+  }
+  if (!enabled) {
+    await x.store.putJson(NOTIFY_SETTINGS_KEY, { enabled: false } satisfies NotifySettings);
+    x.notify = false;
+    x.renderer.event("success", "Notifications off. Nothing leaves the tab.");
+    return;
+  }
+  const permission = await x.chrome.requestNotifyPermission();
+  if (permission === "unsupported") {
+    x.renderer.event(
+      "warning",
+      "This browser does not support notifications, so nothing was changed.",
+    );
+    return;
+  }
+  if (permission === "denied") {
+    x.renderer.event(
+      "warning",
+      "The browser is blocking notifications for this site, so nothing was changed. Allow them in the site permissions and run this again.",
+    );
+    return;
+  }
+  await x.store.putJson(NOTIFY_SETTINGS_KEY, { enabled: true } satisfies NotifySettings);
+  x.notify = true;
+  x.renderer.event(
+    "success",
+    "Notifications on. A message arriving while this tab is in the background raises one that says only that something arrived: no sender, no alias, no text, because a notification is handed to the operating system and this app cannot control what it does with it.",
   );
 }
 

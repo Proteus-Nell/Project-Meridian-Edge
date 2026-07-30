@@ -129,7 +129,7 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/settings trust <auto|manual>", blurb: "auto-verify contacts (TOFU) or verify by hand" },
       { cmd: "/settings mask <asterisk|hidden>", blurb: "passphrase echo style" },
       { cmd: "/settings rotation <on|off|day>", blurb: "weekly passphrase-rotation prompt" },
-      { cmd: "/settings notify <on|off>", blurb: "toast notifications" },
+      { cmd: "/settings notify <on|off>", blurb: "desktop notification when a message arrives in the background" },
       { cmd: "/settings a11y screenreader <on|off>", blurb: "mirror terminal output into an ARIA live region" },
       { cmd: "/settings a11y motion <on|off>", blurb: "force reduced motion, whatever your OS says" },
     ],

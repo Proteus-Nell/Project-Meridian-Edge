@@ -63,6 +63,7 @@ import {
   doSettingsFontSize,
   doSettingsSpacing,
   doSettingsMask,
+  doSettingsNotify,
   doSettingsRotation,
   doSettingsScheme,
   doSettingsSchemeDelete,
@@ -74,10 +75,6 @@ import {
 import { doAck, doVerified, doVerify } from "./trust";
 import { renderActiveConversation, renderHome, returnToPreviousView } from "./views";
 
-const SEGMENT_OF: Partial<Record<Command["name"], string>> = {
-  "settings-notify": "a future release (could-have)",
-};
-
 export class Executor implements ExecutorInternals {
   readonly store: KeyStore;
   identity: Identity | null = null;
@@ -88,6 +85,7 @@ export class Executor implements ExecutorInternals {
   unread = new Map<string, number>();
   previousView: ViewRef | null = null;
   autoTrust = true;
+  notify = false;
   epoch = 0;
   wipeRequestedAt = 0;
   ws: WsClient | null = null;
@@ -230,6 +228,9 @@ export class Executor implements ExecutorInternals {
         return;
       case "settings-rotation":
         this.run(() => doSettingsRotation(this, cmd.setting));
+        return;
+      case "settings-notify":
+        this.run(() => doSettingsNotify(this, cmd.enabled));
         return;
       case "settings-mask":
         this.run(() => doSettingsMask(this, cmd.mask));
@@ -381,12 +382,13 @@ export class Executor implements ExecutorInternals {
       case "clr":
         this.chrome.clearScreen();
         return;
-      default: {
-        const segment = SEGMENT_OF[cmd.name] ?? "a later release";
-        this.renderer.event("info", `/${cmd.name} is not implemented yet. It is scheduled for ${segment}.`);
-        return;
-      }
     }
+    // No default branch, deliberately. Every command the parser can produce is
+    // now handled, so `cmd` is `never` here and TypeScript will refuse to
+    // compile a new command that nobody dispatched. That check is worth more
+    // than the "not implemented yet" placeholder this replaced, which could
+    // only ever tell the user at runtime what the compiler can now tell us.
+    cmd satisfies never;
   }
 
   /** `/chat <target> [message]`: focus a conversation and, with
