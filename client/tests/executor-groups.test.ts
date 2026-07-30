@@ -401,6 +401,29 @@ describe("the /group command surface", () => {
     expect((await loadGroup(bob.executor, gid))?.active).toBe(false);
     expect((await loadGroup(alice.executor, gid))?.members).toEqual([alice.uid]);
     expect(alice.output.text()).toContain("left 'team'");
+    // A routine departure must not look like an attack. The notice carries the
+    // roster as it stands after the leave, so alice applies the change and
+    // lands on exactly that roster with nothing left over to warn about. An
+    // earlier version sent the pre-leave roster, which made every legitimate
+    // departure raise a [SECURITY] divergence warning naming the person who
+    // had just left as a member alice could not see.
+    expect(alice.output.text()).not.toContain("different member list");
+    expect(alice.chrome.discarded.map((d) => d.code)).not.toContain("E513");
+  });
+
+  it("a departure still has to come from someone actually in the roster", async () => {
+    // Relaxing the roster check for a leave must not become a way in: the gate
+    // that matters is that the sender is in THIS device's roster, and that one
+    // is unchanged.
+    const { alice, bob, outbox, gid } = await setupAliceBobGroup();
+    const alicesGroup = must(await loadGroup(alice.executor, gid));
+    await saveGroup(alice.executor, { ...alicesGroup, members: [alice.uid] });
+
+    await run(bob, "/group leave team");
+    await deliver(alice, must(outbox[0]).envelope);
+
+    expect(alice.chrome.discarded.map((d) => d.code)).toContain("E513");
+    expect((await loadGroup(alice.executor, gid))?.members).toEqual([alice.uid]);
   });
 
   it("/group sync adds the members the confirmation names, and nothing when declined", async () => {

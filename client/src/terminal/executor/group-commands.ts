@@ -268,13 +268,19 @@ export async function doGroupLeave(x: ExecutorInternals, name: string): Promise<
   if (group === null) {
     return;
   }
-  const result = await fanOutToGroup(x, group, null, "leave", null);
   const self = x.identity?.uid ?? "";
   const updated: Group = {
     ...group,
     members: group.members.filter((uid) => uid !== self),
     active: false,
   };
+  // Advertise the roster as it stands AFTER the departure, the same as a
+  // removal does. Every notice carrying the after-state is what lets a
+  // recipient apply the announced change and get a roster that matches, so a
+  // routine departure raises no divergence warning. Sending the pre-leave
+  // roster meant every remaining member was told the person who just left was
+  // an extra member the sender could see and they could not.
+  const result = await fanOutToGroup(x, updated, null, "leave", null, group.members);
   await saveGroup(x, updated);
   x.unread.delete(group.gid);
   if (x.activeGroup?.gid === group.gid) {

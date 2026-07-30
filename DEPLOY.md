@@ -18,7 +18,7 @@ ship a new version, and how to make the site pass PQC/TLS screenings.
 2. [How routing works](#2-how-routing-works)
 3. [Prerequisites and configuration](#3-prerequisites-and-configuration)
 4. [Getting your TLS certificate (Route A)](#4-getting-your-tls-certificate-route-a)
-5. [Route A - nginx](#5-route-a---nginx) - [B - Caddy](#6-route-b---caddy-automatic-https) - [C - single box](#7-route-c---single-box)
+5. [Route A: nginx](#5-route-a-nginx), [B: Caddy](#6-route-b-caddy-automatic-https), [C: single box](#7-route-c-single-box)
 6. [Verify after deploying](#8-verify-after-deploying)
 7. [Updating an existing deployment](#9-updating-an-existing-deployment)
 8. [Passing PQC/TLS screenings](#10-passing-pqctls-screenings)
@@ -29,25 +29,25 @@ Pick a route:
 | Route | Edge | TLS certificates | Best for |
 |---|---|---|---|
 | **A. Traditional** | nginx (container) | **you provide them** (certbot or a CA) | you already run nginx/certbot and want explicit control |
-| **B. Caddy** | Caddy (container) | **automatic** (Let's Encrypt) | most people - the simplest hardened HTTPS deploy |
+| **B. Caddy** | Caddy (container) | **automatic** (Let's Encrypt) | most people: the simplest hardened HTTPS deploy |
 | **C. Single box** | Caddy (host) | **automatic** | 10-20 users on one small VPS, no container orchestration |
 
 All three keep the same hardening posture (non-root, read-only filesystems,
 TLS 1.3, the exact CSP/HSTS header set, WS origin allowlist). **If you do not
-want to think about certificates, use Route B or C** - Caddy fetches and renews
+want to think about certificates, use Route B or C**: Caddy fetches and renews
 TLS for you, and negotiates the post-quantum TLS group with no OpenSSL wrangling.
 
 ---
 
 ## 1. What you are deploying
 
-The server is a **zero-knowledge relay**. Every post-quantum operation -
-ML-KEM-768 key exchange, ML-DSA-65 signatures, the message ratchet - runs in the
-browser. The server only stores and forwards opaque encrypted blobs and
+The server is a **zero-knowledge relay**. Every post-quantum operation runs in
+the browser: ML-KEM-768 key exchange, ML-DSA-65 signatures, the message
+ratchet. The server only stores and forwards opaque encrypted blobs and
 public-key bundles; it never sees plaintext, private keys, or symmetric keys.
 The database holds users' public keys, prekey bundles, the per-recipient
 ciphertext queue (delete-on-ack, 14-day TTL), session-token hashes, and
-Argon2id recovery-code hashes - no plaintext, ever.
+Argon2id recovery-code hashes. No plaintext, ever.
 
 Two consequences shape deployment:
 
@@ -58,7 +58,7 @@ Two consequences shape deployment:
   `X25519MLKEM768` hybrid group on the TLS handshake is an extra layer. The
   messenger's end-to-end guarantees (ML-KEM-768 / ML-DSA-65) live in the client
   and are **unaffected** if the edge falls back to classical TLS curves. This
-  distinction matters for screenings - see [section 10](#10-passing-pqctls-screenings).
+  distinction matters for screenings. See [section 10](#10-passing-pqctls-screenings).
 
 The trust model does **not** depend on the server or database being trustworthy;
 end-to-end encryption and the safety-number check are what protect
@@ -69,7 +69,7 @@ server a trusted party (it is not one).
 
 ## 2. How routing works
 
-Everything is served **same-origin** from one hostname - no separate API domain,
+Everything is served **same-origin** from one hostname: no separate API domain,
 no CDN. The edge (nginx or Caddy) is the only thing exposed to the internet; it
 fans requests out by URL path.
 
@@ -111,7 +111,7 @@ chat.example.com.   AAAA  2001:db8::10         # IPv6 (if you have it)
 
 Behind a cloud LB / NAT, forward ports 80 and 443 to the box there too. DNS must
 resolve **before** you request a Let's Encrypt cert (Route A certbot, and Routes
-B/C) - the ACME challenge validates the name.
+B/C), because the ACME challenge validates the name.
 
 ### 2.2 Ports and firewall
 
@@ -119,9 +119,9 @@ B/C) - the ACME challenge validates the name.
 |---|---|---|
 | 80/tcp | **public** | HTTP->HTTPS redirect + ACME HTTP-01 challenge |
 | 443/tcp | **public** | HTTPS (and HTTP/2) |
-| 443/udp | public (optional) | HTTP/3 - Caddy routes only |
-| 8000/tcp | **internal only** | FastAPI server - never expose publicly |
-| 5432/tcp | **internal only** | Postgres - never expose publicly |
+| 443/udp | public (optional) | HTTP/3: Caddy routes only |
+| 8000/tcp | **internal only** | FastAPI server: never expose publicly |
+| 5432/tcp | **internal only** | Postgres: never expose publicly |
 
 In Docker (A/B) the server and Postgres sit on the private Compose network and
 are unreachable from outside; Compose publishes only `80:8080` and `443:8443`.
@@ -136,9 +136,9 @@ sudo ufw enable
 
 ### 2.3 The one routing gotcha: the `Origin` header
 
-The server checks `Origin` against its allowlist on **two** paths - the
-WebSocket upgrade and login (`/v1/login/challenge` and `/v1/login/verify`) - and
-**rejects a mismatch**. Two things must line up exactly (scheme + host, no
+The server checks `Origin` against its allowlist on **two** paths: the
+WebSocket upgrade and login (`/v1/login/challenge` and `/v1/login/verify`). It
+**rejects a mismatch** on both. Two things must line up exactly (scheme + host, no
 trailing slash):
 
 - `MERIDIAN_EDGE_WS_ORIGINS=https://chat.example.com` (the value the browser
@@ -151,7 +151,7 @@ Get it wrong and the two paths fail very differently:
 | Symptom | Cause and blast radius |
 |---|---|
 | WebSocket connects, then drops immediately | Mismatch on the upgrade. Degrades gracefully: only live push is lost, and messages still arrive when the recipient reconnects and drains the queue. |
-| Sign-in fails with a generic request failure (HTTP 403) | Mismatch on login. **Fails closed - nobody can sign in at all** until it is fixed. |
+| Sign-in fails with a generic request failure (HTTP 403) | Mismatch on login. **Fails closed: nobody can sign in at all** until it is fixed. |
 
 Login fails hard here, so re-check sign-in after any change to the edge
 configuration, the public hostname, or the allowlist. Leaving the allowlist
@@ -175,14 +175,14 @@ The server **refuses to boot** in production if any of these is wrong
 | Var | Required in prod | Purpose |
 |---|---|---|
 | `MERIDIAN_EDGE_ENV=production` | yes | turns on the boot guard, disables `/docs` |
-| `MERIDIAN_EDGE_ALLOWED_ORIGINS` | yes | exact `Origin` allowlist, comma-separated (e.g. `https://chat.example.com`) - **must not be empty**. Governs both the WebSocket upgrade **and** `/v1/login/challenge` + `/v1/login/verify`. `MERIDIAN_EDGE_WS_ORIGINS` is the former name and still works; set either one |
-| `MERIDIAN_EDGE_DATABASE_URL` | yes | Postgres DSN - a `sqlite://` URL is **rejected** |
+| `MERIDIAN_EDGE_ALLOWED_ORIGINS` | yes | exact `Origin` allowlist, comma-separated (e.g. `https://chat.example.com`). **Must not be empty**. Governs both the WebSocket upgrade **and** `/v1/login/challenge` + `/v1/login/verify`. `MERIDIAN_EDGE_WS_ORIGINS` is the former name and still works; set either one |
+| `MERIDIAN_EDGE_DATABASE_URL` | yes | Postgres DSN: a `sqlite://` URL is **rejected** |
 | `MERIDIAN_EDGE_DEV` | must be unset / not `1` | `=1` enables `/docs`; refused alongside production |
 | `FORWARDED_ALLOW_IPS` | must not be `*` | peers trusted to set `X-Forwarded-For`, so per-IP limits and the security log see real clients. Compose sets it to the proxy's network; `*` is **refused** because it would let any client forge its address. See [deploy/rate-limiting.md](deploy/rate-limiting.md) |
 
 The gate also refuses to boot if the live Argon2id parameters have drifted from
 the expected Argon2id constants (m = 64 MiB, t = 3, p = 1). If the server container exits
-immediately on `up`, read `docker compose logs server` - the gate names exactly
+immediately on `up`, read `docker compose logs server`: the gate names exactly
 what is wrong.
 
 ### 3.2 Compose / host `.env`
@@ -198,7 +198,7 @@ server vars above from them and **refuses to start** if one is missing.
 | `MERIDIAN_EDGE_TRUSTED_PROXY_IPS` | server | optional. Narrows which peers may set `X-Forwarded-For`; defaults to the private ranges a Compose network draws from |
 | `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Route B) | public hostname + ACME contact |
 
-Never commit `.env`, `./tls/`, or any private key - all are git-ignored.
+Never commit `.env`, `./tls/`, or any private key: all are git-ignored.
 
 ### 3.3 Container port map (routes A/B)
 
@@ -215,7 +215,7 @@ with no added capabilities; Compose maps the host's 80/443 onto them.
 ### 3.4 Where the deployment files live
 
 Deployment artifacts are split between the repo root and `deploy/`. The split
-is not arbitrary - Docker's own lookup rules decide it, so resist the urge to
+is not arbitrary. Docker's own lookup rules decide it, so resist the urge to
 tidy these into one folder:
 
 | File | Location | Why it sits there |
@@ -236,7 +236,7 @@ clone it, `cd` into it, write `.env`, and run `docker compose` from the root.
 
 ## 4. Getting your TLS certificate (Route A)
 
-> **Skip this section for Route B or C** - Caddy obtains and renews the
+> **Skip this section for Route B or C**: Caddy obtains and renews the
 > certificate automatically. This is only for **Route A (nginx)**, which mounts
 > two files you provide.
 
@@ -244,7 +244,7 @@ clone it, `cd` into it, write `.env`, and run `docker compose` from the root.
 
 | File | Contents | Secrecy |
 |---|---|---|
-| `privkey.pem` | your certificate's **private key** | **secret** - never commit, `chmod 600` |
+| `privkey.pem` | your certificate's **private key** | **secret**: never commit, `chmod 600` |
 | `fullchain.pem` | your **leaf certificate followed by the intermediate CA cert(s)** | public |
 
 `deploy/nginx.conf` references exactly `/etc/nginx/tls/fullchain.pem` and
@@ -252,11 +252,11 @@ clone it, `cd` into it, write `.env`, and run `docker compose` from the root.
 `TLS_CERT_DIR` there read-only. You must end up with those two filenames in that
 directory. Pick one method:
 
-### 4.2 Method 1 - Let's Encrypt via certbot (recommended)
+### 4.2 Method 1: Let's Encrypt via certbot (recommended)
 
 Free, trusted by all browsers, 90-day certs with automated renewal.
 
-**HTTP-01 (standalone)** - simplest when port 80 is free. Stop anything on port
+**HTTP-01 (standalone)**: simplest when port 80 is free. Stop anything on port
 80 first (the edge container, if running):
 
 ```bash
@@ -272,7 +272,7 @@ sudo cp -L /etc/letsencrypt/live/chat.example.com/fullchain.pem ./tls/
 sudo cp -L /etc/letsencrypt/live/chat.example.com/privkey.pem   ./tls/
 ```
 
-**DNS-01** - cleanest for containers / wildcards (no port-80 juggling):
+**DNS-01**: cleanest for containers / wildcards (no port-80 juggling):
 
 ```bash
 sudo certbot certonly --manual --preferred-challenges dns -d chat.example.com
@@ -293,7 +293,7 @@ sudo certbot renew --deploy-hook '
 (`--manual` DNS-01 does not auto-renew; use a DNS plugin like
 `certbot-dns-cloudflare` for hands-off renewal.)
 
-### 4.3 Method 2 - a commercial / paid CA certificate
+### 4.3 Method 2: a commercial / paid CA certificate
 
 Generate the key + CSR yourself (keep `privkey.pem` local):
 
@@ -303,7 +303,7 @@ openssl req -new -newkey rsa:2048 -nodes \
 ```
 
 Submit the CSR, complete **Domain Control Validation by DNS (TXT) or email**
-(not the HTTP-file method - you have no running web server yet), then assemble
+(not the HTTP-file method, because you have no running web server yet), then assemble
 `fullchain.pem` **leaf first, then intermediate(s)** (root omitted):
 
 ```bash
@@ -314,9 +314,9 @@ mkdir -p ./tls && cp fullchain.pem privkey.pem ./tls/
 Renewal is manual (commercial certs last ~1 year): drop the new files into
 `TLS_CERT_DIR` and `docker compose restart proxy`.
 
-### 4.4 Method 3 - self-signed (local testing only)
+### 4.4 Method 3: self-signed (local testing only)
 
-Browsers show a trust warning - **never for real users**:
+Browsers show a trust warning, **never for real users**:
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
@@ -353,7 +353,7 @@ openssl crl2pkcs7 -nocrl -certfile ./tls/fullchain.pem \
 
 ---
 
-## 5. Route A - nginx
+## 5. Route A: nginx
 
 Reference topology: `docker-compose.yml` + `deploy/nginx.conf` +
 `deploy/proxy.Dockerfile`. nginx terminates TLS, serves the built client bundle
@@ -375,13 +375,13 @@ docker compose up -d --build
 
 `server` waits for `db` to pass its health check. nginx requests
 `ssl_ecdh_curve X25519MLKEM768:X25519:secp384r1` and **will not start** if its
-linked OpenSSL does not know the hybrid group (needs OpenSSL >= 3.5) - see
+linked OpenSSL does not know the hybrid group (needs OpenSSL >= 3.5). See
 [section 10.4](#104-if-the-edge-cannot-negotiate-the-group). Certificate renewal
 is on you (section 4.2's deploy hook); if that is tedious, Route B removes it.
 
 ---
 
-## 6. Route B - Caddy (automatic HTTPS)
+## 6. Route B: Caddy (automatic HTTPS)
 
 Same containerized topology, edge is **Caddy** instead of nginx. Caddy
 provisions and renews TLS automatically (Let's Encrypt / ZeroSSL), and Caddy
@@ -406,18 +406,18 @@ cp .env.example .env
 docker compose -f docker-compose.caddy.yml up -d --build
 ```
 
-Caddy stores its ACME account + certs in the persistent `caddy-data` volume - do
+Caddy stores its ACME account + certs in the persistent `caddy-data` volume, so do
 not delete it, or you re-issue certs (and can hit Let's Encrypt rate limits) on
 the next start.
 
 ---
 
-## 7. Route C - single box
+## 7. Route C: single box
 
 The lightest sane deployment: one small VPS, no Docker, Caddy on the host for
 auto-TLS, one `uvicorn` under systemd, one local Postgres.
 
-> Postgres is still required - the boot guard rejects SQLite by design (a dev
+> Postgres is still required: the boot guard rejects SQLite by design (a dev
 > artifact must never be deployed). It just runs on the same box here.
 
 ```bash
@@ -441,7 +441,7 @@ cd /opt/meridian-edge/client && npm ci && npm run build
 sudo mkdir -p /srv/www && sudo cp -r dist/* /srv/www/
 ```
 
-**systemd unit** - `/etc/systemd/system/meridian-edge.service`:
+Create the **systemd unit** at `/etc/systemd/system/meridian-edge.service`:
 
 ```ini
 [Unit]
@@ -455,7 +455,7 @@ WorkingDirectory=/opt/meridian-edge/server
 Environment=MERIDIAN_EDGE_ENV=production
 Environment=MERIDIAN_EDGE_WS_ORIGINS=https://chat.example.com
 Environment=MERIDIAN_EDGE_DATABASE_URL=postgresql+psycopg://meridian_edge:CHANGE_ME_LONG_RANDOM@localhost/meridian_edge
-# Bind to localhost only - Caddy is the only thing that should reach it (section 2.2)
+# Bind to localhost only: Caddy is the only thing that should reach it (section 2.2)
 ExecStart=/opt/meridian-edge/server/.venv/bin/uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000
 Restart=on-failure
 # Hardening (mirrors the container posture)
@@ -468,7 +468,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-**Caddy** - reuse `deploy/Caddyfile`; override the backend to localhost:
+**Caddy**: reuse `deploy/Caddyfile`; override the backend to localhost:
 
 ```bash
 sudo tee /etc/caddy/env >/dev/null <<'ENV'
@@ -521,7 +521,7 @@ Then load the site, `/register`, note the UID, and from a second browser `/add`
 
 ## 9. Updating an existing deployment
 
-The server is **stateless** - all durable state is in Postgres (server side) and
+The server is **stateless**: all durable state is in Postgres (server side) and
 each browser's encrypted IndexedDB (client side). Recreating the server or edge
 container loses nothing but in-flight WebSocket connections, which clients
 re-establish automatically. So a routine update is safe and quick.
@@ -556,18 +556,18 @@ sudo systemctl restart meridian-edge
 
 Caddy keeps serving `/srv/www` throughout; only the API blips on the uvicorn
 restart. Session tokens are in-memory with a 15-minute idle expiry, so a restart
-just forces clients to reconnect (and re-`/login` if their token had lapsed) -
+just forces clients to reconnect (and re-`/login` if their token had lapsed):
 no data loss, since each client keeps its own encrypted store.
 
-### 9.3 Client caching - why users get the new build
+### 9.3 Client caching: why users get the new build
 
 Vite content-hashes the JS/CSS filenames (e.g. `index-CTYmNQn3.js`), so a new
 build produces new URLs that bypass any stale cache; `index.html` is served
 uncached and points at the new hashed assets. A normal page load picks up the
-new front-end. There is **no server-push auto-update** in the MVP -
-a user with the app already open keeps the old bundle until they reload.
+new front-end. There is **no server-push auto-update** in the MVP: a user
+with the app already open keeps the old bundle until they reload.
 
-### 9.4 Database schema changes - read before a schema-changing release
+### 9.4 Database schema changes: read before a schema-changing release
 
 The server uses SQLAlchemy `create_all()` as a migration stand-in: it **creates
 missing tables but never alters existing ones**. Additive releases (a brand-new
@@ -628,7 +628,7 @@ does and does not prove:
 | **Transport (what scanners grade)** | `X25519MLKEM768` hybrid key exchange on TLS 1.3 | the checks below |
 
 A transport screening that shows only classical curves does **not** weaken the
-messenger - but it is the thing most PQC/TLS screenings actually measure, so
+messenger, but it is the thing most PQC/TLS screenings actually measure, so
 here is how to make it pass and prove it.
 
 ### 10.1 What the config already gives you
@@ -642,8 +642,8 @@ here is how to make it pass and prove it.
   X25519 instead (see 10.4).
 - **HSTS** `max-age=63072000; includeSubDomains; preload` on every response.
 - **Full security-header set** (CSP, `nosniff`, `Referrer-Policy`, COOP, CORP,
-  `Permissions-Policy`) - target Mozilla Observatory grade A.
-- **Same-origin, zero CDN** - nothing downstream can strip or weaken the headers.
+  `Permissions-Policy`): target Mozilla Observatory grade A.
+- **Same-origin, zero CDN**: nothing downstream can strip or weaken the headers.
 
 ### 10.2 Verify the PQ handshake from the command line
 
@@ -674,17 +674,17 @@ testssl.sh --protocols --fs --headers chat.example.com
 
 ### 10.3 Online screeners and what "pass" looks like
 
-- **Qualys SSL Labs** (`ssllabs.com/ssltest`) - target **A / A+**. A+ needs HSTS
+- **Qualys SSL Labs** (`ssllabs.com/ssltest`): target **A / A+**. A+ needs HSTS
   with a long `max-age` (we set 63072000 + `preload`) and a complete chain.
   SSL Labs may not yet name the group "post-quantum", but it must show TLS 1.3
   and strong key exchange.
-- **internet.nl** (Modern TLS test) - passes on TLS 1.3 + HSTS + secure
+- **internet.nl** (Modern TLS test): passes on TLS 1.3 + HSTS + secure
   ciphers, and increasingly reports PQ key exchange. Good holistic check.
-- **Mozilla Observatory** (`observatory.mozilla.org`) - grades the HTTP security
+- **Mozilla Observatory** (`observatory.mozilla.org`): grades the HTTP security
   headers; our set is built for grade **A/A+**. A ding here almost always means
   something downstream stripped a header (see 10.5).
-- **Hardenize** - one-page TLS + DNS + headers overview; useful before go-live.
-- **Browser devtools** - Chrome padlock -> Connection, or `chrome://net-internals`,
+- **Hardenize**: one-page TLS + DNS + headers overview; useful before go-live.
+- **Browser devtools**: Chrome padlock -> Connection, or `chrome://net-internals`,
   shows the negotiated **Key Exchange**; recent Chrome/Firefox print
   `X25519MLKEM768` when it is used. This is the quickest human confirmation.
 
@@ -721,14 +721,14 @@ ML-KEM/ML-DSA E2EE runs in the client; the fix restores the transport layer the
 project advertises.
 
 > nginx **refuses to start** when the first named group is unknown, so a running
-> nginx that lacks PQ means someone already dropped the group - re-add it after
+> nginx that lacks PQ means someone already dropped the group, so re-add it after
 > upgrading the image.
 
 ### 10.5 The terminating-proxy caveat (most common false failure)
 
 If you put Meridian behind a TLS-terminating layer (Cloudflare's orange-cloud
 proxy, an AWS/GCP L7 load balancer, a corporate reverse proxy), **that layer's**
-handshake is what a scanner sees - not your nginx/Caddy. Your PQ group and header
+handshake is what a scanner sees, not your nginx/Caddy. Your PQ group and header
 set stop mattering at that boundary. To keep the screening (and the PQ transport)
 end-to-edge, either:
 
@@ -746,7 +746,7 @@ almost always a terminating proxy in the path.
 
 Once HTTPS is stable and you are committed to it (the directive is hard to undo
 quickly), submit the domain at `hstspreload.org`. It requires a base-domain
-redirect to HTTPS, `includeSubDomains`, and `preload` - all of which the edge
+redirect to HTTPS, `includeSubDomains`, and `preload`, all of which the edge
 already emits.
 
 ---
@@ -762,7 +762,7 @@ docker compose logs -f db
 ```
 
 Server logs are privacy-minimal by design: auth-failure counts,
-rate-limit trips, and errors - no message metadata, no UIDs where avoidable.
+rate-limit trips, and errors. No message metadata, no UIDs where avoidable.
 Retain ~30 days per policy.
 
 ### 11.2 Backups
@@ -774,9 +774,9 @@ docker compose exec db pg_dump -U meridian_edge meridian_edge > backup-$(date +%
 ```
 
 It contains public keys, prekey bundles, session hashes, recovery-code hashes,
-and the transient ciphertext queue - **no plaintext, no private keys**, so a
+and the transient ciphertext queue. **No plaintext, no private keys**, so a
 leaked backup does not expose message content. The **message queue is
-intentionally ephemeral** (delete-on-ack + 14-day TTL) - never add it
+intentionally ephemeral** (delete-on-ack + 14-day TTL): never add it
 to any archival tooling that would retain delivered ciphertext.
 
 ### 11.3 Scaling and its limits
@@ -784,16 +784,16 @@ to any archival tooling that would retain delivered ciphertext.
 This topology targets a **single server instance**. Two pieces of state are
 in-process per server container, so naively running replicas breaks them:
 
-- **Rate limiters** (`rate_limit.py`) are in-memory token buckets - N replicas
+- **Rate limiters** (`rate_limit.py`) are in-memory token buckets, so N replicas
   behind a load balancer each enforce the limit independently (effective limit
   ~N x), and even a single instance resets its buckets on restart and sees the
   proxy's IP rather than the client's. Put a durable limit at the edge:
   **[deploy/rate-limiting.md](deploy/rate-limiting.md)** gives the nginx
   `limit_req` config and the honest Caddy caveat (no built-in limiter; needs a
   module).
-- **The WebSocket hub** (`WsHub` in `ws.py`) tracks live connections in memory -
-  a message for a user connected to a different replica is not live-pushed from
-  this one (it still delivers on the recipient's next connect).
+- **The WebSocket hub** (`WsHub` in `ws.py`) tracks live connections in memory,
+  so a message for a user connected to a different replica is not live-pushed
+  from this one (it still delivers on the recipient's next connect).
 
 To scale horizontally you would need a shared rate-limit store (Redis) and shared
 pub/sub or sticky sessions for WS fan-out. Until then, scale **up** (a bigger
@@ -839,12 +839,12 @@ circle comfortably.
 ### 11.6 Known limitations
 
 - The Docker / Compose / nginx / Caddy config is a reviewed reference,
-  **not build-tested** end-to-end - `docker compose build` + section 8 first.
-- No automated DB migrations (`create_all` only) - see section 9.4.
-- Single-server design - see section 11.3.
+  **not build-tested** end-to-end: run `docker compose build` and section 8 first.
+- No automated DB migrations (`create_all` only). See section 9.4.
+- Single-server design. See section 11.3.
 - Certificate issuance/renewal is out of scope for the compose file (section 4).
 - Rate limiting is the only DoS defense, by design and best-effort (section
-  7.14) - not resilience against a resourced attacker.
+  7.14), not resilience against a resourced attacker.
 
 See [SECURITY.md](SECURITY.md) for how to report a vulnerability and for the
 documented browser-platform limitations.

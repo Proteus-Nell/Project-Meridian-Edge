@@ -748,11 +748,17 @@ export async function applyIncomingGroup(
   // exists AFTER the removal, which is exactly the point of sending it. Without
   // this exception the notice is discarded by the only person who needs it, and
   // they go on believing they are still in the group.
-  const removesMe = envelope.action === "remove" && envelope.subject === self;
-  if (
-    !envelope.members.includes(senderUid) ||
-    (!envelope.members.includes(self) && !removesMe)
-  ) {
+  // Every notice carries the roster as it stands AFTER the change it
+  // announces, which means the person the change is ABOUT is legitimately
+  // missing from it: a removal naming you omits you, and a departure omits the
+  // sender. Both would otherwise be discarded by the one party who most needs
+  // to see them. Nothing is loosened by this: the real gate is the check just
+  // below, that the sender is in THIS device's roster.
+  const senderListed = envelope.members.includes(senderUid) || envelope.action === "leave";
+  const selfListed =
+    envelope.members.includes(self) ||
+    (envelope.action === "remove" && envelope.subject === self);
+  if (!senderListed || !selfListed) {
     x.renderer.discarded("E513");
     return;
   }
