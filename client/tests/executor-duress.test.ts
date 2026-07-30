@@ -14,6 +14,7 @@ import * as api from "../src/net/api";
 import { KeyStore } from "../src/crypto/store";
 import type { Argon2Params } from "../src/crypto/store";
 import { Executor } from "../src/terminal/executor";
+import { doLogin } from "../src/terminal/executor/identity";
 import { formatUid, parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
 import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
@@ -329,5 +330,48 @@ describe("/rotate passphrase", () => {
     expect(await h.store.tryDuress(DURESS)).not.toBeNull();
     h.executor.lockLocal();
     expect(await h.store.unlock(next)).toBe(true);
+  });
+});
+
+describe("S3 - doLogin's failure path prints E203 before the rejection hook finishes", () => {
+  // Calls doLogin directly with a hand-built hook instead of going through
+  // /login (which always wires the real maybeTriggerDuress), so the test can
+  // hold the hook open and observe exactly what has already been rendered
+  // when it starts - which is the property the fix is about, independent of
+  // duress specifically. A duress trigger wipes the store and calls the
+  // network before returning; if E203 were printed only after that finished,
+  // a duress login would visibly take longer than an ordinary typo, which is
+  // exactly the tell this feature exists not to have.
+  it("has already rendered E203 by the time the hook is invoked, however long the hook takes", async () => {
+    const h = setup();
+    await register(h);
+    h.executor.lockLocal();
+    h.shell.secrets.push("not the real passphrase 4!");
+
+    let textWhenHookStarted: string | null = null;
+    let resolveInvoked!: () => void;
+    const invoked = new Promise<void>((resolve) => {
+      resolveInvoked = resolve;
+    });
+    let finishHook!: () => void;
+    const hookWork = new Promise<void>((resolve) => {
+      finishHook = resolve;
+    });
+    const hook = async (): Promise<void> => {
+      // Runs synchronously up to this line the instant doLogin calls it, so
+      // this snapshot reflects exactly what doLogin had already rendered
+      // beforehand - no timing assumptions on the test's side required.
+      textWhenHookStarted = h.output.text();
+      resolveInvoked();
+      await hookWork; // held open to prove E203 does not wait on this
+    };
+
+    const loginPromise = doLogin(h.executor, hook);
+    await invoked;
+    expect(textWhenHookStarted).not.toBeNull();
+    expect(textWhenHookStarted).toContain("[E203] Unlock failed");
+
+    finishHook();
+    await loginPromise;
   });
 });

@@ -60,7 +60,10 @@ export async function purgeExpired(x: ExecutorInternals): Promise<void> {
   }
   // Group history lives in its own namespace and would otherwise escape the
   // retention cap entirely, which would make the cap quietly untrue rather
-  // than merely incomplete.
+  // than merely incomplete. StoredGroupMessage carries no tmrExpiresAt (see
+  // its doc comment in records.ts), so `expired` always falls through to the
+  // cap check for these: a mutual timer needs every member to agree on one
+  // deadline, which fan-out has no shared transcript to carry.
   for (const msgKey of await x.store.listKeys(GROUP_MSG_PREFIX)) {
     const record = await x.store.getJson<StoredGroupMessage>(msgKey);
     if (record !== null && expired(record)) {
@@ -147,7 +150,11 @@ export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined
     return;
   }
   if (alias === undefined) {
-    const count = await deleteMessages(x, "msg/");
+    // "across all conversations" has to include groups, or the report is a
+    // lie: group history lives under its own gmsg/ prefix (see
+    // recordGroupMessage) precisely so it never collides with msg/, which
+    // also means a sweep of msg/ alone silently leaves it all behind.
+    const count = (await deleteMessages(x, "msg/")) + (await deleteMessages(x, GROUP_MSG_PREFIX));
     x.renderer.event("success", `Purged ${count} stored message(s) across all conversations.`);
     return;
   }
@@ -161,13 +168,16 @@ export async function doPurgeNow(x: ExecutorInternals, alias: string | undefined
 }
 
 /** `/delete <last|N|all|purge> [/s]`: delete your own (outgoing) messages on
- * BOTH sides (a). `last`/`N`/`all` scope to the active conversation;
- * `purge` spans every conversation. Each deleted message is removed from
- * local history and, where a live session exists, a delete directive naming
- * its shared id is pushed to the peer over the encrypted ratchet. `/s` makes
- * it silent: no confirmation here and no notice on the peer's end. Messages
- * with no live session (or a key-change block) are removed locally but
- * cannot be signalled; that is reported honestly. */
+ * BOTH sides (a). `last`/`N`/`all` scope to the active one-to-one
+ * conversation; `purge` spans every one-to-one conversation. Groups are out
+ * of scope entirely: this is a two-sided directive naming a shared message
+ * id, and a group message has no such id to name (/group purge is the group
+ * equivalent). Each deleted message is removed from local history and, where
+ * a live session exists, a delete directive naming its shared id is pushed
+ * to the peer over the encrypted ratchet. `/s` makes it silent: no
+ * confirmation here and no notice on the peer's end. Messages with no live
+ * session (or a key-change block) are removed locally but cannot be
+ * signalled; that is reported honestly. */
 export async function doDelete(
   x: ExecutorInternals,
   scope: DeleteScope,
@@ -187,9 +197,20 @@ export async function doDelete(
   let scopeLabel: string;
   if (scope.kind === "purge") {
     victims = await collectOwnOutgoing(x, "msg/");
-    scopeLabel = "across all conversations";
+    // Not "across all conversations": group messages have no `mid` (see the
+    // comment on StoredGroupMessage in records.ts), so there is nothing to
+    // signal a peer with and this sweep never touches gmsg/. Claiming group
+    // coverage here would be a lie the next /group open disproves.
+    scopeLabel = "across every one-to-one conversation";
   } else {
     if (x.active === null) {
+      if (x.activeGroup !== null) {
+        report(
+          "warning",
+          `/delete is a two-sided directive between exactly two people, and a group has no such channel. To remove '${x.activeGroup.name}' from this device, run /group purge ${x.activeGroup.name}.`,
+        );
+        return;
+      }
       report("warning", "No active conversation. Use /chat <alias|uid> first.");
       return;
     }

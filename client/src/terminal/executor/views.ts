@@ -14,7 +14,7 @@ import type { ExecutorInternals } from "./context";
 import { formatDuration } from "./format";
 import { favouriteMark, sortContacts } from "./records";
 import type { StoredMessage } from "./records";
-import { loadGroups, rosterDigest } from "./groups";
+import { loadGroup, loadGroups, rosterDigest } from "./groups";
 import type { Group } from "./groups";
 import { loadGroupHistory } from "./group-commands";
 
@@ -77,7 +77,7 @@ export async function renderGroupConversation(
     `-- ${group.name} · ${group.members.length} members · fingerprint ${rosterDigest(group.members)} --`,
   );
   if (records.length === 0) {
-    x.renderer.plain("  (no messages yet - type to send the first one · /home to go back)");
+    x.renderer.plain("  (No messages yet. Type to send the first one, or /home to go back.)");
   }
   for (const record of records) {
     if (record.dir === "in") {
@@ -157,8 +157,8 @@ export async function renderHome(x: ExecutorInternals): Promise<void> {
 /** `/return`: toggle back to the screen shown before the current one, naming
  * where it went. The two screens swap each call, so /return alternates like
  * a back/forward button. Falls back to home if the remembered conversation's
- * contact is gone (removed or wiped). */
-export function returnToPreviousView(x: ExecutorInternals): void {
+ * contact, or group, is gone (removed, left, purged, or wiped). */
+export async function returnToPreviousView(x: ExecutorInternals): Promise<void> {
   if (x.previousView === null) {
     x.renderer.event("info", "There is no previous screen to return to.");
     return;
@@ -168,15 +168,38 @@ export function returnToPreviousView(x: ExecutorInternals): void {
   x.previousView = current; // swap so a second /return comes back here
   if (target.kind === "home") {
     x.active = null;
+    x.activeGroup = null;
     x.shell.setPrompt("> ");
     refreshChatContext(x);
     x.renderer.event("info", "Returned to home.");
     x.enqueueRender(() => renderHome(x));
     return;
   }
+  if (target.kind === "group") {
+    const group = await loadGroup(x, target.gid);
+    if (group === null) {
+      x.active = null;
+      x.activeGroup = null;
+      x.previousView = null;
+      x.shell.setPrompt("> ");
+      refreshChatContext(x);
+      x.renderer.event("warning", "That group is no longer available, so you are back at home.");
+      x.enqueueRender(() => renderHome(x));
+      return;
+    }
+    x.active = null;
+    x.activeGroup = group;
+    x.unread.delete(group.gid);
+    x.shell.setPrompt(`[${group.name}] > `);
+    x.chrome.setChatContext(`[group: ${group.name} (${group.members.length} members)]`);
+    x.renderer.event("info", `Returned to '${group.name}'.`);
+    x.enqueueRender(() => renderGroupConversation(x, group));
+    return;
+  }
   const contact = findContactByUid(x, target.uid);
   if (contact === null) {
     x.active = null;
+    x.activeGroup = null;
     x.previousView = null;
     x.shell.setPrompt("> ");
     refreshChatContext(x);
@@ -185,6 +208,7 @@ export function returnToPreviousView(x: ExecutorInternals): void {
     return;
   }
   x.active = contact;
+  x.activeGroup = null;
   x.unread.delete(contact.uid);
   x.shell.setPrompt(`[${contact.alias}] > `);
   refreshChatContext(x);

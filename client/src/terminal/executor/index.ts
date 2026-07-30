@@ -355,7 +355,7 @@ export class Executor implements ExecutorInternals {
         return;
       }
       case "return":
-        returnToPreviousView(this);
+        this.run(() => returnToPreviousView(this));
         return;
       case "contacts":
         this.run(() => doContacts(this));
@@ -410,7 +410,7 @@ export class Executor implements ExecutorInternals {
     if (contact.keyChangeBlocked) {
       this.renderer.event(
         "security",
-        `The identity key for ${contact.alias} changed and is UNACKNOWLEDGED, so sending is blocked. Run /ack ${contact.alias}, then /verify and /verified to resume.`,
+        `Sending to ${contact.alias} is blocked by an unacknowledged key change. Run /ack ${contact.alias}, then /verify and /verified to resume.`,
       );
     }
     this.shell.setPrompt(`[${contact.alias}] > `);

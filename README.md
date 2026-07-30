@@ -111,6 +111,7 @@ trusting the new one.
 
 | Command | What it does |
 |---|---|
+| `/help [command]` | List every command grouped by purpose; with an argument, explain what that one command is for and print its usage |
 | `/whoami` | Your UID and identity-key fingerprint (needs an unlocked store) |
 | `/lock` | Locks the store immediately and wipes key material from memory; happens automatically after 10 min idle |
 | `/logout` | Revokes this session server-side, then locks |
@@ -119,6 +120,8 @@ trusting the new one.
 | `/rotate passphrase` | Re-wraps the store key under a new passphrase: local only, instant, crash-safe. Warns and asks for confirmation if the new passphrase matches the current one |
 | `/settings rotation on\|off\|day <weekday>` | Configure the weekly rotation reminder |
 | `/settings mask asterisk\|hidden` | Passphrase echo: `asterisk` shows `*` per character (default); `hidden` shows nothing at all, sudo-style, so it leaks no length to a shoulder-surfer. Persists across reloads and applies from the first login prompt |
+| `/settings trust auto\|manual` | Trust-on-first-use mode: `auto` (default) verifies new contacts and accepts a key change automatically, with a loud warning; `manual` blocks on any key change until you `/ack` it, the stronger defence against a machine-in-the-middle |
+| `/settings notify on\|off` | Toggle toast notifications. Parses today but is not yet wired up: running it reports that the feature is scheduled for a future release |
 | `/keys status` | Signed-prekey age and one-time-prekey count on the server |
 | `/keys refill` | Manually top one-time prekeys back up to 50 |
 | `/wipe` | Destroys the local store (identity, keys, everything). Asks you to repeat it within 30 s to confirm |
@@ -179,7 +182,10 @@ duress passphrase disarmed; re-arm it afterwards if you want it.
 | `/remove <alias\|uid> [purge]` | Remove a contact: deletes the contact and tears down the ratchet session, so a later message from them returns as a fresh request. Keeps your message history unless you add `purge`. `/remove all` clears every contact and asks to confirm first. Purely local; the other side is never told |
 | `/rename <alias\|uid> <new>` | Give a contact a new local alias. History (keyed by UID) survives; a name another contact already uses is rejected |
 | `/favourite <alias\|uid> [off]` | Pin a contact to the top of `/contacts` and the home dashboard, marked `*`. Favourites sort first, then alphabetically. Local only, never transmitted, and the contact is never told. Also spelled `/favorite`, `/fav`, `/star` |
+| `/contacts` | List every saved contact with its alias, full UID, and trust state, plus any held contact requests still waiting on `/add` |
 | `/chat <alias\|uid>` | Set the active conversation (prompt changes to `[alias] >`); the status line shows `(verified)` or `(UNVERIFIED)` |
+| `/home` | Return to the home dashboard: every conversation at a glance, with unread counts, trust state, timers, and waiting contact requests |
+| `/return` | Toggle back to the screen shown before this one; toggling again returns, like a back/forward button |
 | `/verify <alias>` | Fetch the contact's current identity key and print a 60-digit safety number. Compare it out-of-band, in person or by phone, against what they see on their end |
 | `/verified <alias>` | Mark the contact trusted once the safety numbers match |
 | `/ack <alias>` | Acknowledge a blocking identity-key-change warning so the conversation is usable again (still `UNVERIFIED` until you `/verify` + `/verified` the new key) |
@@ -275,23 +281,45 @@ post-quantum ciphersuite existing to standardise against.
 papered over in the UI:
 
 1. **Membership is not cryptographically agreed.** Nothing signs the roster, so
-   a malicious member can show different member lists to different people. This
-   design does not prevent that; it makes it *detectable*. Every message carries
-   the sender's full roster, and a recipient whose own roster disagrees gets a
-   `[SECURITY]` warning naming exactly who was added or dropped. `/group info`
-   prints a short fingerprint of your roster to read out to the others. That
-   fingerprint is a convenience for comparing lists, **not** a proof that a list
-   is right, and the app says so on screen.
+   a current member can still show a different member list than the one you
+   hold. This design does not prevent that; it makes it *detectable*. Every
+   message carries the sender's full roster, and a recipient whose own roster
+   disagrees gets a `[SECURITY]` warning naming exactly who was added or
+   dropped. `/group info` prints a short fingerprint of your roster to read out
+   to the others. That fingerprint is a convenience for comparing lists,
+   **not** a proof that a list is right, and the app says so on screen. What is
+   stopped outright is a non-member forging that traffic in the first place:
+   every incoming roster change is checked against **this device's own**
+   membership list, not the sender's claim, so someone who was never in the
+   group, or who has already been removed from it, cannot inject an add or a
+   removal at all; that message is discarded rather than reported.
 2. **There is no transcript consistency.** A member can send different text to
    different members. Fan-out cannot fix this and neither can sender keys; only
    a protocol with a shared ordered transcript can.
 
-Smaller ones, stated rather than discovered: removing someone stops future
-messages and **takes back nothing** they already received; a group discloses
-every member's UID to every other member; a fan-out of N sends in quick
-succession lets the server infer that those N accounts are probably a group,
-which no cheap countermeasure honestly fixes; and group history is swept by
-`/purge set` alongside one-to-one history, so the retention cap stays true.
+Smaller ones, stated rather than discovered:
+
+- Removing someone stops future messages and **takes back nothing** they
+  already received.
+- A group discloses every member's UID to every other member.
+- A fan-out of N sends in quick succession lets the server infer that those N
+  accounts are probably a group, which no cheap countermeasure honestly fixes.
+- **`/timer` does not apply to groups, deliberately.** A mutual disappearing
+  timer needs every member to agree on one deadline, and fan-out gives them no
+  shared transcript to carry that agreement through. Group history is still
+  covered by the local retention cap, `/purge set` sweeps it alongside
+  one-to-one history so the cap stays true rather than quietly incomplete, and
+  `/group purge <name>` clears a group outright.
+- **`/delete` does not work on a group message.** It is a two-sided directive
+  naming a shared message id, and a group message has no such id to name.
+  `/group purge <name>` is the only way to clear a group's history from this
+  device.
+- **Removing a contact does not remove them from a shared group roster.**
+  Membership is a group-wide change that has to be announced to every member,
+  which a purely local `/remove` cannot do, so it leaves them listed rather
+  than silently editing the roster behind the group's back. The app warns when
+  this happens and names the command that actually removes them:
+  `/group remove <name> <uid>`.
 
 Groups cannot be forced onto you. A group message from someone who is not a
 contact is discarded (`E513`), the contact-request gate applies to groups
@@ -323,8 +351,10 @@ Two consequences of that worth knowing before you use it:
 | Command | What it does |
 |---|---|
 | `/timer <alias> <duration\|off>` | Mutual disappearing-message timer for one conversation. The client carries it encrypted to the peer and applies it on both sides; `off` disables it |
+| `/delete <last\|N\|all\|purge> [/s]` | Delete your own messages on both sides: local copies are removed immediately, and where a live session exists, a matching deletion request goes to the peer over the ratchet. `last`, a count, or `all` scope to the active conversation; `purge` spans every one-to-one conversation. `/s` sends it silently: no confirmation here and no notice on the peer's end. One-to-one only, since a group message has no shared id to delete by; `/group purge <name>` is the group equivalent |
 | `/purge set <duration\|off>` | Personal local retention cap. Never transmitted, and may be stricter than the mutual timer |
 | `/purge now [alias]` | Delete stored messages immediately, across all conversations or just one |
+| `/clr` | Clear the transcript, delivery ticks, and the discarded-notice panel, the only way to dismiss it. Same as Ctrl+L; cosmetic only, nothing stored is touched |
 
 Deletion is at-rest, local-only, and best-effort. Peer deletion is cooperative,
 nothing stops a screenshot, and browser storage deletion is not forensic

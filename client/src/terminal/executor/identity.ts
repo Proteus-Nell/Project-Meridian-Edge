@@ -375,10 +375,19 @@ export async function doLogin(
       return;
     }
     if (!(await x.store.unlock(passphrase))) {
-      // The hook may have just destroyed everything. Either way the report is
-      // the same: a duress passphrase must be indistinguishable from a typo.
-      await onRejected?.(passphrase);
+      // E203 prints BEFORE the hook runs, and that order is deliberate and
+      // load-bearing. When the passphrase is the duress one, onRejected wipes
+      // this store and deletes the account over the network - work an
+      // ordinary typo never does. Reporting only once that finished would
+      // make a duress trigger visibly slower than a typo, which is exactly
+      // the tell this feature exists not to have. Printed first, the line
+      // lands after the same two Argon2id derivations a typo also pays for
+      // (the failed unlock above, then tryDuress inside the hook), so the
+      // timing matches either way. Residual: run() does not clear `busy`
+      // until the awaited hook returns, so the command lane stays visibly
+      // busy for as long as the purge takes.
       x.renderer.error("E203");
+      await onRejected?.(passphrase);
       return;
     }
   }

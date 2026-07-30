@@ -97,7 +97,7 @@ fans requests out by URL path.
 | Path | Goes to | Notes |
 |---|---|---|
 | `/` and any non-`/v1` path | static client bundle on disk | SPA fallback to `index.html`; the page-level CSP is set here |
-| `/v1/*` | FastAPI `:8000` (plain reverse proxy) | register, login, key bundles, message enqueue/ack |
+| `/v1/*` | FastAPI `:8000` (plain reverse proxy) | register, login, key bundles, message enqueue/ack, account deletion |
 | `/v1/ws` | FastAPI `:8000` (HTTP Upgrade to WebSocket) | needs `Upgrade`/`Connection` headers **and** the `Origin` header forwarded |
 
 ### 2.1 DNS

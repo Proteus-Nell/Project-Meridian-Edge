@@ -15,6 +15,7 @@ import type { AccessibilityPrefs, EmblemName, ResolvedScheme, TextStyle } from "
 import { formatDuration } from "./format";
 import { normalizeContact } from "./records";
 import type { Contact, Identity } from "./records";
+import { loadGroups } from "./groups";
 import type { Group } from "./groups";
 import { normalizeUid } from "../parser";
 
@@ -72,8 +73,12 @@ export const NULL_CHROME: UiChrome = {
 };
 
 /** Which screen the transcript is showing: the home dashboard or a specific
- * conversation. Tracked so /return can toggle back to the previous one. */
-export type ViewRef = { readonly kind: "home" } | { readonly kind: "chat"; readonly uid: string };
+ * conversation, one-to-one or group. Tracked so /return can toggle back to
+ * the previous one. */
+export type ViewRef =
+  | { readonly kind: "home" }
+  | { readonly kind: "chat"; readonly uid: string }
+  | { readonly kind: "group"; readonly gid: string };
 
 /** The executor's collaborators and mutable state, as seen by the flow
  * modules (identity, messaging, trust, lifecycle, settings, views). The
@@ -162,8 +167,14 @@ export function pinKey(x: ExecutorInternals, contact: Contact, ikB64: string): C
 }
 
 /** The screen currently on the transcript: home when nothing is focused, else
- * the focused conversation (by uid). */
+ * the focused conversation, one-to-one (by uid) or group (by gid).
+ * `activeGroup` is checked first since at most one of it and `active` is ever
+ * set, but only `active` used to be read here, which is what made /return
+ * report "home" while a group was actually on screen. */
 export function currentViewRef(x: ExecutorInternals): ViewRef {
+  if (x.activeGroup !== null) {
+    return { kind: "group", gid: x.activeGroup.gid };
+  }
   return x.active === null ? { kind: "home" } : { kind: "chat", uid: x.active.uid };
 }
 
@@ -190,8 +201,9 @@ export function refreshChatContext(x: ExecutorInternals): void {
 
 /** Recompute the medallion animation state: idle without a live unlocked
  * session, alert while anything awaits acknowledgement (a key-change-blocked
- * contact or a held contact request), active otherwise. Best-effort: a store
- * read failing mid-teardown just leaves the previous state. */
+ * contact, a held contact request, or a group holding a member this device
+ * has no contact entry for), active otherwise. Best-effort: a store read
+ * failing mid-teardown just leaves the previous state. */
 export async function refreshEmblemState(x: ExecutorInternals): Promise<void> {
   if (x.token === null || !x.store.isUnlocked()) {
     x.chrome.setEmblemState("idle");
@@ -201,6 +213,22 @@ export async function refreshEmblemState(x: ExecutorInternals): Promise<void> {
   if (!alert) {
     try {
       alert = (await x.store.listKeys("pending/")).length > 0;
+    } catch {
+      // locked mid-check: the next lock/login transition will correct it
+    }
+  }
+  if (!alert) {
+    try {
+      // A member with no contact entry has no pinned key and no session, so
+      // nothing can be encrypted to them until /group sync adds them. That is
+      // as much a thing awaiting the user's action as an unacked key change.
+      const self = x.identity?.uid ?? null;
+      for (const group of await loadGroups(x)) {
+        if (group.members.some((uid) => uid !== self && findContactByUid(x, uid) === null)) {
+          alert = true;
+          break;
+        }
+      }
     } catch {
       // locked mid-check: the next lock/login transition will correct it
     }

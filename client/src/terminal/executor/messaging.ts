@@ -28,7 +28,7 @@ import {
   saveContacts,
 } from "./context";
 import type { ExecutorInternals } from "./context";
-import { decodeAppPayload, encodeAppPayload } from "./payload";
+import { decodeAppPayload, decodeGroupEnvelope, encodeAppPayload } from "./payload";
 import type { GroupAction, GroupEnvelope } from "./payload";
 import {
   GROUP_MSG_PREFIX,
@@ -521,13 +521,28 @@ export async function processEnvelope(
   let senderUid: string | null = null;
   let text: string | null = null;
   let mid: string | null = null;
+  let group: GroupEnvelope | null = null;
   try {
     const parsed: unknown = JSON.parse(new TextDecoder().decode(result.plaintext));
     if (typeof parsed === "object" && parsed !== null) {
-      const record = parsed as { u?: unknown; m?: unknown; id?: unknown };
+      const record = parsed as {
+        u?: unknown;
+        m?: unknown;
+        id?: unknown;
+        g?: unknown;
+        gn?: unknown;
+        gm?: unknown;
+        ga?: unknown;
+        gs?: unknown;
+      };
       senderUid = typeof record.u === "string" ? normalizeUid(record.u) : null;
       text = typeof record.m === "string" ? record.m : null;
       mid = typeof record.id === "string" ? record.id : null;
+      // The KX first message carries the same group fields under the same key
+      // names as an ordinary ratchet payload does (see sendFirstMessage), so
+      // this reuses the one shared validator rather than trusting a second,
+      // ad hoc read of peer-supplied data.
+      group = decodeGroupEnvelope(record);
     }
   } catch {
     // fall through to the discard below
@@ -560,10 +575,22 @@ export async function processEnvelope(
       await saveContacts(x);
     }
     await x.store.putJson(`session/${senderUid}`, serializeSession(result.session, timestamp));
+    // A group's first message to a member skips the extra round trip a
+    // session would otherwise need (see sendFirstMessage), so a group
+    // envelope can arrive right here, on the handshake itself, and not only
+    // over an already-established ratchet. Route it exactly like the ratchet
+    // path does rather than flattening add/remove/invite into plain text.
+    if (group !== null) {
+      await applyIncomingGroup(x, senderUid, contact.alias, group, text, timestamp);
+      return "ack";
+    }
     await recordMessage(x, senderUid, "in", text, timestamp, mid);
     deliverIncoming(x, senderUid, contact.alias, text);
     if (result.session.reducedFs) {
-      x.renderer.event("warning", "session has reduced forward secrecy (no one-time prekey)");
+      x.renderer.event(
+        "warning",
+        "This session has reduced forward secrecy, because no one-time prekey was used.",
+      );
     }
     return "ack";
   }
@@ -706,12 +733,31 @@ export async function applyIncomingGroup(
     x.renderer.discarded("E513");
     return;
   }
-  if (!envelope.members.includes(senderUid) || !envelope.members.includes(self)) {
+  // Being told you were removed is the one message that legitimately arrives
+  // with you absent from its roster: the roster it carries is the one that
+  // exists AFTER the removal, which is exactly the point of sending it. Without
+  // this exception the notice is discarded by the only person who needs it, and
+  // they go on believing they are still in the group.
+  const removesMe = envelope.action === "remove" && envelope.subject === self;
+  if (
+    !envelope.members.includes(senderUid) ||
+    (!envelope.members.includes(self) && !removesMe)
+  ) {
     x.renderer.discarded("E513");
     return;
   }
 
   const existing = await loadGroup(x, envelope.gid);
+  if (existing !== null && !existing.members.includes(senderUid)) {
+    // The check above only verified the sender's OWN self-reported roster,
+    // which is worthless as a gate: someone this device already removed is
+    // still a 1:1 contact and still knows the gid, so without checking OUR
+    // OWN roster they could keep forging add/remove envelopes forever and
+    // have every one of them applied. `existing.members` is what this device
+    // actually holds, not what the envelope claims.
+    x.renderer.discarded("E513");
+    return;
+  }
   if (existing === null) {
     if (envelope.action !== "invite") {
       // Traffic for a group this device does not know. Reported rather than
@@ -782,6 +828,16 @@ export async function applyIncomingGroup(
         active: leftBehind ? false : existing.active,
       };
       await saveGroup(x, updated);
+      if (leftBehind && x.activeGroup?.gid === existing.gid) {
+        // This device is the one just removed, and the group it lost access
+        // to is the one on screen. Leaving it focused would let the next
+        // typed line keep routing into a group nothing more will ever arrive
+        // in, exactly like a stale activeGroup let /return misroute earlier.
+        x.activeGroup = null;
+        x.shell.setPrompt("> ");
+        x.chrome.setChatContext(null);
+        x.enqueueRender(() => renderHome(x));
+      }
       x.renderer.event(
         "security",
         envelope.action === "add"

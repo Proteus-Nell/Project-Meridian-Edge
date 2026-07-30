@@ -101,6 +101,7 @@ Code families:
 | Message | Meaning |
 |---|---|
 | `No active conversation. Use /chat <alias|uid> first.` | Message text was typed with no focused conversation. |
+| `/delete is a two-sided directive between exactly two people, and a group has no such channel. To remove '<name>' from this device, run /group purge <name>.` | `/delete` was run with a group focused. Groups have no shared message id for a cooperative delete to name; `/group purge` is the only way to clear a group's history. |
 | `Locked or not registered. Please run /login or /register.` | The command needs an unlocked store. Nothing was changed. |
 | `Another operation is in progress. Please wait for it to finish.` | Commands run one at a time. |
 | `Auto-locked after 10 minutes idle. Run /login to unlock.` | Idle auto-lock fired. Keys were zeroized best-effort. |
@@ -135,7 +136,7 @@ Code families:
 | `A message claiming to be <alias> used the new, unconfirmed key, so it was DISCARDED.` | Manual trust. Traffic on a changed key is dropped until re-verification. |
 | `The sender's identity does not match its claimed UID, so the message was DISCARDED.` | First-contact spoofing defence. The envelope's key is not the key the server serves for that UID. |
 | `sending to <alias> is blocked: an unacknowledged identity-key change was detected. ...` | Send refused while a key change awaits `/ack`. |
-| `The identity key for <alias> changed and is UNACKNOWLEDGED, so sending is blocked. ...` | Shown when focusing a blocked conversation. |
+| `Sending to <alias> is blocked by an unacknowledged key change. Run /ack <alias>, then /verify and /verified to resume.` | Shown when focusing a blocked conversation with `/chat`, and again whenever its view is redrawn (for example after a `/delete`) while the block stands. |
 | `Recovery codes, shown ONCE and never recoverable. Write them down now:` | Registration. The one-time display of the recovery code set. |
 | `NEW recovery codes. The old set is now void. ...` | Recovery. The reissued set; every older code is dead. |
 | `Recovery will REPLACE the identity store on this device. ...` | `/recover` confirmation gate before touching anything. Answer `yes` to continue; anything else cancels without changing a thing. |

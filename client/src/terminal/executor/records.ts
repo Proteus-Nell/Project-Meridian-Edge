@@ -133,13 +133,19 @@ export interface StoredMessage {
  * it keeps the sender's label, because a group transcript has to say who is
  * speaking. There is no `mid`: cooperative /delete is a pairwise directive and
  * a group has no shared transcript to reconcile, which is one of the honest
- * limitations of fan-out groups (see executor/groups.ts). */
+ * limitations of fan-out groups (see executor/groups.ts).
+ *
+ * There is also no `tmrExpiresAt`. Group history is still covered by the
+ * local retention cap (`ts` + the cap, same as a one-to-one message) and by
+ * /group purge, but NOT by a mutual disappearing timer: a mutual timer needs
+ * every member to agree on one deadline, and fan-out gives them no shared
+ * transcript to carry that agreement through, the same gap that rules out a
+ * shared `mid` above. */
 export interface StoredGroupMessage {
   readonly dir: "in" | "out";
   readonly sender: string;
   readonly text: string;
   readonly ts: number;
-  readonly tmrExpiresAt?: number;
 }
 
 /** Local retention cap: personal, never transmitted, may be

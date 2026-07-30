@@ -16,6 +16,7 @@ import type { ExecutorInternals } from "./context";
 import { formatDuration } from "./format";
 import { favouriteMark, normalizeContact, sortContacts } from "./records";
 import type { Contact, PendingRequest } from "./records";
+import { loadGroups } from "./groups";
 import { recordMessage } from "./messaging";
 import { renderHome } from "./views";
 
@@ -147,6 +148,7 @@ export async function doRemove(
       ? `Removed ${contact.alias} (${formatUid(contact.uid)}) and its message history.`
       : `Removed ${contact.alias} (${formatUid(contact.uid)}). Message history was kept; add 'purge' to delete it too.`,
   );
+  await warnStaleGroupMemberships(x, [contact]);
 }
 
 async function removeAllContacts(x: ExecutorInternals, purge: boolean): Promise<void> {
@@ -161,7 +163,8 @@ async function removeAllContacts(x: ExecutorInternals, purge: boolean): Promise<
     x.renderer.event("info", "Removal cancelled. Nothing was changed.");
     return;
   }
-  for (const contact of [...x.contacts.values()]) {
+  const removed = [...x.contacts.values()];
+  for (const contact of removed) {
     await forgetContact(x, contact, purge);
   }
   x.contacts.clear();
@@ -170,6 +173,7 @@ async function removeAllContacts(x: ExecutorInternals, purge: boolean): Promise<
   goHomeAfterRemoval(x);
   await refreshEmblemState(x);
   x.renderer.event("success", `Removed all ${count} contact(s)${suffix}.`);
+  await warnStaleGroupMemberships(x, removed);
 }
 
 /** Tear down a single contact's stored side artifacts: the ratchet session,
@@ -188,6 +192,39 @@ async function forgetContact(
       await x.store.deleteKey(key);
     }
   }
+}
+
+/** Warn when a just-removed contact is still in a group's roster.
+ *
+ * /remove is documented as purely local, and group membership is not: it is
+ * a group-wide change that has to be announced to every member (see
+ * doGroupRemove in group-commands.ts), so /remove must not reach into a
+ * roster and edit it behind the group's back. The best it can do is say so,
+ * naming the groups that still list the uid and pointing at the command that
+ * actually removes them there. Single removals name the groups; `/remove
+ * all` only totals them, since listing every (contact, group) pair for a
+ * mass removal would be noise, not information. */
+async function warnStaleGroupMemberships(
+  x: ExecutorInternals,
+  removed: readonly Contact[],
+): Promise<void> {
+  const removedUids = new Set(removed.map((c) => c.uid));
+  const stale = (await loadGroups(x)).filter((g) => g.members.some((uid) => removedUids.has(uid)));
+  if (stale.length === 0) {
+    return;
+  }
+  const [contact, ...rest] = removed;
+  if (contact !== undefined && rest.length === 0) {
+    x.renderer.event(
+      "warning",
+      `${contact.alias} is still listed in ${stale.length} group(s): ${stale.map((g) => g.name).join(", ")}. Run /group remove <name> ${contact.uid} for each one, or they will show up as an unreachable member on the next send.`,
+    );
+    return;
+  }
+  x.renderer.event(
+    "warning",
+    `${stale.length} group(s) still list one or more of the removed contacts. Run /group remove <name> <uid> for each stale member, or they will show up as unreachable on the next send.`,
+  );
 }
 
 /** Return to the home dashboard after the focused (or every) contact was

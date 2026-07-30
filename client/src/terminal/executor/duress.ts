@@ -117,7 +117,13 @@ export async function doDuressSet(x: ExecutorInternals): Promise<void> {
     x.renderer.error("E211");
     return;
   }
-  await x.store.armDuress(first, encodeCredential(x.identity.uid, x.identity.sec));
+  // armDuress zeroizes its own padded copy and the KEK once it has sealed
+  // them, but the buffer handed to it here is ours: it holds the base64 of
+  // the raw ML-DSA-65 secret key in plaintext, armDuress does not own it, and
+  // nothing else zeroizes it for us.
+  const credential = encodeCredential(x.identity.uid, x.identity.sec);
+  await x.store.armDuress(first, credential);
+  credential.fill(0);
   await x.store.putJson(DURESS_SETTINGS_KEY, { armed: true } satisfies DuressSettings);
   x.renderer.event(
     "success",

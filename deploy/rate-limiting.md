@@ -49,10 +49,20 @@ there is no proxy.
 | `POST /v1/messages` | UID | 60 / min |
 | `POST /v1/keys/spk` and `POST /v1/keys/opks` (shared bucket) | UID | 10 / hour |
 
-`login/verify`, `logout`, `logout/all`, `sessions`, `keys/status`, and
-`messages/ack` have no dedicated app limiter - they either require a valid
-single-use nonce or an authenticated session first, and none of them writes an
-unbounded row. A blanket edge limit on `/v1/` covers them.
+`login/verify`, `logout`, `logout/all`, `sessions`, `keys/status`,
+`messages/ack`, and `account/delete` have no dedicated app limiter - they
+either require a valid single-use nonce or an authenticated session first, and
+none of them writes an unbounded row. A blanket edge limit on `/v1/` covers
+them.
+
+`POST /v1/account/delete` (what the client's duress passphrase calls, and a
+plain account-deletion endpoint besides) is worth calling out specifically:
+it has no limiter at all, and that is deliberate, not an oversight. It
+requires a valid session token, so an attacker who could call it already has
+an authenticated session, and with that session they can already do
+everything else the account allows. A per-request limit on this one endpoint
+would not reduce what such an attacker can do. `POST /v1/logout/all` relies
+on the same reasoning.
 
 ## nginx (Route A)
 

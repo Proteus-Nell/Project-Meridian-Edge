@@ -13,7 +13,7 @@
 
 import { formatUid, normalizeUid } from "../parser";
 import { doAdd } from "./contacts";
-import { findContactByUid, resolveContact } from "./context";
+import { currentViewRef, findContactByUid, resolveContact } from "./context";
 import type { ExecutorInternals } from "./context";
 import {
   GROUP_MSG_PREFIX,
@@ -276,9 +276,11 @@ export async function doGroupLeave(x: ExecutorInternals, name: string): Promise<
     active: false,
   };
   await saveGroup(x, updated);
+  x.unread.delete(group.gid);
   if (x.activeGroup?.gid === group.gid) {
     x.activeGroup = null;
     x.shell.setPrompt("> ");
+    x.chrome.setChatContext(null);
     x.enqueueRender(() => renderHome(x));
   }
   x.renderer.event(
@@ -297,6 +299,10 @@ export async function doGroupOpen(x: ExecutorInternals, name: string): Promise<v
   const group = await requireGroup(x, name);
   if (group === null) {
     return;
+  }
+  const previousBeforeOpen = currentViewRef(x);
+  if (previousBeforeOpen.kind !== "group" || previousBeforeOpen.gid !== group.gid) {
+    x.previousView = previousBeforeOpen; // remember for /return
   }
   x.active = null;
   x.activeGroup = group;
@@ -378,6 +384,7 @@ export async function doGroupPurge(x: ExecutorInternals, name: string): Promise<
     await x.store.deleteKey(key);
   }
   await x.store.deleteKey(`group/${group.gid}`);
+  x.unread.delete(group.gid);
   if (x.activeGroup?.gid === group.gid) {
     x.activeGroup = null;
     x.shell.setPrompt("> ");
@@ -396,12 +403,16 @@ export async function sendGroupText(
   group: Group,
   text: string,
 ): Promise<void> {
-  if (!group.active) {
-    x.renderer.event("warning", `You have left '${group.name}', so nothing is sent.`);
+  // Checked on a freshly reloaded copy, not the possibly-stale cached one:
+  // an incoming /group leave or removal notice can flip `active` to false
+  // between focusing the group and typing into it, and checking the cache
+  // would still report a message as sent when every recipient discards it.
+  const fresh = (await loadGroup(x, group.gid)) ?? group;
+  if (!fresh.active) {
+    x.renderer.event("warning", `You have left '${fresh.name}', so nothing is sent.`);
     x.chrome.rejectSent();
     return;
   }
-  const fresh = (await loadGroup(x, group.gid)) ?? group;
   const result = await fanOutToGroup(x, fresh, text, "msg", null);
   if (result.delivered > 0) {
     await recordGroupMessage(x, fresh.gid, "out", "you", text, x.now());

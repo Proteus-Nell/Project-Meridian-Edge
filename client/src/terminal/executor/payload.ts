@@ -175,8 +175,8 @@ export function decodeAppPayload(bytes: Uint8Array): AppPayload | null {
 
 /** Pull the group envelope out of a decoded record, or null when this is an
  * ordinary one-to-one message. Shared by the ratchet payload decoder above and
- * by the KX first-message parser in messaging.ts, so peer-supplied group fields
- * meet exactly one validator whichever path they arrive on.
+ * by the KX branch of processEnvelope in messaging.ts, so peer-supplied group
+ * fields meet exactly one validator whichever path they arrive on.
  *
  * Everything here is peer-supplied and gets validated rather than trusted: a
  * malformed group envelope yields null and the message is handled as an
