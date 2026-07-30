@@ -123,6 +123,25 @@ describe("S2 - a group invite carried on the KX first message", () => {
     // message instead. Confirm that did not happen.
     expect(await bob.store.listKeys(`msg/${alice.uid}/`)).toEqual([]);
   });
+
+  it("still reports reduced forward secrecy, which the group branch used to return past", async () => {
+    // The fixture's bundles always carry opk: null, so every handshake through
+    // it is a reduced-fs one. The warning belongs to the handshake, not to
+    // whatever the message turned out to contain: a peer who drained this
+    // device's one-time prekeys and then opened with a group invite would
+    // otherwise establish a weakened session with nothing said about it.
+    const { outbox } = wireTwoPeerNetwork();
+    const alice = await createPeer("alice");
+    const bob = await createPeer("bob");
+    await addContact(alice, bob, "bob");
+    await addContact(bob, alice, "alice");
+
+    await run(alice, "/group new book-club bob");
+    await deliver(bob, must(outbox[0]).envelope);
+
+    expect(bob.output.text()).toContain("reduced forward secrecy");
+    expect(bob.output.text()).toContain("added you to the group 'book-club'");
+  });
 });
 
 describe("S1 - an incoming group envelope is checked against THIS device's own roster", () => {

@@ -190,6 +190,81 @@ export async function loadNotifyMode(x: ExecutorInternals): Promise<void> {
 
 export const NOTIFY_SETTINGS_KEY = "settings/notify";
 
+// ----- the duress armed flag -------------------------------------------------
+//
+// Lives here rather than in duress.ts so identity.ts can write it without
+// importing that module, which would close the cycle the UnlockRejectionHook
+// exists to keep open.
+//
+// Two properties, and they are the whole reason this is not a putJson call:
+//
+//   1. THE RECORD ALWAYS EXISTS. IndexedDB key names are stored in the clear;
+//      only values are sealed. A record written the first time /duress set or
+//      /duress off runs would therefore announce, to anyone who images the
+//      database with no passphrase at all, that this device has configured the
+//      feature - which is the one fact it promises to hide. It is written at
+//      store creation instead, exactly as crypto/store.ts writes its decoy
+//      envelope from the start and for exactly the same reason.
+//   2. THE RECORD IS ONE CONSTANT LENGTH. XChaCha20-Poly1305 is length-
+//      preserving, so `{"armed":true}` and `{"armed":false}` differ by a byte
+//      in the ciphertext and would leak the state the presence check no longer
+//      does. A fixed-size buffer removes the distinguisher rather than relying
+//      on the two encodings happening to match.
+export const DURESS_SETTINGS_KEY = "settings/duress";
+
+/** Padded well past the one bit it carries, so the size stays constant if this
+ * record ever gains a field. */
+const DURESS_FLAG_BYTES = 32;
+
+function encodeDuressFlag(armed: boolean): Uint8Array {
+  const out = new Uint8Array(DURESS_FLAG_BYTES);
+  out[0] = armed ? 1 : 0;
+  return out;
+}
+
+/** What the stored record says, and whether it is already in the padded form.
+ * Understands the pre-padding JSON shape so a store written by an earlier build
+ * is read correctly rather than reported as disarmed, which is the dangerous
+ * direction to fail: it would tell someone the wipe trigger is off while it is
+ * still armed. */
+async function readDuressRecord(
+  x: ExecutorInternals,
+): Promise<{ armed: boolean; padded: boolean } | null> {
+  const bytes = await x.store.getBytes(DURESS_SETTINGS_KEY);
+  if (bytes === null) {
+    return null;
+  }
+  if (bytes.length === DURESS_FLAG_BYTES) {
+    return { armed: bytes[0] === 1, padded: true };
+  }
+  try {
+    const legacy = JSON.parse(new TextDecoder().decode(bytes)) as { armed?: unknown };
+    return { armed: legacy.armed === true, padded: false };
+  } catch {
+    return null;
+  }
+}
+
+export async function readDuressArmed(x: ExecutorInternals): Promise<boolean> {
+  return (await readDuressRecord(x))?.armed ?? false;
+}
+
+export async function writeDuressArmed(x: ExecutorInternals, armed: boolean): Promise<void> {
+  await x.store.putBytes(DURESS_SETTINGS_KEY, encodeDuressFlag(armed));
+}
+
+/** Write the record if it is absent, and rewrite it at the fixed size if it is
+ * a legacy JSON one, preserving whatever it said. Called at store creation and
+ * at every login, so a store that predates this record acquires one on next
+ * unlock instead of staying identifiable by its absence forever. */
+export async function ensureDuressRecord(x: ExecutorInternals): Promise<void> {
+  const record = await readDuressRecord(x);
+  if (record?.padded === true) {
+    return;
+  }
+  await writeDuressArmed(x, record?.armed ?? false);
+}
+
 /** Whether a desktop notification is raised for a message that arrives while
  * the tab is in the background. Stored ENCRYPTED beside the trust mode rather
  * than with the display preferences: it is not a look-and-feel choice, it

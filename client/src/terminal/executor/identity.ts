@@ -22,6 +22,7 @@ import { fromBase64, toBase64 } from "../../util/base64";
 import { secretStringsEqual } from "../../util/secret";
 import { formatUid, normalizeRecoveryCode, normalizeUid } from "../parser";
 import {
+  ensureDuressRecord,
   loadContacts,
   loadNotifyMode,
   loadTrustMode,
@@ -148,6 +149,9 @@ export async function doRegister(x: ExecutorInternals): Promise<void> {
   };
   await x.store.putJson("identity", stored);
   await x.store.putJson("settings/rotation", DEFAULT_ROTATION);
+  // From the first moment the store exists, so its presence never says that
+  // this device configured a duress passphrase (context.ts).
+  await ensureDuressRecord(x);
   x.identity = { uid, pub: keys.publicKey, sec: keys.secretKey };
 
   x.renderer.event("success", "Registered.");
@@ -250,6 +254,7 @@ export async function doRecover(x: ExecutorInternals): Promise<void> {
   };
   await x.store.putJson("identity", stored);
   await x.store.putJson("settings/rotation", DEFAULT_ROTATION);
+  await ensureDuressRecord(x);
   x.identity = { uid: confirmedUid, pub: keys.publicKey, sec: keys.secretKey };
 
   x.renderer.event("success", "Account recovered.");
@@ -405,6 +410,9 @@ export async function doLogin(
   await loadContacts(x);
   await loadTrustMode(x);
   await loadNotifyMode(x);
+  // A store created before this record existed acquires one here, so it stops
+  // being identifiable by the absence of a key everyone else has.
+  await ensureDuressRecord(x);
   try {
     await loginWithIdentity(x);
   } catch (err) {

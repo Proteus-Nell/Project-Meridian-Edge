@@ -50,15 +50,40 @@ interface Harness {
   output: CaptureSink;
   chrome: FakeChrome;
   store: KeyStore;
+  /** Kept so a test can read the raw records the way someone imaging the
+   * database would, rather than through the store's own decrypting API. */
+  factory: IDBFactory;
+  dbName: string;
 }
 
 function setup(): Harness {
   const output = new CaptureSink();
   const shell = new FakeShell();
   const chrome = new FakeChrome();
-  const store = new KeyStore(`meridian-edge-duress-${Math.random()}`, new IDBFactory(), FAST);
+  const factory = new IDBFactory();
+  const dbName = `meridian-edge-duress-${Math.random()}`;
+  const store = new KeyStore(dbName, factory, FAST);
   const executor = new Executor(new Renderer(output), shell, store, undefined, chrome);
-  return { executor, shell, output, chrome, store };
+  return { executor, shell, output, chrome, store, factory, dbName };
+}
+
+/** The stored (still encrypted) record at `key`, straight out of IndexedDB. */
+async function rawRecord(h: Harness, key: string): Promise<{ ct: Uint8Array } | undefined> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const req = h.factory.open(h.dbName, 1);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("indexeddb error"));
+  });
+  try {
+    const tx = db.transaction("vault", "readonly");
+    return await new Promise<{ ct: Uint8Array } | undefined>((resolve, reject) => {
+      const req = tx.objectStore("vault").get(key);
+      req.onsuccess = () => resolve(req.result as { ct: Uint8Array } | undefined);
+      req.onerror = () => reject(req.error ?? new Error("indexeddb error"));
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function run(h: Harness, line: string): Promise<void> {
@@ -194,6 +219,50 @@ describe("/duress set", () => {
     await register(h);
     await run(h, "/duress status");
     expect(h.output.text()).toContain("not armed");
+  });
+});
+
+describe("the armed flag, as an imaged database sees it", () => {
+  // IndexedDB key names are stored in the clear; only values are sealed. A
+  // record written the first time /duress set ran would therefore tell anyone
+  // with the raw database, and no passphrase at all, that this device
+  // configured the feature - which is the single fact it exists to hide. These
+  // two tests are the reason it is written at registration and at a fixed size.
+
+  it("exists from registration on a device that has never touched the feature", async () => {
+    const h = setup();
+    await register(h);
+    expect(await h.store.listKeys("settings/")).toContain("settings/duress");
+  });
+
+  it("is the same size at rest whether armed, disarmed, or never configured", async () => {
+    const untouched = setup();
+    await register(untouched);
+
+    const armedH = setup();
+    await register(armedH);
+    await arm(armedH);
+
+    const disarmed = setup();
+    await register(disarmed);
+    await arm(disarmed);
+    await run(disarmed, "/duress off");
+
+    const sizes = await Promise.all(
+      [untouched, armedH, disarmed].map(async (h) => {
+        const record = await rawRecord(h, "settings/duress");
+        expect(record?.ct, "the record must be present in every state").toBeDefined();
+        return record?.ct.length;
+      }),
+    );
+    // XChaCha20-Poly1305 is length-preserving, so two JSON encodings differing
+    // by one byte would leak the state the presence check no longer does.
+    expect(new Set(sizes).size, `ciphertext lengths diverged: ${sizes.join(", ")}`).toBe(1);
+    // And the flag still round-trips through the padded form.
+    await run(armedH, "/duress status");
+    expect(armedH.output.text()).toContain("ARMED");
+    await run(disarmed, "/duress status");
+    expect(disarmed.output.text()).toContain("not armed");
   });
 });
 

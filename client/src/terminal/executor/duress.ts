@@ -26,18 +26,9 @@
 import * as api from "../../net/api";
 import { fromBase64, toBase64 } from "../../util/base64";
 import { secretStringsEqual } from "../../util/secret";
-import { refreshChatContext } from "./context";
+import { readDuressArmed, refreshChatContext, writeDuressArmed } from "./context";
 import type { ExecutorInternals } from "./context";
 import { authenticate, passphraseProblem, MIN_PASSPHRASE_LENGTH } from "./identity";
-
-/** Whether the duress passphrase is armed, kept in the ENCRYPTED store so only
- * the real passphrase can answer the question. The sealed envelope itself is
- * the mechanism; this is just what /duress status reports. */
-interface DuressSettings {
-  readonly armed: boolean;
-}
-
-const DURESS_SETTINGS_KEY = "settings/duress";
 
 /** The minimum needed to delete the account: its UID and the identity secret
  * that signs the login challenge. Sealed under the duress passphrase, so it is
@@ -124,7 +115,7 @@ export async function doDuressSet(x: ExecutorInternals): Promise<void> {
   const credential = encodeCredential(x.identity.uid, x.identity.sec);
   await x.store.armDuress(first, credential);
   credential.fill(0);
-  await x.store.putJson(DURESS_SETTINGS_KEY, { armed: true } satisfies DuressSettings);
+  await writeDuressArmed(x, true);
   x.renderer.event(
     "success",
     "Duress passphrase armed. Typing it at the /login prompt destroys this device and the account, silently and with no confirmation. /duress off disarms it.",
@@ -139,7 +130,7 @@ export async function doDuressOff(x: ExecutorInternals): Promise<void> {
     return;
   }
   await x.store.disarmDuress();
-  await x.store.putJson(DURESS_SETTINGS_KEY, { armed: false } satisfies DuressSettings);
+  await writeDuressArmed(x, false);
   x.renderer.event(
     "success",
     "Duress passphrase disarmed. The /login prompt now only ever unlocks or fails.",
@@ -153,8 +144,7 @@ export async function doDuressStatus(x: ExecutorInternals): Promise<void> {
     x.renderer.error("E406");
     return;
   }
-  const settings = await x.store.getJson<DuressSettings>(DURESS_SETTINGS_KEY);
-  if (settings?.armed === true) {
+  if (await readDuressArmed(x)) {
     x.renderer.event(
       "security",
       "Duress passphrase ARMED. Typing it at /login destroys this device and the account with no confirmation. /duress off disarms it, /duress set replaces it.",

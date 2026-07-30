@@ -585,6 +585,19 @@ export async function processEnvelope(
       await saveContacts(x);
     }
     await x.store.putJson(`session/${senderUid}`, serializeSession(result.session, timestamp));
+    // Raised before either delivery path, not after one of them. The session
+    // has already been persisted with its weakened property whatever the
+    // message turns out to be, so the warning belongs to the handshake rather
+    // than to what it happened to carry. Reporting it inside the non-group
+    // branch meant a peer who drained this device's one-time prekeys and then
+    // opened with a group invite established a reduced-forward-secrecy session
+    // in silence.
+    if (result.session.reducedFs) {
+      x.renderer.event(
+        "warning",
+        "This session has reduced forward secrecy, because no one-time prekey was used.",
+      );
+    }
     // A group's first message to a member skips the extra round trip a
     // session would otherwise need (see sendFirstMessage), so a group
     // envelope can arrive right here, on the handshake itself, and not only
@@ -596,12 +609,6 @@ export async function processEnvelope(
     }
     await recordMessage(x, senderUid, "in", text, timestamp, mid);
     deliverIncoming(x, senderUid, contact.alias, text);
-    if (result.session.reducedFs) {
-      x.renderer.event(
-        "warning",
-        "This session has reduced forward secrecy, because no one-time prekey was used.",
-      );
-    }
     return "ack";
   }
 

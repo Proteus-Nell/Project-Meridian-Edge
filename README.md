@@ -150,8 +150,13 @@ Some deliberate properties, and their costs:
 - **The armed state is invisible at rest.** The sealed envelope sits in the
   store's meta record and is written with random contents from the moment the
   store is created, so an imaged database looks the same either way. The flag
-  `/duress status` reads lives *inside* the encrypted store, so only the real
-  passphrase can answer the question.
+  `/duress status` reads is held to the same standard, and it takes more than
+  encrypting it: browser storage keeps key names in the clear and its cipher
+  preserves length, so a record that appeared the first time you ran
+  `/duress set` would announce that you had configured the feature, and a
+  shorter one would say you had turned it off. It is written at the same moment
+  the store is created and at one fixed size, so only the real passphrase can
+  answer the question.
 - **It seals a copy of your identity key**, because deleting the account means
   authenticating to the server as its owner. So the duress passphrase gets the
   same strength rules as your real one, and is refused if it *is* your real one
