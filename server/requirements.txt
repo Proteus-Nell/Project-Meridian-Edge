@@ -5,7 +5,8 @@ uvicorn[standard]==0.50.0
 SQLAlchemy==2.0.51
 pydantic==2.13.4
 # ML-DSA-65 login-challenge verification (FIPS 204 via OpenSSL 3.5+).
-cryptography==49.0.0
+# 50.0.0 is the fix for PYSEC-2026-3552; 49.0.0 is vulnerable.
+cryptography==50.0.0
 # Argon2id hashing of recovery codes at rest.
 argon2-cffi==25.1.0
 # Postgres driver for production (SQLite is a dev-only artifact, never deployed);

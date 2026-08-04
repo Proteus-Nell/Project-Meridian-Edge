@@ -70,9 +70,9 @@ partial `/bench` run (say `/bench b1`) is rejected for the same reason.
 The server harness uses pyca `cryptography` (OpenSSL 3.5) for **both** the PQC
 and classical sides. That makes it a same-library, same-backend comparison, so
 the library variable drops out of the measurement. (The MVP originally named
-liboqs-python for the PQC side; `cryptography` 49 exposes ML-KEM/ML-DSA
-natively and is already a pinned runtime dependency, so no extra dependency is
-needed.)
+liboqs-python for the PQC side; `cryptography` exposes ML-KEM/ML-DSA natively
+from 49 onward and is already a pinned runtime dependency, so no extra
+dependency is needed.)
 
 ### Tests
 

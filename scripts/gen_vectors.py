@@ -17,11 +17,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import cryptography
 from cryptography.hazmat.primitives.asymmetric.mldsa import MLDSA65PrivateKey
 from cryptography.hazmat.primitives.asymmetric.mlkem import MLKEM768PrivateKey
 
 ROOT = Path(__file__).resolve().parent.parent
 VECTOR_COUNT = 8
+
+#: Stamped into every generated file. Read from the running library rather than
+#: written by hand: a pinned version moves (49.0.0 -> 50.0.0 for PYSEC-2026-3552)
+#: and a hard-coded string would then record a provenance that never produced
+#: these bytes. Committed vectors keep whatever version actually made them.
+SOURCE = f"pyca cryptography {cryptography.__version__} / OpenSSL"
 
 
 def b64(data: bytes) -> str:
@@ -44,7 +51,7 @@ def gen_mlkem() -> dict[str, Any]:
         )
     return {
         "algorithm": "ML-KEM-768 (FIPS 203)",
-        "source": "pyca cryptography 49.0.0 / OpenSSL",
+        "source": SOURCE,
         "check": "keygen(seed) must reproduce pk; decapsulate(ct, sk) must equal ss",
         "vectors": vectors,
     }
@@ -66,7 +73,7 @@ def gen_mldsa() -> dict[str, Any]:
         )
     return {
         "algorithm": "ML-DSA-65 (FIPS 204)",
-        "source": "pyca cryptography 49.0.0 / OpenSSL",
+        "source": SOURCE,
         "check": "keygen(seed) must reproduce pk; verify(sig, msg, pk) must pass; tampered must fail",
         "vectors": vectors,
     }

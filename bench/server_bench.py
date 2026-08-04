@@ -5,9 +5,9 @@ PQC vs classical primitive latency, measured with pyca `cryptography` for BOTH
 sides - ML-KEM-768 / ML-DSA-65 and X25519 / Ed25519 share one OpenSSL 3.5
 backend, so this is an apples-to-apples "same library, same backend"
 comparison. (The original spec named liboqs-python for the PQC side; since
-`cryptography` 49 exposes ML-KEM/ML-DSA natively and is already a pinned
-runtime dependency, using it avoids a heavyweight extra dependency and removes
-the library variable from the measurement.)
+`cryptography` exposes ML-KEM/ML-DSA natively from 49 onward and is already a
+pinned runtime dependency, using it avoids a heavyweight extra dependency and
+removes the library variable from the measurement.)
 
 This directory is the ONLY place classical asymmetric primitives are allowed
 (scripts/audit.py excludes it) - here they are the comparison baseline.
