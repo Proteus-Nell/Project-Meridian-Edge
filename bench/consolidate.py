@@ -234,16 +234,26 @@ def _browser_counts(result: dict[str, Any]) -> str | None:
 
 
 def _native_counts(result: dict[str, Any]) -> str | None:
-    """The server harness records its count per measurement rather than per
-    suite, so it is read back off the first row."""
+    """The server harness records its counts per measurement rather than per
+    suite, so they are read back off the first row.
+
+    A results.json written before the harness recorded `warmup` is still a
+    valid file, so the clause is simply omitted when the key is absent. Filling
+    in a zero would report a warm-up count nobody measured."""
     rows = result.get("rows")
     if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
         return None
     stats = rows[0].get("pqc")
-    iters = stats.get("iters") if isinstance(stats, dict) else None
+    if not isinstance(stats, dict):
+        return None
+    iters = stats.get("iters")
     if not isinstance(iters, (int, float)):
         return None
-    return f"{int(iters):,} samples per row, one call per sample (no batching needed)"
+    text = f"{int(iters):,} samples per row, one call per sample (no batching needed)"
+    warmup = stats.get("warmup")
+    if isinstance(warmup, (int, float)):
+        text += f", after {int(warmup):,} discarded warm-up"
+    return text
 
 
 def _gap_sentence(name: str, ratios: list[float]) -> str | None:

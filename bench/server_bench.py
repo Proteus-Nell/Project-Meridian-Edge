@@ -40,6 +40,9 @@ MESSAGE = b"Meridian Edge benchmark fixed message"
 class Stats:
     label: str
     iters: int
+    #: Runs discarded before sampling. Recorded next to `iters` because a
+    #: sample count means little without it, and the report states both.
+    warmup: int
     median_us: float
     p95_us: float
     mean_us: float
@@ -47,10 +50,25 @@ class Stats:
     ops_per_sec: float
 
 
-def summarize(label: str, samples_us: list[float]) -> Stats:
-    """Reduce per-op microsecond samples to summary statistics. Pure."""
+def summarize(label: str, samples_us: list[float], warmup: int = 0) -> Stats:
+    """Reduce per-op microsecond samples to summary statistics. Pure.
+
+    `warmup` defaults to zero: a caller handing over a sample list directly did
+    not warm anything up, and claiming otherwise would be a fabricated count."""
     if not samples_us:
-        return Stats(label, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        # Keyword-constructed on purpose. Positionally, inserting a field would
+        # shift every float one slot along and land an int in median_us without
+        # any error at all.
+        return Stats(
+            label=label,
+            iters=0,
+            warmup=warmup,
+            median_us=0.0,
+            p95_us=0.0,
+            mean_us=0.0,
+            min_us=0.0,
+            ops_per_sec=0.0,
+        )
     ordered = sorted(samples_us)
     n = len(ordered)
     median = statistics.median(ordered)
@@ -59,6 +77,7 @@ def summarize(label: str, samples_us: list[float]) -> Stats:
     return Stats(
         label=label,
         iters=n,
+        warmup=warmup,
         median_us=median,
         p95_us=p95,
         mean_us=mean,
@@ -78,7 +97,7 @@ def timeit(label: str, fn: Callable[[], object], *, warmup: int = WARMUP, iters:
         start = time.perf_counter()
         fn()
         samples.append((time.perf_counter() - start) * 1_000_000)
-    return summarize(label, samples)
+    return summarize(label, samples, warmup)
 
 
 @dataclass(frozen=True)
@@ -157,7 +176,7 @@ NOTE_B1 = (
 )
 
 
-def bench_b1(iters: int) -> LatencyResult:
+def bench_b1(iters: int, warmup: int = WARMUP) -> LatencyResult:
     """B1 - KEM latency: ML-KEM-768 vs X25519.
 
     DH has no split encaps/decaps, so the X25519 shared-secret derivation is the
@@ -170,11 +189,13 @@ def bench_b1(iters: int) -> LatencyResult:
     x_sk = x25519.X25519PrivateKey.generate()
     x_peer = x25519.X25519PrivateKey.generate().public_key()
 
-    kem_keygen = timeit("ml-kem keygen", mlkem.MLKEM768PrivateKey.generate, iters=iters)
-    x_keygen = timeit("x25519 keygen", x25519.X25519PrivateKey.generate, iters=iters)
-    kem_encaps = timeit("ml-kem encaps", kem_pk.encapsulate, iters=iters)
-    x_derive = timeit("x25519 derive", lambda: x_sk.exchange(x_peer), iters=iters)
-    kem_decaps = timeit("ml-kem decaps", lambda: kem_sk.decapsulate(kem_ct), iters=iters)
+    kem_keygen = timeit("ml-kem keygen", mlkem.MLKEM768PrivateKey.generate, iters=iters, warmup=warmup)
+    x_keygen = timeit("x25519 keygen", x25519.X25519PrivateKey.generate, iters=iters, warmup=warmup)
+    kem_encaps = timeit("ml-kem encaps", kem_pk.encapsulate, iters=iters, warmup=warmup)
+    x_derive = timeit("x25519 derive", lambda: x_sk.exchange(x_peer), iters=iters, warmup=warmup)
+    kem_decaps = timeit(
+        "ml-kem decaps", lambda: kem_sk.decapsulate(kem_ct), iters=iters, warmup=warmup
+    )
 
     rows = [
         LatencyRow("keygen", kem_keygen, x_keygen),
@@ -186,7 +207,7 @@ def bench_b1(iters: int) -> LatencyResult:
     )
 
 
-def bench_b2(iters: int) -> LatencyResult:
+def bench_b2(iters: int, warmup: int = WARMUP) -> LatencyResult:
     """B2 - signature latency: ML-DSA-65 vs Ed25519."""
     dsa_sk = mldsa.MLDSA65PrivateKey.generate()
     dsa_pk = dsa_sk.public_key()
@@ -198,18 +219,27 @@ def bench_b2(iters: int) -> LatencyResult:
     rows = [
         LatencyRow(
             "keygen",
-            timeit("ml-dsa keygen", mldsa.MLDSA65PrivateKey.generate, iters=iters),
-            timeit("ed25519 keygen", ed25519.Ed25519PrivateKey.generate, iters=iters),
+            timeit("ml-dsa keygen", mldsa.MLDSA65PrivateKey.generate, iters=iters, warmup=warmup),
+            timeit(
+                "ed25519 keygen", ed25519.Ed25519PrivateKey.generate, iters=iters, warmup=warmup
+            ),
         ),
         LatencyRow(
             "sign",
-            timeit("ml-dsa sign", lambda: dsa_sk.sign(MESSAGE), iters=iters),
-            timeit("ed25519 sign", lambda: ed_sk.sign(MESSAGE), iters=iters),
+            timeit("ml-dsa sign", lambda: dsa_sk.sign(MESSAGE), iters=iters, warmup=warmup),
+            timeit("ed25519 sign", lambda: ed_sk.sign(MESSAGE), iters=iters, warmup=warmup),
         ),
         LatencyRow(
             "verify",
-            timeit("ml-dsa verify", lambda: dsa_pk.verify(dsa_sig, MESSAGE), iters=iters),
-            timeit("ed25519 verify", lambda: ed_pk.verify(ed_sig, MESSAGE), iters=iters),
+            timeit(
+                "ml-dsa verify",
+                lambda: dsa_pk.verify(dsa_sig, MESSAGE),
+                iters=iters,
+                warmup=warmup,
+            ),
+            timeit(
+                "ed25519 verify", lambda: ed_pk.verify(ed_sig, MESSAGE), iters=iters, warmup=warmup
+            ),
         ),
     ]
     return LatencyResult("B2", "B2 - signature primitive latency", "ML-DSA-65", "Ed25519", rows)
@@ -230,6 +260,18 @@ def _factor(pqc: float, classical: float) -> str:
     return f"x{round(f)}" if f >= 10 else f"x{f:.1f}"
 
 
+def _run_counts(stats: Stats) -> str:
+    """What a suite actually ran, per row.
+
+    "1000 iterations" left the reader to guess whether that was samples or
+    calls, and said nothing about the warm-up. Here one sample is exactly one
+    call - `perf_counter` is sub-microsecond, so nothing is batched - and the
+    discarded warm-up count is stated alongside, matching the browser report."""
+    samples = f"{stats.iters:,} sample{'' if stats.iters == 1 else 's'} per row"
+    warmup = f"{stats.warmup:,} discarded warm-up sample{'' if stats.warmup == 1 else 's'}"
+    return f"{samples}, one call per sample, after {warmup}"
+
+
 def _classical_cells(row: LatencyRow) -> tuple[str, str, str]:
     """The classical median / p95 / factor cells, or three blanks when the row
     has no classical measurement of its own (see LatencyResult.note)."""
@@ -246,7 +288,8 @@ def render_terminal(results: list[LatencyResult], footprint: FootprintResult | N
     lines: list[str] = [f"Environment: {platform.python_implementation()} {platform.python_version()} on {platform.platform()}"]
     for r in results:
         lines.append("")
-        lines.append(f"{r.title}  ({r.pqc_name} PQC vs {r.classical_name} classical, median of {r.rows[0].pqc.iters})")
+        lines.append(f"{r.title}  ({r.pqc_name} PQC vs {r.classical_name} classical)")
+        lines.append(f"  median / p95 over {_run_counts(r.rows[0].pqc)}")
         header = f"  {'op':<8} {r.pqc_name + ' med':>16} {'p95':>12} {r.classical_name + ' med':>14} {'p95':>12} {'factor':>7}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
@@ -274,7 +317,14 @@ def render_markdown(results: list[LatencyResult], footprint: FootprintResult | N
         f"{platform.platform()}. pyca/cryptography (OpenSSL) for both PQC and classical.",
     ]
     for r in results:
-        parts += ["", f"## {r.title}", "", f"{r.pqc_name} (PQC) vs {r.classical_name} (classical), median / p95 over {r.rows[0].pqc.iters} iterations.", ""]
+        parts += [
+            "",
+            f"## {r.title}",
+            "",
+            f"{r.pqc_name} (PQC) vs {r.classical_name} (classical) - "
+            f"median / p95 over {_run_counts(r.rows[0].pqc)}.",
+            "",
+        ]
         parts.append(f"| op | {r.pqc_name} median | {r.pqc_name} p95 | {r.classical_name} median | {r.classical_name} p95 | factor |")
         parts.append("| --- | --- | --- | --- | --- | --- |")
         for row in r.rows:
@@ -337,12 +387,18 @@ def _to_json(results: list[LatencyResult], footprint: FootprintResult | None = N
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Meridian Edge server benchmark (B1/B2)")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of tables")
-    parser.add_argument("--iters", type=int, default=ITERS, help="iterations per op")
+    parser.add_argument("--iters", type=int, default=ITERS, help="timed samples per op")
+    # Exposed because the report now prints it: --iters 5 previously still ran
+    # 100 warm-ups per op, which read as a mistake once both numbers were on
+    # the page and could not be changed from the command line.
+    parser.add_argument(
+        "--warmup", type=int, default=WARMUP, help="warm-up runs per op, discarded"
+    )
     parser.add_argument("--sessions", type=int, default=1000, help="sessions for the B5 footprint")
     parser.add_argument("--out", type=Path, default=None, help="write report.md + results.json here")
     args = parser.parse_args(argv)
 
-    results = [bench_b1(args.iters), bench_b2(args.iters)]
+    results = [bench_b1(args.iters, args.warmup), bench_b2(args.iters, args.warmup)]
     footprint = bench_b5_memory(args.sessions)
 
     if args.out is not None:

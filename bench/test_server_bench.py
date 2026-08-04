@@ -16,6 +16,7 @@ import pytest
 
 from consolidate import main as consolidate_main  # type: ignore[import-not-found]
 from server_bench import (  # type: ignore[import-not-found]
+    _run_counts,
     _to_json,
     bench_b1,
     bench_b2,
@@ -40,6 +41,18 @@ def test_summarize_empty() -> None:
     assert stats.iters == 0
     assert stats.median_us == 0.0
     assert stats.ops_per_sec == 0.0
+    # The empty branch builds Stats by keyword. Positionally, inserting a field
+    # would shift every float along and leave an int in median_us silently.
+    assert isinstance(stats.median_us, float)
+
+
+def test_summarize_records_the_warmup_it_was_given() -> None:
+    """A sample count means little without the warm-up beside it. Handing over
+    a list directly warms nothing up, so that case records zero rather than
+    inheriting the module default."""
+    assert summarize("t", [1.0, 2.0, 3.0]).warmup == 0
+    assert summarize("empty", []).warmup == 0
+    assert summarize("t", [1.0, 2.0, 3.0], warmup=7).warmup == 7
 
 
 def test_b1_runs_and_shapes_results() -> None:
@@ -47,6 +60,16 @@ def test_b1_runs_and_shapes_results() -> None:
     assert result.suite == "B1"
     assert [row.op for row in result.rows] == ["keygen", "encaps", "decaps"]
     assert all(row.pqc.iters == 3 for row in result.rows)
+
+
+def test_suites_record_the_warmup_they_ran() -> None:
+    """timeit discards the warm-up runs, so nothing downstream can recover the
+    count by inspection - it has to travel with the measurement."""
+    b1 = bench_b1(iters=3, warmup=2)
+    assert all(row.pqc.warmup == 2 for row in b1.rows)
+    assert all(row.classical.warmup == 2 for row in b1.rows if row.classical is not None)
+    b2 = bench_b2(iters=3, warmup=4)
+    assert all(row.pqc.warmup == 4 for row in b2.rows)
 
 
 def test_b1_measures_the_shared_x25519_baseline_once() -> None:
@@ -95,24 +118,44 @@ def test_to_json_round_trips_a_real_b1_result() -> None:
     """B1 is the suite with a None classical cell, so this covers that path as
     well as the payload's shape. `note` belongs to the result: a LatencyRow has
     only op/pqc/classical, and reaching for `row.note` would raise here."""
-    payload = json.loads(_to_json([bench_b1(iters=3)]))
+    payload = json.loads(_to_json([bench_b1(iters=3, warmup=2)]))
     result = payload["results"][0]
     assert result["suite"] == "B1"
     assert isinstance(result["note"], str) and result["note"]
     assert all("note" not in row for row in result["rows"])
     assert [row["op"] for row in result["rows"]] == ["keygen", "encaps", "decaps"]
     assert result["rows"][2]["classical"] is None
+    # The counts travel in the payload, which is what consolidate.py reads.
+    assert result["rows"][0]["pqc"]["iters"] == 3
+    assert result["rows"][0]["pqc"]["warmup"] == 2
 
 
 def test_markdown_heading_interpolates_its_counts() -> None:
     """The heading is an f-string over the run counts. If a brace ever became a
     parenthesis the expression would render as literal source into a journal
     artifact, which no other assertion in this file would notice."""
-    md = render_markdown([bench_b1(iters=7)])
+    md = render_markdown([bench_b1(iters=7, warmup=3)])
     heading = next(line for line in md.splitlines() if "median / p95 over" in line)
-    assert "7" in heading
+    assert "7 samples per row" in heading
+    assert "3 discarded warm-up samples" in heading
     assert "r.rows[0]" not in md
     assert "{" not in heading and "}" not in heading
+    # "iterations" left samples and calls ambiguous; the server states both.
+    assert "iterations" not in md
+    assert "one call per sample" in heading
+
+
+def test_terminal_heading_states_both_counts() -> None:
+    term = render_terminal([bench_b1(iters=7, warmup=3)])
+    heading = next(line for line in term.splitlines() if "median / p95 over" in line)
+    assert "7 samples per row" in heading
+    assert "3 discarded warm-up samples" in heading
+
+
+def test_run_counts_reads_naturally_at_one() -> None:
+    """Singular/plural, because the heading is prose in a published report."""
+    one = summarize("t", [1.0], warmup=1)
+    assert _run_counts(one) == "1 sample per row, one call per sample, after 1 discarded warm-up sample"
 
 
 def test_b2_runs_and_renders_markdown() -> None:
@@ -244,6 +287,7 @@ def _server_fixture() -> dict[str, object]:
         return {
             "label": "op",
             "iters": 10,
+            "warmup": 5,
             "median_us": median_us,
             "p95_us": median_us * 2,
             "mean_us": median_us,
@@ -406,7 +450,10 @@ def test_consolidate_carries_browser_only_suites_and_both_b5_halves(tmp_path: Pa
     # The merge must not drop the sample/warm-up disclosure the individual
     # reports carry - B4's counts are capped well below B1/B2's.
     assert "**Run counts.** Browser: 10 samples per row after 2 discarded warm-up" in report
-    assert "Native: 10 samples per row, one call per sample" in report
+    assert (
+        "Native: 10 samples per row, one call per sample (no batching needed), "
+        "after 5 discarded warm-up" in report
+    )
 
     # Provenance ties every number back to the file and environment it came from.
     assert "## Provenance" in report
@@ -415,6 +462,27 @@ def test_consolidate_carries_browser_only_suites_and_both_b5_halves(tmp_path: Pa
     # Paths outside the repo keep their own form, but never a Windows separator
     # that would render differently in the published document.
     assert "\\" not in report
+
+
+def test_consolidate_omits_the_warmup_clause_for_a_legacy_results_file(tmp_path: Path) -> None:
+    """A results.json written before the harness recorded `warmup` is still a
+    valid file. The clause is dropped rather than filled with a zero, which
+    would report a warm-up count nobody measured."""
+    server = _server_fixture()
+    results = server["results"]
+    assert isinstance(results, list)
+    for result in results:
+        assert isinstance(result, dict)
+        for row in result["rows"]:
+            for side in ("pqc", "classical"):
+                if isinstance(row.get(side), dict):
+                    row[side].pop("warmup", None)
+
+    code, out = _run(tmp_path, _write_inputs(tmp_path, server=server))
+    assert code == 0
+    report = out.read_text(encoding="utf-8")
+    assert "Native: 10 samples per row, one call per sample (no batching needed)." in report
+    assert "discarded warm-up" not in report.split("Native:")[1].split("\n")[0]
 
 
 def test_consolidate_says_so_when_the_breakdown_is_absent(tmp_path: Path) -> None:

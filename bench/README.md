@@ -37,7 +37,7 @@ PQC costs in a `@noble` JS implementation, not in native C.
 make bench                       # server B1/B2 + B5 footprint -> bench/out/, plus B5 bundle sizes
 make bench-print                 # server tables to stdout
 make bench-bundle                # B5 bundle sizes -> table + bench/out/bundle.json
-python bench/server_bench.py --iters 2000 --sessions 5000   # custom counts
+python bench/server_bench.py --iters 2000 --warmup 200 --sessions 5000   # custom counts
 ```
 
 ### The consolidated report (every suite in one document)
@@ -85,14 +85,25 @@ client suite via `npm test`).
 
 ## Methodology
 
-- Warm-up runs discarded, then median / p95 / mean over the sample set.
-- **A sample is not a call.** Each timed sample executes a *batch* of calls and
-  divides, so a row runs `samples x batch` calls in total. B1/B2 default to 1000
-  samples per row, which at batch 64 is 64,000 X25519 calls and at batch 32 is
-  32,000 ML-KEM calls. Every suite heading states its sample and warm-up counts,
-  and the timer footnote gives the batch and the resulting call count per row -
-  the older "over 1000 iterations" wording named only the sample count and was
-  read, reasonably, as the number of calls.
+- Warm-up runs discarded, then median / p95 / mean over the sample set. **Both
+  harnesses state the warm-up count wherever they state a sample count**, in
+  the browser and server headings and in the consolidated report's per-suite
+  "Run counts" line. The server records it on each measurement (`Stats.warmup`,
+  which travels in `results.json`) because `timeit` discards those runs and
+  nothing downstream could recover the number by inspection.
+- **A sample is not a call.** In the browser each timed sample executes a
+  *batch* of calls and divides, so a row runs `samples x batch` calls in total:
+  B1/B2 default to 1000 samples per row, which at batch 64 is 64,000 X25519
+  calls and at batch 32 is 32,000 ML-KEM calls. Every browser suite heading
+  states its sample and warm-up counts, and the timer footnote gives the batch
+  and the resulting call count per row - the older "over 1000 iterations"
+  wording named only the sample count and was read, reasonably, as the number
+  of calls. The server needs no batching (`perf_counter` is sub-microsecond),
+  so one sample there *is* one call, and its heading says so outright.
+- `--iters` and `--warmup` both control the server run. They are separate flags
+  because they are separate numbers: before `--warmup` existed, `--iters 5`
+  still ran the built-in 100 warm-ups per operation, which was invisible until
+  the heading started printing it.
 - **B4 runs fewer samples than B1/B2, by design.** One B4 sample is a whole
   handshake or ratchet step rather than a single primitive, so it caps at
   `B4_MAX_SAMPLES` = 200 samples and `B4_MAX_WARMUP` = 20 warm-up runs however
