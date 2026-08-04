@@ -41,8 +41,8 @@ def client(app: FastAPI) -> Iterator[TestClient]:
 
 @pytest.fixture(autouse=True)
 def fast_argon2(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Production parameters (m=64 MiB, t=3) would add ~1 s per registration;
-    # the parameters themselves are asserted separately in test_security.
+    # Production parameters (m=64 MiB, t=3) are expensive by design and would
+    # dominate the runtime of every test that registers a user;
     monkeypatch.setattr(
         security,
         "_hasher",

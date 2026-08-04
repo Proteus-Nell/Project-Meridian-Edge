@@ -2,7 +2,7 @@
 // the results plus terminal / Markdown / JSON renderings. Driven by the /bench
 // command; also importable headlessly by tests.
 
-import { benchB1, benchB2, benchB3, benchB4, DEFAULT_CONFIG } from "./suites";
+import { benchB1, benchB2, benchB3, benchB4, DEFAULT_CONFIG, primitiveMedians } from "./suites";
 import type { BenchConfig, SuiteResult } from "./suites";
 import { renderMarkdown, renderTerminal } from "./report";
 
@@ -62,7 +62,11 @@ export async function runBench(suite: SuiteName, options: RunOptions = {}): Prom
     } else if (name === "b3") {
       results.push(benchB3());
     } else {
-      results.push(await benchB4(config));
+      // B4 prices its handshake rows against the B1/B2 medians when those
+      // suites have already run in this session. It never runs them itself:
+      // that would add their cost to the timings it is about to take, so
+      // `/bench b4` alone simply reports no breakdown.
+      results.push(await benchB4(config, primitiveMedians(results) ?? undefined));
     }
   }
 

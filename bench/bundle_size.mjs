@@ -1,17 +1,27 @@
-// B5 (footprint) - frontend bundle-size delta attributable to the PQC libraries
-//. Bundles the PQC primitives (@noble/post-quantum) and, for
-// context, the classical baseline (@noble/curves) each on their own, minified
-// the same way the production build does (esbuild), and reports raw + gzipped
-// size. The PQC row IS the delta a pure-PQC client pays over a classical one.
+// B5 (footprint) - frontend bundle-size of the PQC libraries against the classical baseline.
+// Bundles the PQC primitives (@noble/post-quantum) and the classical baseline (@noble/curves) 
+// each on their own, minified the same way the production build is 
+// (Vite's default minifier, unconfig'd in both), and reports raw + gzipped size.
 //
-// Run:  node bench/bundle_size.mjs           # table to stdout
-//       node bench/bundle_size.mjs --json     # JSON to stdout
+// Each row is a standalone bundled size, not the marginal cost of adding that
+// library to this client: @noble/hashes is already a client dependency, so
+// modules shared with it (hashes/utils.js, and curves/utils.js pulled in by
+// ml-dsa) are counted here but shipped either way. Read the rows as a
+// like-for-like library comparison and an upper bound on the true delta.
+//
+// Run:  node bench/bundle_size.mjs                 # table to stdout
+//       node bench/bundle_size.mjs --json          # JSON to stdout
+//       node bench/bundle_size.mjs --out bench/out # table + <out>/bundle.json
+//
+// The --out file is what bench/consolidate.py reads for the B5 bundle half;
+// without it the numbers only ever existed on someone's terminal.
 //
 // vite is resolved from client/node_modules regardless of cwd.
 
+
 import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -65,9 +75,26 @@ for (const [name, source] of Object.entries(ENTRIES)) {
   rows.push({ library: name, ...(await bundleSize(source)) });
 }
 
+const payload = { suite: "B5", metric: "bundle-size", rows };
+
+// --out <dir> writes <dir>/bundle.json and still prints the table: the file is
+// for consolidate.py, the table for whoever ran the command.
+const outIndex = process.argv.indexOf("--out");
+const outDir = outIndex === -1 ? null : process.argv[outIndex + 1];
+if (outIndex !== -1 && (outDir === undefined || outDir.startsWith("--"))) {
+  console.error("--out needs a directory, e.g. --out bench/out");
+  process.exit(2);
+}
+if (outDir !== null) {
+  mkdirSync(outDir, { recursive: true });
+  const file = path.join(outDir, "bundle.json");
+  writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  console.log(`wrote ${file}\n`);
+}
+
 const asJson = process.argv.includes("--json");
 if (asJson) {
-  console.log(JSON.stringify({ suite: "B5", metric: "bundle-size", rows }, null, 2));
+  console.log(JSON.stringify(payload, null, 2));
 } else {
   const fmt = (n) => `${(n / 1024).toFixed(1)} kB`;
   console.log("B5 - frontend bundle-size (minified, own chunk)\n");
@@ -80,7 +107,7 @@ if (asJson) {
   const pqc = rows[0];
   const classical = rows[1];
   console.log(
-    `\n  PQC bundle delta over classical: ${fmt(pqc.gzip - classical.gzip)} gzipped ` +
+    `\n  PQC vs classical, standalone + gzipped: ${fmt(pqc.gzip - classical.gzip)} ` +
       `(${(pqc.gzip / classical.gzip).toFixed(1)}x).`,
   );
 }

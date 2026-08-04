@@ -5,9 +5,25 @@
 //
 // Methodology: a warm-up run is discarded, then `iters` samples are
 // collected and reported as median / p95 / mean. Fast primitives (X25519,
-// Ed25519 at tens of microseconds) sit near the browser's clamped
-// performance.now() resolution, so each sample times a `batch` of calls and
-// divides - the per-op figure stays meaningful without a high-resolution timer.
+// Ed25519) sit near the browser's clamped performance.now() resolution,
+// so each sample times a `batch` of calls and divides - the per-op
+// figure stays meaningful without a high-resolution timer.
+//
+// Batching shrinks the quantisation but never removes it: every per-op figure
+// is still a multiple of CLOCK_CLAMP_MS / batch. That floor travels with the
+// numbers as `Stats.tickMs` so the report can state it instead of implying a
+// precision the clock cannot deliver.
+
+/** Granularity of `performance.now()` in the browser. The timer is coarsened
+ * as a Spectre mitigation: a document that is not cross-origin isolated (COOP +
+ * COEP) reads the clock at 100 us in Chrome and Edge, and every figure this
+ * harness has produced lands exactly on that grid.
+ *
+ * It is an assumption, not a measurement: a context that coarsens further
+ * (Firefox's default privacy.reduceTimerPrecision is 1 ms) would make the
+ * resolution reported here optimistic by 10x, and cross-origin isolation would
+ * make it pessimistic. The report prints the assumption for that reason. */
+export const CLOCK_CLAMP_MS = 0.1;
 
 export interface Stats {
   readonly label: string;
@@ -18,6 +34,10 @@ export interface Stats {
   readonly meanMs: number;
   readonly minMs: number;
   readonly opsPerSec: number;
+  /** Effective per-op timer resolution for this measurement: the clock clamp
+   * divided by the batch size. Every figure in this row is a multiple of it,
+   * and no difference smaller than it is real. */
+  readonly tickMs: number;
 }
 
 /** Nearest-rank percentile over an already-collected sample set. */
@@ -45,6 +65,7 @@ export function summarize(label: string, samplesMs: readonly number[], batch = 1
     meanMs,
     minMs: sorted[0] ?? 0,
     opsPerSec: meanMs > 0 ? 1000 / meanMs : 0,
+    tickMs: CLOCK_CLAMP_MS / Math.max(1, batch),
   };
 }
 

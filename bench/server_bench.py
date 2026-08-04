@@ -85,7 +85,11 @@ def timeit(label: str, fn: Callable[[], object], *, warmup: int = WARMUP, iters:
 class LatencyRow:
     op: str
     pqc: Stats
-    classical: Stats
+    #: None when the classical side has no operation of its own to time and its
+    #: baseline is reported once on a different row (B1 decaps - see the
+    #: result's note). Rendered as "-" rather than repeating the other row's
+    #: number, which would read as a second measurement.
+    classical: Stats | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,7 @@ class LatencyResult:
     pqc_name: str
     classical_name: str
     rows: list[LatencyRow]
+    note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -145,32 +150,40 @@ def bench_b5_memory(sessions: int) -> FootprintResult:
     )
 
 
+NOTE_B1 = (
+    "X25519 has no split encaps/decaps. The single exchange() measurement shown on the encaps "
+    "row is the classical baseline for both ML-KEM encaps and decaps; the decaps row leaves its "
+    "classical cells blank rather than repeat that one number as if it were two."
+)
+
+
 def bench_b1(iters: int) -> LatencyResult:
-    """B1 - KEM latency: ML-KEM-768 vs X25519."""
+    """B1 - KEM latency: ML-KEM-768 vs X25519.
+
+    DH has no split encaps/decaps, so the X25519 shared-secret derivation is the
+    closest analog to both ML-KEM halves. It is timed once and reported on the
+    encaps row; the decaps row carries no classical cell at all, so the one
+    measurement can never be mistaken for two (NOTE_B1)."""
     kem_sk = mlkem.MLKEM768PrivateKey.generate()
     kem_pk = kem_sk.public_key()
     _, kem_ct = kem_pk.encapsulate()
     x_sk = x25519.X25519PrivateKey.generate()
     x_peer = x25519.X25519PrivateKey.generate().public_key()
 
+    kem_keygen = timeit("ml-kem keygen", mlkem.MLKEM768PrivateKey.generate, iters=iters)
+    x_keygen = timeit("x25519 keygen", x25519.X25519PrivateKey.generate, iters=iters)
+    kem_encaps = timeit("ml-kem encaps", kem_pk.encapsulate, iters=iters)
+    x_derive = timeit("x25519 derive", lambda: x_sk.exchange(x_peer), iters=iters)
+    kem_decaps = timeit("ml-kem decaps", lambda: kem_sk.decapsulate(kem_ct), iters=iters)
+
     rows = [
-        LatencyRow(
-            "keygen",
-            timeit("ml-kem keygen", mlkem.MLKEM768PrivateKey.generate, iters=iters),
-            timeit("x25519 keygen", x25519.X25519PrivateKey.generate, iters=iters),
-        ),
-        LatencyRow(
-            "encaps",
-            timeit("ml-kem encaps", kem_pk.encapsulate, iters=iters),
-            timeit("x25519 derive", lambda: x_sk.exchange(x_peer), iters=iters),
-        ),
-        LatencyRow(
-            "decaps",
-            timeit("ml-kem decaps", lambda: kem_sk.decapsulate(kem_ct), iters=iters),
-            timeit("x25519 derive", lambda: x_sk.exchange(x_peer), iters=iters),
-        ),
+        LatencyRow("keygen", kem_keygen, x_keygen),
+        LatencyRow("encaps", kem_encaps, x_derive),
+        LatencyRow("decaps", kem_decaps),  # baseline is the encaps row's figure
     ]
-    return LatencyResult("B1", "B1 - KEM primitive latency", "ML-KEM-768", "X25519", rows)
+    return LatencyResult(
+        "B1", "B1 - KEM primitive latency", "ML-KEM-768", "X25519", rows, NOTE_B1
+    )
 
 
 def bench_b2(iters: int) -> LatencyResult:
@@ -217,6 +230,18 @@ def _factor(pqc: float, classical: float) -> str:
     return f"x{round(f)}" if f >= 10 else f"x{f:.1f}"
 
 
+def _classical_cells(row: LatencyRow) -> tuple[str, str, str]:
+    """The classical median / p95 / factor cells, or three blanks when the row
+    has no classical measurement of its own (see LatencyResult.note)."""
+    if row.classical is None:
+        return ("-", "-", "-")
+    return (
+        _fmt_us(row.classical.median_us),
+        _fmt_us(row.classical.p95_us),
+        _factor(row.pqc.median_us, row.classical.median_us),
+    )
+
+
 def render_terminal(results: list[LatencyResult], footprint: FootprintResult | None = None) -> str:
     lines: list[str] = [f"Environment: {platform.python_implementation()} {platform.python_version()} on {platform.platform()}"]
     for r in results:
@@ -226,11 +251,13 @@ def render_terminal(results: list[LatencyResult], footprint: FootprintResult | N
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
         for row in r.rows:
+            classical_med, classical_p95, factor = _classical_cells(row)
             lines.append(
                 f"  {row.op:<8} {_fmt_us(row.pqc.median_us):>16} {_fmt_us(row.pqc.p95_us):>12} "
-                f"{_fmt_us(row.classical.median_us):>14} {_fmt_us(row.classical.p95_us):>12} "
-                f"{_factor(row.pqc.median_us, row.classical.median_us):>7}"
+                f"{classical_med:>14} {classical_p95:>12} {factor:>7}"
             )
+        if r.note is not None:
+            lines.append(f"  note: {r.note}")
     if footprint is not None:
         lines.append("")
         lines.append(f"{footprint.title}  ({footprint.sessions} sessions)")
@@ -251,11 +278,13 @@ def render_markdown(results: list[LatencyResult], footprint: FootprintResult | N
         parts.append(f"| op | {r.pqc_name} median | {r.pqc_name} p95 | {r.classical_name} median | {r.classical_name} p95 | factor |")
         parts.append("| --- | --- | --- | --- | --- | --- |")
         for row in r.rows:
+            classical_med, classical_p95, factor = _classical_cells(row)
             parts.append(
                 f"| {row.op} | {_fmt_us(row.pqc.median_us)} | {_fmt_us(row.pqc.p95_us)} | "
-                f"{_fmt_us(row.classical.median_us)} | {_fmt_us(row.classical.p95_us)} | "
-                f"{_factor(row.pqc.median_us, row.classical.median_us)} |"
+                f"{classical_med} | {classical_p95} | {factor} |"
             )
+        if r.note is not None:
+            parts += ["", f"_{r.note}_"]
     if footprint is not None:
         parts += [
             "",
@@ -284,8 +313,16 @@ def _to_json(results: list[LatencyResult], footprint: FootprintResult | None = N
                 "title": r.title,
                 "pqc_name": r.pqc_name,
                 "classical_name": r.classical_name,
+                "note": r.note,
+                # An explicit null says "not measured on this row" (the baseline
+                # lives on another one); repeating the figure would claim a
+                # second sample that was never taken.
                 "rows": [
-                    {"op": row.op, "pqc": asdict(row.pqc), "classical": asdict(row.classical)}
+                    {
+                        "op": row.op,
+                        "pqc": asdict(row.pqc),
+                        "classical": asdict(row.classical) if row.classical is not None else None,
+                    }
                     for row in r.rows
                 ],
             }
