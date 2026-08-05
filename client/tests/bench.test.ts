@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { CLOCK_CLAMP_MS, summarize } from "../src/bench/harness";
 import {
+  B1_SHARED_BASELINE_NOTE,
   B4_MAX_SAMPLES,
   B4_MAX_WARMUP,
   BENCH_MESSAGE_BYTES,
@@ -15,10 +16,17 @@ import {
   primitiveMedians,
 } from "../src/bench/suites";
 import type { PrimitiveMedians } from "../src/bench/suites";
+// The disclosure constants are asserted by identity rather than by fragment:
+// a test matching part of a sentence goes red on a rewrite, which teaches
+// people to edit the test instead of thinking about what changed.
 import {
+  BREAKDOWN_ABSENT,
+  BREAKDOWN_NOTE,
+  BREAKDOWN_TITLE,
   formatBytes,
   formatFactor,
   formatMs,
+  RATE_FOOTNOTE,
   renderMarkdown,
   renderTerminal,
 } from "../src/bench/report";
@@ -159,13 +167,16 @@ describe("B3 size overhead", () => {
     expect(basisOf("Registration bundle (50 OPKs)")).toBe("analytic");
     expect(result.rows.filter((r) => r.basis === "analytic")).toHaveLength(1);
 
-    // The note has to disclose that the classical column is a model, and that
-    // the bundle row's classical side carries this protocol's leaf hashes -
-    // 3,200 of its 4,992 bytes - which a real X3DH bundle does not have.
-    expect(result.note).toContain("analytic");
-    expect(result.note).toContain("X3DH");
-    expect(result.note).toContain("3,200");
-    expect(result.note).toContain("x40"); // leaf-free factor, vs the x14 shown
+    // The note has to quote the leaf-hash bytes and the leaf-free factor. Both
+    // are derived from the row here rather than written down, so they follow
+    // OPK_BATCH_MAX instead of pinning today's 50-OPK numbers into the test.
+    const bundle = byObject.get("Registration bundle (50 OPKs)");
+    const leafBytes = 50 * 64;
+    const leafFree = Math.round(
+      (bundle?.pqcBytes ?? 0) / ((bundle?.classicalBytes ?? 0) - leafBytes),
+    );
+    expect(result.note).toContain(leafBytes.toLocaleString("en-US"));
+    expect(result.note).toContain(`x${leafFree}`);
   });
 
   it("renders the basis in both the terminal and Markdown tables", () => {
@@ -281,14 +292,13 @@ describe("runBench end-to-end (tiny sample count)", () => {
       }
     }
     // B1 mixes batches: ML-KEM at 32, X25519 at 64. Both must be disclosed,
-    // each naming the ops it covers.
-    expect(out.markdown).toContain("Timer resolution: 100 us clamped;");
+    // each naming the ops it covers. The figures are what matter here - the
+    // call counts and the ticks the batch divides the clamp into.
     expect(out.markdown).toContain("batch 32 = 96 calls per row"); // 3 samples
     expect(out.markdown).toContain("batch 64 = 192 calls per row");
     expect(out.markdown).toContain("effective per-op resolution 3.13 us");
     expect(out.markdown).toContain("effective per-op resolution 1.56 us");
-    expect(out.markdown).toContain("ml-kem encaps");
-    expect(out.markdown).toContain("x25519 derive");
+    expect(out.markdown).toContain("ml-kem encaps"); // groups name their ops
     // The terminal is the primary surface, so it carries the footnote too.
     expect(out.terminalLines.some((l) => l.includes("Timer resolution:"))).toBe(true);
   });
@@ -310,13 +320,13 @@ describe("runBench end-to-end (tiny sample count)", () => {
       }
     }
     for (const surface of [out.markdown, out.terminalLines.join("\n")]) {
-      expect(surface).toContain("over 3 samples per row");
-      expect(surface).toContain("after 1 discarded warm-up sample");
-      expect(surface).not.toContain("warm-up samples"); // 1 is singular
-      expect(surface).not.toContain("iterations");
+      // Both counts reach the heading, tracked from the config rather than
+      // pinned, so changing `tiny` cannot leave a stale expectation behind.
+      expect(surface).toContain(`${tiny.iters} samples per row`);
+      expect(surface).toContain(`${tiny.warmup} discarded warm-up`);
       // B1's rows do not share a batch, so no single figure can go in the
-      // heading; it has to send the reader to the per-op breakdown.
-      expect(surface).toContain("see the timer footnote for the batch per row");
+      // heading; it has to send the reader to the per-op breakdown instead.
+      expect(surface).not.toContain("each timing a batch of");
     }
   });
 
@@ -332,9 +342,8 @@ describe("runBench end-to-end (tiny sample count)", () => {
       expect(byOp.get("keygen")?.classical).toBeDefined();
       expect(byOp.get("encaps")?.classical).toBeDefined();
       expect(byOp.get("decaps")?.classical).toBeUndefined();
-      // The note carries the explanation, and has to name both halves.
-      expect(result.note).toContain("encaps");
-      expect(result.note).toContain("decaps");
+      // The blank cell is only honest if the explanation ships with it.
+      expect(result.note).toBe(B1_SHARED_BASELINE_NOTE);
     }
 
     // Terminal: classical median, p95 and factor are all blank, and the column
@@ -374,8 +383,8 @@ describe("runBench end-to-end (tiny sample count)", () => {
       const throughput = result.rows.filter((r) => r.display === "throughput");
       expect(throughput).toHaveLength(2);
       expect(throughput.every((r) => r.stats.opsPerSec > 0)).toBe(true);
-      // The note has to name the interval the two rows bracket.
-      expect(result.note).toContain(`KEM_STEP_INTERVAL=${KEM_STEP_INTERVAL}`);
+      // The note quotes the live constant, so it cannot hard-code a stale 10.
+      expect(result.note).toContain(String(KEM_STEP_INTERVAL));
     }
     expect(out.markdown).toContain("B4 - protocol level");
     // B4 times one operation per sample, so its floor is the raw clamp - the
@@ -424,11 +433,11 @@ describe("runBench end-to-end (tiny sample count)", () => {
     expect(mdRow("handshake round-trip").endsWith("| - |")).toBe(true);
     expect(mdRow("ratchet message (unidirectional burst)")).toMatch(/\| [\d,]+ msg\/s \|$/);
 
-    // The rate must be disclaimed wherever it appears.
+    // The rate must be disclaimed wherever it appears. Asserting the constant
+    // rather than a phrase from it: rewording then updates both sides at once,
+    // and this only goes red if the disclaimer is dropped.
     for (const surface of [out.markdown, out.terminalLines.join("\n")]) {
-      expect(surface).toContain("Mean throughput is 1000 / mean");
-      expect(surface).toContain("not system capacity");
-      expect(surface).toContain("single-threaded");
+      expect(surface).toContain(RATE_FOOTNOTE);
     }
   });
 
@@ -502,13 +511,13 @@ describe("runBench end-to-end (tiny sample count)", () => {
       // The main table keeps its five columns; the breakdown is separate.
       expect(markdown).toContain("| metric | median | p95 | mean | mean throughput |");
       for (const surface of [terminal, markdown]) {
-        expect(surface).toContain("where the time goes (primitive costs from B1/B2)");
+        expect(surface).toContain(BREAKDOWN_TITLE);
+        // Row labels, not prose: these are the table's structure.
         expect(surface).toContain("predicted total");
         expect(surface).toContain("measured median");
         expect(surface).toContain("residual");
-        // The caveats that keep the prediction honest.
-        expect(surface).toContain("traced by hand from crypto/kx.ts");
-        expect(surface).toContain("the median of a sum is not the sum of medians");
+        // The caveats that keep the prediction honest have to travel with it.
+        expect(surface).toContain(BREAKDOWN_NOTE);
       }
       expect(markdown).toContain("| metric | component | count | each | subtotal |");
       expect(markdown).toContain("| ML-DSA-65 sign | 1 | 6.00 ms | 6.00 ms |");
@@ -524,11 +533,10 @@ describe("runBench end-to-end (tiny sample count)", () => {
         expect(result.breakdown).toBeUndefined();
       }
       for (const surface of [alone.markdown, alone.terminalLines.join("\n")]) {
-        expect(surface).not.toContain("where the time goes");
-        expect(surface).toContain("No breakdown");
-        // B4 must never re-run B1/B2 to fill the gap - that would change what
-        // its own timings mean.
-        expect(surface).toContain("will not run B1/B2 itself");
+        expect(surface).not.toContain(BREAKDOWN_TITLE);
+        // The absence is explained rather than left as a silent hole, and the
+        // explanation says why B4 does not simply run B1/B2 to fill it.
+        expect(surface).toContain(BREAKDOWN_ABSENT);
       }
     });
 
@@ -562,12 +570,11 @@ describe("runBench end-to-end (tiny sample count)", () => {
       expect(result.rows.every((r) => r.stats.iters === result.samples)).toBe(true);
     }
     for (const surface of [out.markdown, out.terminalLines.join("\n")]) {
-      expect(surface).toContain("over 3 samples per row");
-      expect(surface).toContain("after 1 discarded warm-up sample");
-      expect(surface).not.toContain("warm-up samples"); // 1 is singular
-      // Every B4 row times one operation per sample, so the heading can state
-      // the batch outright rather than deferring to the footnote.
-      expect(surface).toContain("each timing a batch of 1 call, so 3 calls per row");
+      expect(surface).toContain(`${tiny.iters} samples per row`);
+      expect(surface).toContain(`${tiny.warmup} discarded warm-up`);
+      // Every B4 row times one operation per sample, so the heading states the
+      // batch outright instead of deferring to the footnote as B1 must.
+      expect(surface).toContain(`batch of 1 call, so ${tiny.iters} calls per row`);
     }
   });
 

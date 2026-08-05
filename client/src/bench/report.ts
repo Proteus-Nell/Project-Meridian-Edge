@@ -116,7 +116,7 @@ function protocolRows(result: ProtocolResult): string[][] {
 
 /** What the throughput column is, and what it is not. Rendered only when a
  * throughput row exists, so it can never describe an absent column. */
-const RATE_FOOTNOTE =
+export const RATE_FOOTNOTE =
   "Mean throughput is 1000 / mean for one single-threaded browser tab doing crypto only - " +
   "it is not system capacity: no network, no concurrency, no server, one core. Latency rows " +
   "carry no rate, since a per-op cost is not one. Where the mean exceeds the median the samples " +
@@ -128,9 +128,9 @@ function hasThroughputRow(result: ProtocolResult): boolean {
 
 const BREAKDOWN_HEADERS = ["metric", "component", "count", "each", "subtotal"] as const;
 
-const BREAKDOWN_TITLE = "where the time goes (primitive costs from B1/B2)";
+export const BREAKDOWN_TITLE = "where the time goes (primitive costs from B1/B2)";
 
-const BREAKDOWN_NOTE =
+export const BREAKDOWN_NOTE =
   "Composition traced by hand from crypto/kx.ts, not instrumented - the fixture bundle carries " +
   "an OPK, so both ct2 paths run; an SPK-only handshake would drop one encaps and one decaps. " +
   "Predicted is the sum of per-op B1/B2 medians, and the median of a sum is not the sum of " +
@@ -140,7 +140,7 @@ const BREAKDOWN_NOTE =
   "Line items are rounded for display while the totals come from the unrounded medians, so a " +
   "column may not add up in its last digit.";
 
-const BREAKDOWN_ABSENT =
+export const BREAKDOWN_ABSENT =
   "No breakdown: it prices these rows against the B1/B2 medians, which this run did not " +
   "produce. Run /bench with no argument. B4 will not run B1/B2 itself - that would add their " +
   "cost to the session it is timing.";

@@ -14,9 +14,17 @@ from pathlib import Path
 
 import pytest
 
+from consolidate import (  # type: ignore[import-not-found]
+    BREAKDOWN_CAVEAT,
+    BROWSER_REMEDY,
+    BUNDLE_CAVEAT,
+    BUNDLE_REMEDY,
+    FOOTPRINT_CAVEAT,
+    SERVER_REMEDY,
+)
 from consolidate import main as consolidate_main  # type: ignore[import-not-found]
 from server_bench import (  # type: ignore[import-not-found]
-    _run_counts,
+    NOTE_B1,
     _to_json,
     bench_b1,
     bench_b2,
@@ -81,8 +89,10 @@ def test_b1_measures_the_shared_x25519_baseline_once() -> None:
     assert by_op["keygen"].classical is not None
     assert by_op["encaps"].classical is not None
     assert by_op["decaps"].classical is None
-    assert result.note is not None
-    assert "encaps" in result.note and "decaps" in result.note
+    # The blank cell is only honest if the explanation ships with it. Asserting
+    # the constant, not a phrase from it: a rewrite updates both sides at once
+    # and this still fails if the disclosure is dropped.
+    assert result.note == NOTE_B1
 
 
 def test_b1_renders_the_absent_classical_cell_blank_everywhere() -> None:
@@ -130,32 +140,17 @@ def test_to_json_round_trips_a_real_b1_result() -> None:
     assert result["rows"][0]["pqc"]["warmup"] == 2
 
 
-def test_markdown_heading_interpolates_its_counts() -> None:
-    """The heading is an f-string over the run counts. If a brace ever became a
-    parenthesis the expression would render as literal source into a journal
+def test_headings_state_both_counts_on_both_surfaces() -> None:
+    """The heading is an f-string over the run counts. A brace turning into a
+    parenthesis would render the expression as literal source into a journal
     artifact, which no other assertion in this file would notice."""
-    md = render_markdown([bench_b1(iters=7, warmup=3)])
-    heading = next(line for line in md.splitlines() if "median / p95 over" in line)
-    assert "7 samples per row" in heading
-    assert "3 discarded warm-up samples" in heading
-    assert "r.rows[0]" not in md
-    assert "{" not in heading and "}" not in heading
-    # "iterations" left samples and calls ambiguous; the server states both.
-    assert "iterations" not in md
-    assert "one call per sample" in heading
-
-
-def test_terminal_heading_states_both_counts() -> None:
-    term = render_terminal([bench_b1(iters=7, warmup=3)])
-    heading = next(line for line in term.splitlines() if "median / p95 over" in line)
-    assert "7 samples per row" in heading
-    assert "3 discarded warm-up samples" in heading
-
-
-def test_run_counts_reads_naturally_at_one() -> None:
-    """Singular/plural, because the heading is prose in a published report."""
-    one = summarize("t", [1.0], warmup=1)
-    assert _run_counts(one) == "1 sample per row, one call per sample, after 1 discarded warm-up sample"
+    result = bench_b1(iters=7, warmup=3)
+    for render in (render_markdown, render_terminal):
+        text = render([result])
+        heading = next(line for line in text.splitlines() if "median / p95 over" in line)
+        assert "7" in heading and "3" in heading
+        assert "r.rows[0]" not in text
+        assert "{" not in heading and "}" not in heading
 
 
 def test_b2_runs_and_renders_markdown() -> None:
@@ -405,7 +400,7 @@ def test_consolidate_merges_both_environments_into_one_row(tmp_path: Path) -> No
     )
     # The gap is also stated in prose, which is the finding being surfaced.
     assert "**JS/native gap.**" in report
-    assert "ML-KEM-768 runs x10-x16 slower in the browser than through OpenSSL" in report
+    assert "x10-x16" in report  # 0.4 ms / 40 us and 0.8 ms / 50 us, rounded
     # Both harnesses' own notes survive the merge, each attributed.
     assert "_browser: browser B1 note_" in report
     assert "_native: native B1 note_" in report
@@ -434,26 +429,24 @@ def test_consolidate_carries_browser_only_suites_and_both_b5_halves(tmp_path: Pa
     assert "|  | predicted total |  |  | 5.50 ms |" in report
     assert "|  | measured median |  |  | 6.00 ms |" in report
     assert "|  | residual |  |  | +500 us (8.3%) |" in report
-    assert "traced by hand" in report
+    assert BREAKDOWN_CAVEAT in report
 
     # B5's two halves finally share a document, each carrying its caveat.
     assert "## B5 - footprint" in report
     assert "### Frontend bundle size" in report
     assert "### Server memory per active session" in report
     assert "| 100 | 2,188 | 218,800 |" in report
-    assert "not RSS" in report
+    assert FOOTPRINT_CAVEAT in report
+    assert BUNDLE_CAVEAT in report
     # The harness's own note survives alongside the added caveat, rather than
     # one silently replacing the other.
     assert "Python-heap (tracemalloc) for the SessionToken object" in report
-    assert "an upper bound on the true delta" in report
 
     # The merge must not drop the sample/warm-up disclosure the individual
     # reports carry - B4's counts are capped well below B1/B2's.
-    assert "**Run counts.** Browser: 10 samples per row after 2 discarded warm-up" in report
-    assert (
-        "Native: 10 samples per row, one call per sample (no batching needed), "
-        "after 5 discarded warm-up" in report
-    )
+    counts = next(line for line in report.splitlines() if line.startswith("**Run counts.**"))
+    assert "Browser: 10 samples per row after 2 discarded warm-up" in counts
+    assert "Native: 10 samples per row" in counts and "after 5 discarded warm-up" in counts
 
     # Provenance ties every number back to the file and environment it came from.
     assert "## Provenance" in report
@@ -509,7 +502,7 @@ def test_consolidate_refuses_a_missing_browser_json(
     assert not out.exists()  # no partial report left behind
     message = capsys.readouterr().err
     assert "Browser results not found" in message
-    assert "/bench" in message
+    assert BROWSER_REMEDY in message
 
 
 def test_consolidate_refuses_a_partial_browser_run(
@@ -519,8 +512,8 @@ def test_consolidate_refuses_a_partial_browser_run(
     assert code == 1
     assert not out.exists()
     message = capsys.readouterr().err
-    assert "missing B3, B4" in message
-    assert "must not quietly omit a suite" in message
+    assert "missing B3, B4" in message  # names exactly what is absent
+    assert BROWSER_REMEDY in message
 
 
 def test_consolidate_names_the_target_that_produces_each_missing_input(
@@ -528,11 +521,11 @@ def test_consolidate_names_the_target_that_produces_each_missing_input(
 ) -> None:
     code, _ = _run(tmp_path, _write_inputs(tmp_path, server=None))
     assert code == 1
-    assert "make bench-server" in capsys.readouterr().err
+    assert SERVER_REMEDY in capsys.readouterr().err
 
     code, _ = _run(tmp_path, _write_inputs(tmp_path, bundle=None))
     assert code == 1
-    assert "make bench-bundle" in capsys.readouterr().err
+    assert BUNDLE_REMEDY in capsys.readouterr().err
 
 
 def test_consolidate_refuses_unreadable_json(

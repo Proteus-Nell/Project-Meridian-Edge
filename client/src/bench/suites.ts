@@ -211,6 +211,15 @@ async function loadClassical(): Promise<Classical> {
   return { ed25519: mod.ed25519, x25519: mod.x25519 };
 }
 
+/** Why B1's decaps row has no classical cell. Named so the report and its test
+ * share one copy: a test matching a fragment of this goes red on a reworded
+ * sentence, which teaches people to edit tests rather than think. Asserting the
+ * constant itself only fails when the disclosure is actually dropped. */
+export const B1_SHARED_BASELINE_NOTE =
+  "X25519 has no split encaps/decaps. The single getSharedSecret measurement shown on the " +
+  "encaps row is the classical baseline for both ML-KEM encaps and decaps; the decaps row " +
+  "leaves its classical cells blank rather than repeat that one number as if it were two.";
+
 /** B1 - KEM primitive latency: ML-KEM-768 vs X25519.
  *
  * DH has no split encaps/decaps, so X25519's shared-secret derivation is the
@@ -264,10 +273,7 @@ export async function benchB1(cfg: BenchConfig): Promise<LatencyResult> {
     classicalName: "X25519",
     samples: iters,
     warmup,
-    note:
-      "X25519 has no split encaps/decaps. The single getSharedSecret measurement shown on the " +
-      "encaps row is the classical baseline for both ML-KEM encaps and decaps; the decaps row " +
-      "leaves its classical cells blank rather than repeat that one number as if it were two.",
+    note: B1_SHARED_BASELINE_NOTE,
     rows: [
       { op: "keygen", pqc: kemKeygen, classical: xKeygen },
       { op: "encaps", pqc: kemEncaps, classical: xDerive },
