@@ -517,6 +517,48 @@ Then load the site, `/register`, note the UID, and from a second browser `/add`
 + `/chat` to confirm an end-to-end message round-trips. Finish with the
 [PQC/TLS screenings](#10-passing-pqctls-screenings) below.
 
+### 8.1 Expected console noise: six blocked stylesheets
+
+Every page load logs six CSP violations, and they are **not** a fault:
+
+```
+Applying inline style violates the following Content Security Policy directive 'style-src 'self''.
+```
+
+xterm does not ship the terminal's core styling in its stylesheet. The DOM
+renderer generates it from the live theme and appends it as `<style>` elements:
+the cell metrics (`white-space: pre`, the font face and size), the 256-entry
+ANSI palette, the dim/bold attributes, the text selection, and the caret with
+its blink keyframes. `style-src 'self'` blocks all six, one set per terminal.
+
+The client expects this. `client/src/terminal/stylemirror.ts` copies each
+blocked sheet into an adopted stylesheet, which is CSSOM rather than an inline
+style and so falls outside `style-src`; the terminal then renders exactly as
+xterm intended with the CSP untouched. The violations are logged because the
+original elements really are blocked - only the mirrors do the work.
+
+Relaxing the CSP to `style-src 'self' 'unsafe-inline'` would also silence them.
+Do not: the strict directive is the point, and the mirror already delivers the
+rendering without it.
+
+Two things this is worth knowing for:
+
+- **A blank or monospace-collapsed terminal is a real fault.** If the wordmark
+  reads `M E R I D I A N E D G E` with the spacing gone, the three-step list
+  loses its column alignment, colours flatten to plain foreground, or the
+  command-line caret never appears, the mirror is not running. Check that the
+  deployed bundle is current, and that the browser supports constructed
+  stylesheets (Chrome 73+, Firefox 101+, Safari 16.4+) - below that the mirror
+  is inert by design and the terminal degrades to exactly this.
+- **These six can mask a seventh.** When reading the console for an unrelated
+  problem, filter them out rather than skimming past, or a genuinely new CSP
+  violation will hide in the noise.
+
+`scripts/audit.py` cross-checks the CSP in `deploy/nginx.conf`,
+`deploy/Caddyfile` and `client/vite.config.ts` and fails on any drift between
+them, so the local rehearsal (`npm run build && npm run preview`, which serves
+the production header) cannot silently stop matching what you deploy.
+
 ---
 
 ## 9. Updating an existing deployment

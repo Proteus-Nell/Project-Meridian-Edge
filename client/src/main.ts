@@ -12,6 +12,7 @@ import { Shell } from "./terminal/shell";
 import { Executor } from "./terminal/executor";
 import { Chrome } from "./terminal/chrome";
 import { commandSuggestions, longestCommonPrefix } from "./terminal/suggest";
+import { mirrorTerminalStyles } from "./terminal/stylemirror";
 import { DEFAULT_FONT, DEFAULT_FONT_SIZE, FONT_STACKS } from "./terminal/theme";
 
 // FIRST statement of the app: start reading the saved colour scheme before
@@ -64,6 +65,12 @@ const transcriptTerm = new Terminal({
 const transcriptFit = new FitAddon();
 transcriptTerm.loadAddon(transcriptFit);
 transcriptTerm.open(mount("transcript"));
+// xterm generates its cell metrics, ANSI palette, attributes and cursor as
+// <style> elements, which the production CSP's `style-src 'self'` blocks. Mirror
+// them into adopted stylesheets, which are CSSOM and so exempt (stylemirror.ts).
+// Inert in dev, where the sheets apply normally. Must run before fit(): without
+// the cell metrics the measured character box - and therefore `cols` - is wrong.
+mirrorTerminalStyles(mount("transcript"));
 transcriptFit.fit();
 
 // Command-line terminal: a single-row input that the shell drives.
@@ -71,6 +78,7 @@ const inputTerm = new Terminal({ ...SHARED, cursorBlink: true, rows: 1 });
 const inputFit = new FitAddon();
 inputTerm.loadAddon(inputFit);
 inputTerm.open(mount("command-line"));
+mirrorTerminalStyles(mount("command-line"));
 inputFit.fit();
 
 const chrome = new Chrome(transcriptTerm, inputTerm);
