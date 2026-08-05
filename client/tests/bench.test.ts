@@ -86,8 +86,28 @@ describe("B3 size overhead", () => {
   it("computes composite protocol sizes analytically", () => {
     // 50-OPK bundle: 1952 + 1184 + 3309 + 50*1184 + 3309 + 50*64
     expect(byObject.get("Registration bundle (50 OPKs)")?.pqcBytes).toBe(72154);
-    // KEM step header: fresh pk + ciphertext
-    expect(byObject.get("Ratchet KEM step header")?.pqcBytes).toBe(1184 + 1088);
+  });
+
+  // An unaccepted KEM offer is echoed on every send (ratchet.ts replaces
+  // sendKemPk with a fresh keygen but never clears it), so a burst carries the
+  // public key on every message and pays the keygen only every tenth. The old
+  // single "Ratchet KEM step header" row priced bare KEM material for the
+  // alternating case and represented the burst nowhere.
+  it("measures both ratchet modes, exposing what the KEM-step interval does not buy", () => {
+    const alternating = byObject.get("Ratchet message (alternating turns)")?.pqcBytes ?? 0;
+    const burst = byObject.get("Ratchet message (unidirectional burst)")?.pqcBytes ?? 0;
+    // Both carry a KEM public key; only the alternating one carries an accept.
+    expect(alternating - burst).toBe(1088);
+    // A burst message is not free of KEM material - it is dominated by it.
+    expect(burst).toBeGreaterThan(1184);
+    // Sanity against the analytic figure the old row reported: the real body
+    // costs more than the bare KEM material it used to quote.
+    expect(alternating).toBeGreaterThan(1184 + 1088);
+    // The classical analog swaps the KEM material for one DH ratchet key, so
+    // both modes cost the same classically - which is the finding.
+    expect(byObject.get("Ratchet message (alternating turns)")?.classicalBytes).toBe(
+      byObject.get("Ratchet message (unidirectional burst)")?.classicalBytes,
+    );
   });
 
   // The handshake rows used to be a byte-layout sum that had drifted from the
@@ -109,11 +129,20 @@ describe("B3 size overhead", () => {
     const withOpk = byObject.get("Handshake first message (with OPK)")?.pqcBytes ?? 0;
     const noOpk = byObject.get("Handshake first message (no OPK)")?.pqcBytes ?? 0;
     expect(withOpk - noOpk).toBe(64 + 1088);
-    // Both rows share one classical figure: X3DH's one-time prekey is another
-    // DH against the ephemeral already on the wire, not another ciphertext.
-    expect(byObject.get("Handshake first message (with OPK)")?.classicalBytes).toBe(
-      byObject.get("Handshake first message (no OPK)")?.classicalBytes,
-    );
+
+    // The classical side is priced with the same envelope framing, because the
+    // PQC side is a whole measured message. Comparing a measured envelope
+    // against bare classical crypto understated the classical row by 71-135
+    // bytes and inflated the with-OPK factor from x22 to x37.
+    const classicalNoOpk = byObject.get("Handshake first message (no OPK)")?.classicalBytes ?? 0;
+    const classicalWithOpk =
+      byObject.get("Handshake first message (with OPK)")?.classicalBytes ?? 0;
+    const CRYPTO = 32 + 32 + 64 + 24 + 16 + BENCH_MESSAGE_BYTES; // IK+eph+sig+AEAD+payload
+    expect(classicalNoOpk).toBe(CRYPTO + 3 + 64 + 4); // version/type/flags + spkHash + u32be len
+    expect(classicalWithOpk).toBe(classicalNoOpk + 64); // + the OPK's routing hash
+    // The asymmetry the row exists to show: a one-time prekey costs the
+    // classical side a routing hash, and the KEM side a hash plus a ciphertext.
+    expect(withOpk - noOpk).toBe(classicalWithOpk - classicalNoOpk + 1088);
   });
 
   it("labels every row as measured or analytic, and explains the classical column", () => {
@@ -124,9 +153,11 @@ describe("B3 size overhead", () => {
     expect(basisOf("Signature public key")).toBe("measured");
     expect(basisOf("Handshake first message (no OPK)")).toBe("measured");
     expect(basisOf("Handshake first message (with OPK)")).toBe("measured");
-    // Composites are priced on paper, and must never read as measurements.
+    expect(basisOf("Ratchet message (alternating turns)")).toBe("measured");
+    expect(basisOf("Ratchet message (unidirectional burst)")).toBe("measured");
+    // The one composite still priced on paper must never read as a measurement.
     expect(basisOf("Registration bundle (50 OPKs)")).toBe("analytic");
-    expect(basisOf("Ratchet KEM step header")).toBe("analytic");
+    expect(result.rows.filter((r) => r.basis === "analytic")).toHaveLength(1);
 
     // The note has to disclose that the classical column is a model, and that
     // the bundle row's classical side carries this protocol's leaf hashes -

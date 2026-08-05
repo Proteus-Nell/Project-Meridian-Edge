@@ -30,6 +30,7 @@ import {
   KEM_STEP_INTERVAL,
   MAX_SKIP,
 } from "../crypto/ratchet";
+import type { RatchetState } from "../crypto/ratchet";
 import { timeit } from "./harness";
 import type { Stats } from "./harness";
 
@@ -338,6 +339,48 @@ export async function benchB2(cfg: BenchConfig): Promise<LatencyResult> {
   };
 }
 
+/** Steady-state ratchet message sizes, measured off real `ratchetEncrypt`
+ * output in both directions of the KEM-step rule.
+ *
+ * The two modes are not the same size, and the difference is not the one the
+ * timings suggest. `ratchetEncrypt` echoes an unaccepted offer on every send
+ * (`sendKemPk` is replaced by a fresh keygen, never cleared), so a burst - where
+ * the peer never replies to accept - carries the 1,184-byte public key on every
+ * message while paying the keygen only every KEM_STEP_INTERVAL. The interval
+ * buys a 10x cut in keygen cost and nothing at all on the wire.
+ *
+ * Alternating is measured on the *second* send: the first send of a session has
+ * no offer to accept yet, so it is a burst-shaped message. */
+function measureRatchetBodies(): { alternating: number; burst: number } {
+  const open = (): { a: RatchetState; b: RatchetState } => {
+    const fx = buildProtocolFixture();
+    const opened = initiateKx(fx.alicePub, fx.aliceSec, fx.bundle, MESSAGE);
+    const responded = respondKx(fx.bobPub, fx.lookup, opened.envelope);
+    if (!responded.ok) {
+      throw new Error(`ratchet size fixture failed: ${responded.reason}`);
+    }
+    return {
+      a: initRatchet(opened.session.rk, opened.session.role),
+      b: initRatchet(responded.session.rk, responded.session.role),
+    };
+  };
+
+  // Burst: one party sends without a reply, so no offer is ever accepted.
+  const burstPair = open();
+  const burst = ratchetEncrypt(burstPair.a, MESSAGE).length;
+
+  // Alternating: A sends, B reads it, and B's reply both accepts A's offer and
+  // makes its own - the steady state where every message carries a KEM step.
+  const turnPair = open();
+  const first = ratchetEncrypt(turnPair.a, MESSAGE);
+  const read = ratchetDecrypt(turnPair.b, first);
+  if (!read.ok) {
+    throw new Error(`ratchet size fixture desync: ${read.reason}`);
+  }
+  const alternating = ratchetEncrypt(turnPair.b, MESSAGE).length;
+  return { alternating, burst };
+}
+
 // Classical baseline sizes (bytes) for the analytic composite rows.
 const X25519_KEY = 32;
 const X25519_SHARE = 32;
@@ -349,15 +392,17 @@ const SHA512_HASH = 64; // OPK leaf-hash size, same both worlds
  * composite protocol objects.
  *
  * Every row states its `basis`. The primitives are measured from real generated
- * objects, and both handshake rows are the length of a real `encodeKxEnvelope`
- * output from `initiateKx` - not a byte-layout sum, so the table cannot drift
- * from the wire format the way an analytic figure silently did. The bundle and
- * ratchet-step rows remain analytic models of what those objects carry.
+ * objects, the handshake rows are the length of a real `encodeKxEnvelope`
+ * output, and the ratchet rows the length of a real `ratchetEncrypt` body - not
+ * byte-layout sums, so the table cannot drift from the wire format the way an
+ * analytic figure silently did. Only the registration bundle stays a model.
  *
  * The classical column is analytic on every row: there is no classical
  * implementation of this protocol, so it prices *this* construction with
- * classical primitives rather than quoting a deployed X3DH stack. The note
- * spells out where that matters most (the batch-leaf hashes). */
+ * classical primitives rather than quoting a deployed X3DH stack. It includes
+ * the envelope framing, because the PQC side is a whole measured message and
+ * comparing that against bare classical crypto flattered the factor. The note
+ * spells out where the modelling matters most (the batch-leaf hashes). */
 export function benchB3(): SizeResult {
   // Measured from real objects (asserts the constants match the library).
   const kemPub = ml_kem768.keygen().publicKey.length;
@@ -389,18 +434,30 @@ export function benchB3(): SizeResult {
   // the same bundle with no OPK, exactly as `Bundle.opk === null` models it.
   const noOpkBytes = initiateKx(fx.alicePub, fx.aliceSec, { ...fx.bundle, opk: null }, MESSAGE)
     .envelope.length;
-  // Classical analog, priced at the same payload so the columns are
-  // like-for-like: IK + ephemeral share + signature + AEAD nonce/tag + message.
-  // It is the same for both rows - X3DH's one-time prekey costs another DH
-  // against the ephemeral already on the wire, not another ciphertext.
+  // Classical analog, priced at the same payload AND the same envelope framing
+  // so the columns are like-for-like. The PQC figure is a measured envelope, so
+  // pricing the classical side as bare crypto (IK + share + sig + AEAD) was
+  // comparing a whole message against its payload: it understated the classical
+  // row by 71-135 bytes and inflated the with-OPK factor from x22 to x37.
+  // Framing is algorithm-independent - transcribed from crypto/envelope.ts:
+  //   u8 version | u8 type | u8 flags | spkHash(64) | [opkHash(64)] | u32be len
+  const KX_FRAME_FIXED = 3 + SHA512_HASH + 4;
   const AEAD_OVERHEAD = 24 + 16; // XChaCha nonce + Poly1305 tag
-  const classicalHandshake =
+  const classicalCrypto =
     ED25519_PUBKEY + X25519_SHARE + ED25519_SIG + AEAD_OVERHEAD + MESSAGE.length;
+  const classicalNoOpk = classicalCrypto + KX_FRAME_FIXED;
+  // The OPK costs the classical side only its routing hash; the KEM path pays
+  // that plus a second ciphertext, which is the whole 1,152-byte difference.
+  const classicalWithOpk = classicalNoOpk + SHA512_HASH;
 
-  // Per-ratchet-step: a KEM step carries a fresh public key + a ciphertext in
-  // the header. Classical DH ratchet carries a single ephemeral public key.
-  const pqcRatchetStep = kemPub + kemCt;
-  const classicalRatchetStep = X25519_KEY;
+  // Per ratchet message, measured off real `ratchetEncrypt` output rather than
+  // priced as bare KEM material. The two modes differ on the wire, and only one
+  // of them was ever represented here.
+  const ratchetBodies = measureRatchetBodies();
+  // Same body with the KEM material swapped for a DH ratchet key: classical
+  // carries one ephemeral public key in either mode, with no accept ciphertext.
+  const classicalAlternating = ratchetBodies.alternating - (kemPub + kemCt) + X25519_KEY;
+  const classicalBurst = ratchetBodies.burst - kemPub + X25519_KEY;
 
   return {
     kind: "size",
@@ -408,13 +465,18 @@ export function benchB3(): SizeResult {
     title: "B3 - size overhead (bytes)",
     note:
       "The classical column is analytic on every row: there is no classical implementation of " +
-      `this protocol, so it prices this construction with classical primitives. That matters most ` +
-      `on the bundle row, where ${bundleLeafBytes.toLocaleString("en-US")} of the classical ` +
+      "this protocol, so it prices this construction with classical primitives - including its " +
+      "envelope framing and the same payload, so a measured PQC message is compared against a " +
+      "whole classical message rather than against its payload. That matters most on the bundle " +
+      `row, where ${bundleLeafBytes.toLocaleString("en-US")} of the classical ` +
       `${classicalBundle.toLocaleString("en-US")} bytes are SHA-512 batch-leaf hashes carried only ` +
-      `because this protocol batch-signs its OPKs; a real X3DH bundle has none, which puts that ` +
-      `row nearer x${bundleFactorNoLeaves} than the x${bundleFactor} shown. The handshake rows are ` +
-      `measured KX envelopes carrying the fixed ${MESSAGE.length}-byte message, and share one ` +
-      "classical figure because X3DH's one-time prekey costs another DH, not another ciphertext.",
+      "because this protocol batch-signs its OPKs; a real X3DH bundle has none, which puts that " +
+      `row nearer x${bundleFactorNoLeaves} than the x${bundleFactor} shown. The handshake and ` +
+      `ratchet rows are measured, carrying the fixed ${MESSAGE.length}-byte message. A one-time ` +
+      "prekey costs the classical side only its routing hash, against a routing hash plus a whole " +
+      "second ciphertext for the KEM. The two ratchet rows differ because an unaccepted KEM offer " +
+      "is echoed on every send: a burst pays the keygen once per KEM_STEP_INTERVAL but carries " +
+      "the public key every single message, so the interval buys compute, not bytes.",
     rows: [
       {
         object: "KEM/DH public key",
@@ -443,21 +505,27 @@ export function benchB3(): SizeResult {
       },
       {
         object: "Handshake first message (no OPK)",
-        classicalBytes: classicalHandshake,
+        classicalBytes: classicalNoOpk,
         pqcBytes: noOpkBytes,
         basis: "measured",
       },
       {
         object: "Handshake first message (with OPK)",
-        classicalBytes: classicalHandshake,
+        classicalBytes: classicalWithOpk,
         pqcBytes: withOpkBytes,
         basis: "measured",
       },
       {
-        object: "Ratchet KEM step header",
-        classicalBytes: classicalRatchetStep,
-        pqcBytes: pqcRatchetStep,
-        basis: "analytic",
+        object: "Ratchet message (alternating turns)",
+        classicalBytes: classicalAlternating,
+        pqcBytes: ratchetBodies.alternating,
+        basis: "measured",
+      },
+      {
+        object: "Ratchet message (unidirectional burst)",
+        classicalBytes: classicalBurst,
+        pqcBytes: ratchetBodies.burst,
+        basis: "measured",
       },
     ],
   };
@@ -673,7 +741,10 @@ export async function benchB4(
       "Crypto only, no network RTT. The two ratchet rows bracket the real cost: alternating turns " +
       "force a KEM step on every message (worst case), a unidirectional burst amortises one over " +
       `KEM_STEP_INTERVAL=${KEM_STEP_INTERVAL} sends (floor). The gap between them is what the ` +
-      "interval buys; real traffic sits somewhere inside it.",
+      "interval buys; real traffic sits somewhere inside it. That floor is compute only: an " +
+      "unaccepted offer is echoed on every send, so a burst carries the KEM public key on every " +
+      "message while paying its keygen once per interval - a 10x cut in keygen, none on the wire. " +
+      "B3 prices both modes.",
     rows: [
       { metric: TTFM_METRIC, stats: ttfm, display: "latency", unit: "op" },
       { metric: HANDSHAKE_METRIC, stats: handshake, display: "latency", unit: "op" },

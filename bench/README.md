@@ -153,23 +153,36 @@ client suite via `npm test`).
   objects, and both handshake rows are the byte length of a real serialized KX
   envelope from `initiateKx` - not a layout sum, so they cannot drift from
   `client/src/crypto/envelope.ts` (a test pins them to the layout it documents).
-  The registration-bundle and ratchet-step rows are analytic models of what
-  those objects carry. The label describes the **PQC** figure: the classical
-  column is analytic on every row, since there is no classical implementation of
-  this protocol to measure.
+  The ratchet rows are likewise the byte length of a real `ratchetEncrypt`
+  body. Only the registration bundle is still an analytic model. The label
+  describes the **PQC** figure: the classical column is analytic on every row,
+  since there is no classical implementation of this protocol to measure.
 - B3's classical column prices *this* protocol rebuilt on classical primitives,
-  not a deployed X3DH stack. The gap is widest on the registration bundle, whose
-  classical side carries 3,200 bytes of SHA-512 batch-leaf hashes purely because
-  this protocol batch-signs its OPKs - 64% of its 4,992 bytes. Real X3DH has no
-  leaf hashes, so measured against one the row would be nearer x40 than the x14
-  shown. Both framings are in the generated note; neither is the "true" number
-  on its own.
-- B3's handshake rows carry the bench's fixed 37-byte message plus the 16-byte
-  AEAD tag on both sides, so the columns are like-for-like. The two rows share
-  one classical figure on purpose: X3DH's one-time prekey costs an extra DH
-  against the ephemeral already on the wire, whereas the KEM path pays a second
-  ciphertext and its routing hash - 1,152 bytes, which is the whole difference
-  between the two PQC rows.
+  not a deployed X3DH stack, and **includes the envelope framing** - the 3-byte
+  version/type/flags, the 64-byte routing hashes and the 4-byte length field.
+  That matters: the PQC figure is a whole measured message, so pricing the
+  classical side as bare crypto compared a message against a payload and
+  inflated the with-OPK handshake factor from x22 to x37. The gap is widest on
+  the registration bundle, whose classical side carries 3,200 bytes of SHA-512
+  batch-leaf hashes purely because this protocol batch-signs its OPKs - 64% of
+  its 4,992 bytes. Real X3DH has no leaf hashes, so measured against one that
+  row would be nearer x40 than the x14 shown. Both framings are in the generated
+  note; neither is the "true" number on its own.
+- B3's handshake and ratchet rows carry the bench's fixed 37-byte message plus
+  the 16-byte AEAD tag on both sides, so the columns are like-for-like. A
+  one-time prekey costs the classical side just its 64-byte routing hash; the
+  KEM path pays that hash **and** a second 1,088-byte ciphertext, which is the
+  whole 1,152-byte difference between the two PQC handshake rows.
+- **`KEM_STEP_INTERVAL` buys compute, not bytes.** `ratchetEncrypt` replaces
+  `sendKemPk` on a fresh keygen but never clears it, so an offer the peer has
+  not accepted is echoed on every send. In a unidirectional burst the peer never
+  replies, so every message carries the same 1,184-byte public key while only
+  every tenth pays the keygen: a 10x cut in keygen cost and none at all on the
+  wire. B3 prices both modes from real bodies - alternating 2,404 B against a
+  burst's 1,316 B, the difference being exactly the 1,088-byte accept
+  ciphertext - so the B4 timing floor is not mistaken for a wire-size floor.
+  The echo is a deliberate reliability choice (a dropped offer still
+  propagates); this quantifies what it costs.
 - B4 prints median, p95 **and mean** for every row, because its rate column is
   `1000 / mean` while the headline figures are the median: a table showing two
   centres has to name both. The column is headed "mean throughput" for that
@@ -216,7 +229,7 @@ Every row lands in `bench/out/consolidated.md` via `make bench-report`; the
 |---|---|---|
 | B1 | KEM latency (keygen/encaps/decaps), ML-KEM-768 vs X25519 | ✓ browser (`/bench b1`) + native (`make bench-server`), merged into one table |
 | B2 | Signature latency (keygen/sign/verify), ML-DSA-65 vs Ed25519 | ✓ browser (`/bench b2`) + native (`make bench-server`), merged into one table |
-| B3 | Size overhead (keys, ciphertexts, sigs, bundle/handshake/ratchet-step) | ✓ browser only (`/bench b3`); each row labelled measured or analytic |
+| B3 | Size overhead (keys, ciphertexts, sigs, bundle, handshake and ratchet messages) | ✓ browser only (`/bench b3`); each row labelled measured or analytic |
 | B4 | Protocol level (TTFM, handshake, ratchet msgs/sec in both KEM-step modes) | ✓ browser only (`/bench b4`); the primitive breakdown needs a full `/bench` run |
 | B5 | Footprint: bundle-size delta + server heap/session | ✓ `make bench-bundle` + `make bench-server`, both halves in one section |
 | — | All of the above in one document | ✓ `make bench-report` → `bench/out/consolidated.md` |
