@@ -14,7 +14,6 @@ export const BANNER_MAX_COLUMNS = 60;
 
 const RESET = "\x1b[0m";
 const DIM = "\x1b[2m";
-const DIM_CYAN = "\x1b[2;36m";
 const ACCENT = "\x1b[36m";
 const BOLD = "\x1b[1m";
 
@@ -32,11 +31,11 @@ export function visibleWidth(line: string): number {
 export function bannerLines(): string[] {
   const rule = "─".repeat(WORDMARK.length + 2);
   return [
-    `${DIM_CYAN}╭${rule}╮${RESET}`,
-    `${DIM_CYAN}│ ${WORDMARK} │${RESET}`,
-    `${DIM_CYAN}╰${rule}╯${RESET}`,
+    `╭${rule}╮`,
+    `│ ${WORDMARK} │`,
+    `╰${rule}╯`,
     "",
-    "A private messenger. Messages are encrypted on your",
+    "A private messenger. Messages are encrypted on your", // TODO: Change Later
     "device and can only be read by the person you send",
     `them to ${DIM}-${RESET} not by the server, and not by us.`,
     "",
