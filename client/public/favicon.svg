@@ -1,0 +1,22 @@
+<!-- Globe with meridians: the wordmark's namesake, and the same figure as the
+     medallion's glyph-globe in index.html, redrawn for a 16px tab strip.
+
+     Deliberately simpler than the medallion: the framing rings and the finer
+     parallels that read well at 140px turn to mush at favicon size, so this
+     keeps one meridian pair, the equator and two parallels, at roughly double
+     the relative stroke weight.
+
+     Colour is a literal, not a CSS variable: the file is fetched standalone as
+     an image, so it never sees the bundle's :root scheme slots. #58a6ff is the
+     `dark` scheme's --accent, and is legible against both a light and a dark
+     browser chrome. No <style> element on purpose - inline CSS inside an SVG
+     image sits in a murky corner of the CSP, and attributes moot the question. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <g fill="none" stroke="#58a6ff" stroke-linecap="round">
+    <circle cx="32" cy="32" r="27" stroke-width="4"/>
+    <ellipse cx="32" cy="32" rx="11" ry="27" stroke-width="3.5"/>
+    <path d="M5 32 L59 32" stroke-width="3.5"/>
+    <path d="M10.5 20 Q32 13.5 53.5 20" stroke-width="3"/>
+    <path d="M10.5 44 Q32 50.5 53.5 44" stroke-width="3"/>
+  </g>
+</svg>

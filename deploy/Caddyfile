@@ -15,6 +15,21 @@
 	email {$ACME_EMAIL}
 }
 
+# The page-level security header set, in a snippet because two routes now need
+# it: the static bundle and the 404 page. Writing it twice would put two copies
+# of the CSP in this file - free to drift, and only the first of them is the one
+# scripts/audit.py compares against nginx.conf and vite.config.ts.
+(static_headers) {
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss://{$MERIDIAN_EDGE_DOMAIN}; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Resource-Policy same-origin
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+	}
+}
+
 {$MERIDIAN_EDGE_DOMAIN} {
 	encode gzip
 
@@ -48,20 +63,30 @@
 		}
 	}
 
-	# Static client bundle, served same-origin (zero CDN assets). SPA fallback
-	# to index.html. Full page-level CSP lives on these responses only.
+	# Static client bundle, served same-origin (zero CDN assets). Full page-level
+	# CSP lives on these responses only.
+	#
+	# No try_files, and so no SPA fallback: the client has no router (no
+	# pushState, no hash routing, one URL), so rewriting unmatched paths to
+	# /index.html rescued no real request and only made every wrong URL answer
+	# 200 with the app - including /robots.txt and any mistyped asset hash, which
+	# the browser then reports as `Unexpected token '<'` rather than a 404.
+	# file_server still serves index.html for the site root on its own.
 	handle {
 		root * /srv/www
-		try_files {path} /index.html
 		file_server
+		import static_headers
+	}
 
-		header {
-			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss://{$MERIDIAN_EDGE_DOMAIN}; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
-			X-Content-Type-Options nosniff
-			Referrer-Policy no-referrer
-			Cross-Origin-Opener-Policy same-origin
-			Cross-Origin-Resource-Policy same-origin
-			Permissions-Policy "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+	# Mirrors nginx.conf's `error_page 404 /404.html`. Scoped to 404 so a 502
+	# from the backend still surfaces as a 502; `status 404` is needed because
+	# the rewrite would otherwise hand back the page with a 200.
+	handle_errors 404 {
+		root * /srv/www
+		rewrite * /404.html
+		file_server {
+			status 404
 		}
+		import static_headers
 	}
 }

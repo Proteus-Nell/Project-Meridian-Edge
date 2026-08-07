@@ -1,0 +1,99 @@
+/* Styles for 404.html only.
+ *
+ * Standalone by necessity: the app's style.css is bundled under a content-hashed
+ * name that this static page cannot predict, and the five scheme slots it feeds
+ * (accent/background/panel/text/muted) live in IndexedDB behind the app's JS.
+ * An error page that had to boot the bundle to render itself would be a worse
+ * error page, so the values below are the `dark` scheme's defaults, copied from
+ * :root in src/style.css. A visitor on the parchment or olive scheme sees the
+ * dark one here; that is the accepted cost of a zero-JS error page.
+ *
+ * Kept in an external file rather than a <style> block because the page is
+ * served with the same page-level CSP as the app, and `style-src 'self'` blocks
+ * inline CSS. */
+
+:root {
+  --accent: #58a6ff;
+  --bg: #0d1117;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --font-mono: "Cascadia Mono", "Fira Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Generous on desktop, tight on a phone, without a media query. */
+  padding: clamp(1rem, 5vw, 3rem);
+  box-sizing: border-box;
+}
+
+main {
+  width: 100%;
+  max-width: 34rem;
+}
+
+/* The box rule is drawn with the same characters as the startup banner
+   (src/terminal/banner.ts), so a 404 still looks like it came from this app. */
+.rule {
+  color: var(--accent);
+  white-space: pre;
+  margin: 0;
+  /* The rule and the wordmark must sit on one visual column, and at small
+     viewports the 29-character rule is what overflows first. */
+  overflow-x: auto;
+}
+
+.wordmark {
+  color: var(--accent);
+  white-space: pre;
+  margin: 0;
+  font-weight: 700;
+}
+
+.status {
+  color: var(--muted);
+  margin: 1.75rem 0 0;
+  /* Matches the transcript's [*] / [!] event prefixes. */
+  letter-spacing: 0.02em;
+}
+
+p {
+  line-height: 1.6;
+  margin: 0.85rem 0 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a {
+    transition: opacity 120ms ease;
+  }
+}
+
+a:hover {
+  opacity: 0.8;
+}

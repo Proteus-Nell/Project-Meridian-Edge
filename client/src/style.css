@@ -58,6 +58,35 @@ body:not(.theme-ready) #app {
   visibility: hidden;
 }
 
+/* The <noscript> fallback in index.html. Fixed rather than in flow because #app
+   is 100dvh and would otherwise push this below the fold - it keeps its layout
+   box even while `visibility: hidden` holds it invisible, which is exactly the
+   state it is stuck in when scripting is off. */
+#noscript-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 30; /* above the autosuggest dropdown's 20 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: clamp(1rem, 5vw, 3rem);
+  box-sizing: border-box;
+  background: var(--bg);
+  line-height: 1.6;
+}
+
+#noscript-notice p {
+  margin: 0 0 0.85rem;
+}
+
+#noscript-notice .noscript-title {
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+}
+
 #app {
   position: relative; /* anchors the #vignette overlay */
   display: grid;

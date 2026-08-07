@@ -1,0 +1,21 @@
+# Meridian Edge is a self-hosted end-to-end-encrypted messenger, not a content
+# site. There is one URL and everything behind it needs a passphrase, so there
+# is nothing here for a search index to carry.
+#
+# Crawling is deliberately ALLOWED and indexing is refused separately, by the
+# <meta name="robots" content="noindex"> in index.html. The distinction matters:
+# link unfurlers (Slack, Discord, Signal, iMessage) read robots.txt before
+# fetching a page, so `Disallow: /` would strip the Open Graph preview off every
+# link anyone shares - while doing nothing that the noindex does not already do
+# against search engines.
+#
+# Keeping a deployed instance out of search results is a privacy posture, not an
+# oversight: a search-engine list of live Meridian Edge instances is a target
+# list. Discoverability for the project belongs on its repository, not on a
+# running deployment.
+
+User-agent: *
+Disallow:
+
+# No Sitemap: line. The site is a single URL; a sitemap enumerating it would
+# say nothing the crawler does not already know from following the link.
