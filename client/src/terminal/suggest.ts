@@ -7,7 +7,7 @@
 
 import { A11Y_FEATURES, COMMAND_USAGE, SPACING_KINDS, WEEKDAYS, isCommandWord } from "./parser";
 import type { CommandWord } from "./parser";
-import { EVENT_COLOR_SLOTS, FONT_NAMES, SCHEME_NAMES } from "./theme";
+import { EMBLEM_NAMES, EVENT_COLOR_SLOTS, FONT_NAMES, SCHEME_NAMES } from "./theme";
 
 // Resolved lazily, not at module load: parser.ts imports this module and this
 // module imports parser.ts, so touching COMMAND_USAGE at top level would read it
@@ -97,7 +97,7 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           // the display prefs, which this pure function cannot read.
           return n === 1 ? [...SCHEME_NAMES, "new", "delete", "list"] : [];
         case "emblem":
-          return n === 1 ? ["globe", "tree"] : [];
+          return n === 1 ? [...EMBLEM_NAMES] : [];
         case "font":
           return n === 1 ? [...FONT_NAMES, "list"] : [];
         case "spacing":

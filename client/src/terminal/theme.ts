@@ -383,7 +383,7 @@ export const DEFAULT_ACCESSIBILITY: AccessibilityPrefs = {
   reduceMotion: false,
 };
 
-export const EMBLEM_NAMES = ["globe", "tree"] as const;
+export const EMBLEM_NAMES = ["globe", "tree", "gaia"] as const;
 export type EmblemName = (typeof EMBLEM_NAMES)[number];
 
 export function isEmblemName(word: string): word is EmblemName {

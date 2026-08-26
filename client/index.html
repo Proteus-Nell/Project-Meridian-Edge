@@ -99,7 +99,7 @@
         <div class="medallion" aria-hidden="true" hidden>
           <svg class="emblem-svg" viewBox="0 0 140 140">
             <!-- Shared framing: solid ring + dashed inner ring. The inner glyph
-                 is selectable via /settings emblem (body.em-globe/em-tree). -->
+                 is selectable via /settings emblem (body.em-globe/em-tree/em-gaia). -->
             <circle cx="70" cy="70" r="64" fill="none" stroke="var(--emblem)" stroke-width="2.2"/>
             <circle cx="70" cy="70" r="57" fill="none" stroke="var(--emblem-dim)" stroke-width="1" stroke-dasharray="2 5"/>
             <g class="glyph glyph-globe" stroke="var(--emblem)" fill="none" stroke-width="2.2" stroke-linecap="round">
@@ -136,6 +136,16 @@
                 <path d="M82 106 Q78 111 82 115" stroke-width="1.6"/>
                 <path d="M70 106 L70 116" stroke-width="1.6"/>
               </g>
+            </g>
+            <!-- Gaia: a solid silhouette rather than line art, traced from the
+                 source artwork - a figure raising a tree canopy, inside its own
+                 ring. One even-odd path, because the three open regions are
+                 holes in a single shape rather than separate figures, and
+                 filled with var(--emblem) so it follows /settings scheme and
+                 /settings color exactly like the stroked glyphs. Scaled to
+                 r=49 so it clears the shared dashed ring at r=57. -->
+            <g class="glyph glyph-gaia">
+              <path fill="var(--emblem)" fill-rule="evenodd" d="M67.34 21L63.5 21.34L57.74 22.47L49.6 25.41L46.43 26.99L41.46 30.16L38.18 32.76L34 36.82L30.83 40.67L27.67 45.53L23.83 54.01L21.9 61.47L21.34 65.76L21.23 72.2L22.36 80.68L24.05 86.45L25.63 90.4L28.12 95.15L30.83 99.22L33.77 102.84L37.5 106.57L45.19 112.22L52.99 115.95L57.17 117.3L62.48 118.43L71.3 119L80.46 117.87L86.67 116.06L90.97 114.25L98.54 109.73L102.84 106.23L105.89 103.18L111.09 96.39L113.69 91.76L115.95 86.45L117.3 81.93L118.43 75.82L118.66 66.67L117.98 61.13L117.08 57.17L114.25 49.37L112.22 45.42L109.51 41.23L106.34 37.28L102.27 33.21L94.47 27.56L86.79 23.94L81.59 22.36L76.27 21.34Z M117.53 75.93L116.74 80.57L114.82 87.01L112.9 91.42L109.28 97.52L106 101.71L102.38 105.44L97.98 109.05L93 112.22L88.59 114.37L83.62 116.17L78.42 117.42L75.37 117.76L69.15 110.3L65.42 104.87L64.97 103.29L68.25 94.13L69.38 85.99L70.96 82.04L74.8 77.18L78.19 76.84L80 77.4L84.98 77.4L86.45 77.74L95.83 72.66L97.18 73.22L98.54 74.58L98.99 75.71L104.19 76.05L105.32 76.61L106 77.52L107.13 77.29L108.6 76.27L110.52 76.27L110.97 76.61L111.31 77.74L112.56 77.97L115.27 76.84L116.63 75.71Z M26.2 50.73L26.88 51.41L28.57 50.84L29.82 50.84L31.29 53.44L35.47 53.21L39.2 52.54L41.35 53.44L41.91 54.01L41.57 56.38L42.14 57.06L46.09 57.74L48.13 59.88L50.28 58.98L52.31 59.66L54.12 63.05L55.59 67L64.18 73.67L62.94 75.37L63.84 79.44L63.61 80.68L62.03 82.72L56.15 86.22L55.59 87.46L55.02 95.38L55.93 103.29L59.77 97.64L59.88 97.98L55.48 104.76L50.28 113.8L46.77 112.1L42.14 109.17L38.07 105.89L34.56 102.38L31.17 98.2L28.8 94.58L24.96 86.45L23.6 82.04L22.58 76.84L22.13 68.7L23.03 60.45L24.39 55.25Z M54.68 48.92L57.51 47.68L58.41 45.08L60.67 43.95L62.48 43.72L65.42 44.4L67.57 42.14L68.81 41.46L71.75 41.8L72.66 42.7L73.33 42.7L77.52 39.99L79.33 43.27L76.84 45.42L76.39 46.21L79.44 48.58L80.23 49.6L82.26 48.35L83.62 48.01L84.75 48.47L86.11 49.82L86.45 50.95L87.01 51.52L94.58 51.41L93.91 53.33L95.83 55.25L95.94 55.81L92.78 56.83L92.1 57.96L93.57 60.67L93.23 62.14L96.17 64.52L95.94 65.87L94.7 67.91L94.7 68.47L95.83 69.15L95.15 70.85L92.1 72.43L86.9 73.45L85.77 74.46L82.49 73.45L77.18 73.45L76.5 70.96L77.18 69.94L77.29 68.25L78.19 67.46L78.08 65.76L77.52 64.97L77.52 63.05L75.93 61.13L73.56 60.79L72.43 59.77L71.75 59.77L70.62 60.67L70.17 61.47L70.28 63.39L69.04 64.63L69.49 65.2L69.15 67.12L70.4 67.8L69.6 70.17L68.02 70.62L67.34 69.94L65.31 69.72L62.37 66.78L59.54 65.54L55.93 61.47L54.01 58.53L53.44 58.41L52.31 57.28L52.42 56.83L54.68 55.7L55.36 53.78L56.49 52.2Z"/>
             </g>
           </svg>
           <div class="medallion-pulse" aria-hidden="true"></div>

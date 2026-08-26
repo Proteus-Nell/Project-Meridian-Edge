@@ -119,7 +119,7 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/settings fontsize <10-28>", blurb: "terminal size in px; the terminal re-fits itself" },
       { cmd: "/settings spacing letter <0-4>", blurb: "extra space between characters, in px" },
       { cmd: "/settings spacing line <1-2.5>", blurb: "line height as a multiple of the font size" },
-      { cmd: "/settings emblem <name>", blurb: "medallion glyph: globe | tree" },
+      { cmd: "/settings emblem <name>", blurb: "medallion glyph: globe | tree | gaia" },
       { cmd: "/settings theme <layer> <on|off>", blurb: "toggle atmosphere layers" },
     ],
   },

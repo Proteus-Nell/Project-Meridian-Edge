@@ -172,11 +172,15 @@ body.is-tx .medallion {
 }
 
 body.em-globe .glyph-globe,
-body:not(.em-globe):not(.em-tree) .glyph-globe {
+body:not(.em-globe):not(.em-tree):not(.em-gaia) .glyph-globe {
   display: inline;
 }
 
 body.em-tree .glyph-tree {
+  display: inline;
+}
+
+body.em-gaia .glyph-gaia {
   display: inline;
 }
 
