@@ -376,7 +376,7 @@ erasure.
 | `/settings color <slot> <#rrggbb>` | Set one of the five slots: `accent`, `background`, `panel`, `text`, `muted` |
 | `/settings color event <marker> <#rrggbb>` | Recolor a notification marker: `success`, `warning`, `info`, `failure`, `peer` |
 | `/settings color reset` | Put your scheme's colors and markers back to its base preset's |
-| `/settings emblem <globe\|tree>` | Medallion glyph |
+| `/settings emblem <globe\|tree\|gaia>` | Medallion glyph. `gaia` is the default; `globe` and `tree` are the line-art alternatives |
 | `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
 | `/settings font <name>` | Monospace stack: `default`, `system`, `classic`, `wide`, `compact` |
 | `/settings font list` | The stacks, with what each is for |

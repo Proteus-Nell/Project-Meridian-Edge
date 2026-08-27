@@ -114,6 +114,7 @@ function unpadDuressPayload(padded: Uint8Array): Uint8Array | null {
 import {
   COLOR_SLOTS,
   DEFAULT_ACCESSIBILITY,
+  DEFAULT_EMBLEM,
   DEFAULT_FONT,
   DEFAULT_FONT_SIZE,
   DEFAULT_LETTER_SPACING,
@@ -189,7 +190,7 @@ const DEFAULT_PREFS: DisplayPrefs = {
   secretMask: "hidden",
   theme: DEFAULT_THEME,
   scheme: DEFAULT_SCHEME,
-  emblemGlyph: "globe",
+  emblemGlyph: DEFAULT_EMBLEM,
   font: DEFAULT_FONT,
   fontSize: DEFAULT_FONT_SIZE,
   letterSpacing: DEFAULT_LETTER_SPACING,

@@ -107,6 +107,9 @@ describe("/settings theme", () => {
 
   it("selects an emblem glyph and persists it", async () => {
     const { executor, chrome, store } = makeExecutor();
+    // gaia is the default, so switching away from it is what proves the
+    // command wrote anything at all.
+    expect((await store.getDisplayPrefs()).emblemGlyph).toBe("gaia");
     executor.handle(parseLine("/settings emblem globe"));
     await executor.idle();
     expect(chrome.glyphs[chrome.glyphs.length - 1]).toBe("globe");
@@ -114,6 +117,9 @@ describe("/settings theme", () => {
     executor.handle(parseLine("/settings emblem tree"));
     await executor.idle();
     expect(chrome.glyphs[chrome.glyphs.length - 1]).toBe("tree");
+    executor.handle(parseLine("/settings emblem gaia"));
+    await executor.idle();
+    expect(chrome.glyphs[chrome.glyphs.length - 1]).toBe("gaia");
   });
 
   it("preserves the theme when the mask setting is changed", async () => {

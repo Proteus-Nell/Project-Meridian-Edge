@@ -194,7 +194,7 @@ describe("KeyStore", () => {
     // Nothing written: defaults.
     const defaults = await store.getDisplayPrefs();
     expect(defaults.scheme).toBe("dark");
-    expect(defaults.emblemGlyph).toBe("globe");
+    expect(defaults.emblemGlyph).toBe("gaia");
     expect(defaults.customSchemes).toEqual([]);
 
     const mine = {
@@ -228,7 +228,7 @@ describe("KeyStore", () => {
     } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
     const cleaned = await store.getDisplayPrefs();
     expect(cleaned.scheme).toBe("dark");
-    expect(cleaned.emblemGlyph).toBe("globe");
+    expect(cleaned.emblemGlyph).toBe("gaia");
   });
 
   it("drops a stored custom scheme whose colors or name are not trustworthy", async () => {

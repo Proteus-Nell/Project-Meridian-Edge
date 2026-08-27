@@ -387,7 +387,8 @@ export async function doSettingsA11y(
   );
 }
 
-/** `/settings emblem <pq|globe|tree>`: choose the medallion glyph. */
+/** `/settings emblem <globe|tree|gaia>`: choose the medallion glyph.
+ * `gaia` is the default; the other two are there to go back to. */
 export async function doSettingsEmblem(x: ExecutorInternals, emblem: EmblemName): Promise<void> {
   const prefs = await x.store.getDisplayPrefs();
   await x.store.setDisplayPrefs({ ...prefs, emblemGlyph: emblem });

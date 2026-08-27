@@ -386,6 +386,11 @@ export const DEFAULT_ACCESSIBILITY: AccessibilityPrefs = {
 export const EMBLEM_NAMES = ["globe", "tree", "gaia"] as const;
 export type EmblemName = (typeof EMBLEM_NAMES)[number];
 
+/** The glyph a fresh install wears, and what an unreadable stored value falls
+ * back to. Named here beside the catalog so the prefs record, the pre-prefs CSS
+ * fallback and the docs all have one place to agree on. */
+export const DEFAULT_EMBLEM: EmblemName = "gaia";
+
 export function isEmblemName(word: string): word is EmblemName {
   return (EMBLEM_NAMES as readonly string[]).includes(word);
 }

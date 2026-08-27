@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_EMBLEM,
+  EMBLEM_NAMES,
   EVENT_COLOR_SLOTS,
   MAX_CUSTOM_SCHEMES,
   SCHEMES,
@@ -242,5 +247,23 @@ describe("resolveEventColors", () => {
     // palette, so resolving strip colors must not start overriding ANSI.
     expect(resolveScheme("dark", []).ansi).toBeNull();
     expect(resolveScheme("olive", []).ansi).toBeNull();
+  });
+});
+
+describe("default emblem", () => {
+  // style.css picks a glyph before the prefs read resolves, through a
+  // :not() chain that names no body class. It has to land on the same glyph
+  // the stored default does, or the medallion visibly swaps a few
+  // milliseconds into the first paint - the same flash preloadDisplayStyle
+  // exists to avoid.
+  const CSS = readFileSync(fileURLToPath(new URL("../src/style.css", import.meta.url)), "utf-8");
+
+  it("is a real glyph in the catalog", () => {
+    expect(EMBLEM_NAMES).toContain(DEFAULT_EMBLEM);
+  });
+
+  it("is the glyph style.css falls back to before the prefs load", () => {
+    const fallback = /body(?::not\(\.em-[a-z]+\))+ \.glyph-([a-z]+)/.exec(CSS);
+    expect(fallback?.[1]).toBe(DEFAULT_EMBLEM);
   });
 });
