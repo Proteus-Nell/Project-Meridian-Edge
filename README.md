@@ -365,6 +365,11 @@ Deletion is at-rest, local-only, and best-effort. Peer deletion is cooperative,
 nothing stops a screenshot, and browser storage deletion is not forensic
 erasure.
 
+Every message carries the time it was sent or received, read from this device's
+clock and never transmitted, so two devices can honestly disagree about a
+message's time. Turn the display off with
+[`/settings timestamps off`](#appearance).
+
 ### Appearance
 
 | Command | What it does |
@@ -377,6 +382,7 @@ erasure.
 | `/settings color event <marker> <#rrggbb>` | Recolor a notification marker: `success`, `warning`, `info`, `failure`, `peer` |
 | `/settings color reset` | Put your scheme's colors and markers back to its base preset's |
 | `/settings emblem <globe\|tree\|gaia>` | Medallion glyph. `gaia` is the default; `globe` and `tree` are the line-art alternatives |
+| `/settings timestamps <on\|off>` | Show the time beside each message, on by default. `off` returns to bare conversation lines; system events keep their timestamp either way. Applies to the whole transcript, including history already on screen |
 | `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
 | `/settings font <name>` | Monospace stack: `default`, `system`, `classic`, `wide`, `compact` |
 | `/settings font list` | The stacks, with what each is for |

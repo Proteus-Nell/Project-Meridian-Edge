@@ -69,6 +69,7 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           "theme",
           "scheme",
           "emblem",
+          "timestamps",
           "color",
           "trust",
           "font",
@@ -98,6 +99,8 @@ function nextArgOptions(word: CommandWord, priorArgs: readonly string[]): string
           return n === 1 ? [...SCHEME_NAMES, "new", "delete", "list"] : [];
         case "emblem":
           return n === 1 ? [...EMBLEM_NAMES] : [];
+        case "timestamps":
+          return n === 1 ? ["on", "off"] : [];
         case "font":
           return n === 1 ? [...FONT_NAMES, "list"] : [];
         case "spacing":

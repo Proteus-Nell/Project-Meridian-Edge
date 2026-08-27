@@ -39,6 +39,7 @@ describe("commandSuggestions", () => {
       "/settings theme",
       "/settings scheme",
       "/settings emblem",
+      "/settings timestamps",
       "/settings color",
       "/settings trust",
       "/settings font",

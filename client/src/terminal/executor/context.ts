@@ -43,6 +43,9 @@ export interface UiChrome {
   setEmblemState(state: EmblemState): void;
   applyScheme(scheme: ResolvedScheme): void;
   applyEmblem(name: EmblemName): void;
+  /** Follow /settings timestamps for the echo of a message you send, so the
+   * live line and the same line replayed by renderer.ownMessage agree. */
+  setMessageTimestamps(enabled: boolean): void;
   /** Apply the text metrics (face, size, letter spacing, line height) to both
    * terminals and the DOM. All four change the cell box, so the implementation
    * must re-fit afterwards or the column count silently goes stale. */
@@ -80,6 +83,7 @@ export const NULL_CHROME: UiChrome = {
   setEmblemState() {},
   applyScheme() {},
   applyEmblem() {},
+  setMessageTimestamps() {},
   applyTextStyle() {},
   applyAccessibility() {},
   requestNotifyPermission: () => Promise.resolve("unsupported" as const),

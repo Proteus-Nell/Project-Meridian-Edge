@@ -42,6 +42,7 @@ import { NOTIFY_SETTINGS_KEY } from "./context";
 import type { ExecutorInternals, NotifySettings } from "./context";
 import { DEFAULT_ROTATION } from "./records";
 import type { RotationSettings } from "./records";
+import { redrawConversation } from "./views";
 
 export async function doSettingsRotation(
   x: ExecutorInternals,
@@ -394,6 +395,38 @@ export async function doSettingsEmblem(x: ExecutorInternals, emblem: EmblemName)
   await x.store.setDisplayPrefs({ ...prefs, emblemGlyph: emblem });
   x.chrome.applyEmblem(emblem);
   x.renderer.event("success", `Emblem set to '${emblem}'.`);
+}
+
+/** `/settings timestamps <on|off>`: stamp each conversation line with the time
+ * it was sent or received. On by default.
+ *
+ * Both surfaces that draw a conversation line have to be told: the renderer
+ * prints incoming messages and replayed history, and the chrome echoes the
+ * message you just sent. A view rebuild afterwards is what makes the change
+ * visible on what is already on screen - xterm is append-only, so the lines
+ * already written cannot be restamped in place.
+ *
+ * Local presentation only. Nothing here changes what is stored, and nothing is
+ * transmitted: the stamp comes from the receiving device's own clock, recorded
+ * when the message arrived. */
+export async function doSettingsTimestamps(
+  x: ExecutorInternals,
+  enabled: boolean,
+): Promise<void> {
+  const prefs = await x.store.getDisplayPrefs();
+  await x.store.setDisplayPrefs({ ...prefs, messageTimestamps: enabled });
+  x.renderer.setMessageTimestamps(enabled);
+  x.chrome.setMessageTimestamps(enabled);
+  // Redraw first, then confirm: the rebuild clears the screen, so a
+  // confirmation printed before it would be wiped by its own command. Same
+  // order /delete redraws in.
+  await redrawConversation(x);
+  x.renderer.event(
+    "success",
+    enabled
+      ? "Message timestamps on. Each message carries the time it was sent or received, taken from this device's clock."
+      : "Message timestamps off. Times are still shown on system events.",
+  );
 }
 
 /** `/settings color <slot> <#rrggbb>`: the terminal-native color picker.

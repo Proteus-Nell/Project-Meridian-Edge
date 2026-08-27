@@ -16,6 +16,7 @@ const BASE = {
   theme: { emblem: true, scanlines: true, vignette: true, dock: true },
   scheme: "dark",
   emblemGlyph: "globe",
+  messageTimestamps: true,
   font: "default",
   fontSize: 15,
   letterSpacing: 0,

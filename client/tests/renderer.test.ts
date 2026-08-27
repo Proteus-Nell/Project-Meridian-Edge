@@ -92,6 +92,67 @@ describe("Renderer peer messages", () => {
   });
 });
 
+describe("Renderer message timestamps", () => {
+  const AT = new Date(2026, 6, 4, 21, 30, 15).getTime();
+
+  it("stamps conversation lines with the local time by default", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
+    renderer.peerMessage("alice", "hello there");
+    renderer.ownMessage("hi back");
+    expect(sink.lines[0]).toContain("09:05:07");
+    expect(sink.lines[0]).toContain("[alice]");
+    expect(sink.lines[0]).toContain("hello there");
+    expect(sink.lines[1]).toContain("09:05:07");
+    expect(sink.lines[1]).toContain("hi back");
+  });
+
+  it("uses the message's own instant when history is replayed", () => {
+    // A view rebuild happens long after the messages it reprints; stamping
+    // them with the rebuild's clock would silently rewrite the transcript.
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
+    renderer.peerMessage("alice", "hello there", AT);
+    renderer.ownMessage("hi back", AT);
+    for (const line of sink.lines) {
+      expect(line).toContain("21:30:15");
+      expect(line).not.toContain("09:05:07");
+    }
+  });
+
+  it("goes back to the unstamped lines when the setting is off", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
+    renderer.setMessageTimestamps(false);
+    renderer.peerMessage("alice", "hello there", AT);
+    renderer.ownMessage("hi back", AT);
+    expect(sink.lines[0]).not.toContain("21:30:15");
+    expect(sink.lines[0]).not.toContain("09:05:07");
+    expect(sink.lines[0]?.startsWith("  \x1b[96m[alice]")).toBe(true);
+    expect(sink.lines[1]?.startsWith(`\x1b[2m> `)).toBe(true);
+  });
+
+  it("leaves typed events stamped whatever the setting says", () => {
+    // The setting governs the conversation only: an event line has carried a
+    // time since long before it existed.
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
+    renderer.setMessageTimestamps(false);
+    renderer.event("success", "it worked");
+    renderer.error("E301");
+    expect(sink.lines[0]).toContain("09:05:07");
+    expect(sink.lines[1]).toContain("09:05:07");
+  });
+
+  it("closes the timestamp colour before the peer's name and text", () => {
+    // Same property the marker colours have: nothing the renderer tints can
+    // bleed into content.
+    const sink = new CaptureSink();
+    new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7)).peerMessage("alice", "hello");
+    expect(sink.lines[0]).toContain("\x1b[2m09:05:07\x1b[0m ");
+  });
+});
+
 describe("Renderer status strip", () => {
   it("mirrors the latest event into the status sink (sanitized, no ANSI)", () => {
     const sink = new CaptureSink();

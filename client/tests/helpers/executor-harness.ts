@@ -79,6 +79,9 @@ export class FakeChrome implements UiChrome {
   /** Transcript width reported to width-aware output (/help). Assignable so a
    * test can render the same command at a phone width and a desktop one. */
   width = 80;
+  /** Every /settings timestamps application, so a test can assert the echo of a
+   * sent message follows the setting the same way the renderer does. */
+  messageTimestamps: boolean[] = [];
   /** Every text-metric application, so a test can assert both what was applied
    * and that a change actually reached the terminals. */
   textStyles: TextStyle[] = [];
@@ -119,6 +122,9 @@ export class FakeChrome implements UiChrome {
   }
   applyEmblem(name: EmblemName): void {
     this.glyphs.push(name);
+  }
+  setMessageTimestamps(enabled: boolean): void {
+    this.messageTimestamps.push(enabled);
   }
   columns(): number {
     return this.width;
