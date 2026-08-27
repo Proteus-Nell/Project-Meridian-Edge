@@ -70,6 +70,7 @@ import {
   doSettingsSchemeList,
   doSettingsSchemeNew,
   doSettingsTheme,
+  doSettingsTimestamps,
   doSettingsTrust,
 } from "./settings";
 import { doAck, doVerified, doVerify } from "./trust";
@@ -129,6 +130,10 @@ export class Executor implements ExecutorInternals {
       this.chrome.applyTheme(prefs.theme);
       this.chrome.applyScheme(resolveScheme(prefs.scheme, prefs.customSchemes));
       this.chrome.applyEmblem(prefs.emblemGlyph);
+      // Both surfaces that print a conversation line: the renderer (history and
+      // incoming) and the chrome (the echo of what you just sent).
+      this.renderer.setMessageTimestamps(prefs.messageTimestamps);
+      this.chrome.setMessageTimestamps(prefs.messageTimestamps);
       this.chrome.applyTextStyle(prefs);
       this.chrome.applyAccessibility(prefs.accessibility);
     } catch {
@@ -264,6 +269,9 @@ export class Executor implements ExecutorInternals {
         return;
       case "settings-emblem":
         this.run(() => doSettingsEmblem(this, cmd.emblem));
+        return;
+      case "settings-timestamps":
+        this.run(() => doSettingsTimestamps(this, cmd.enabled));
         return;
       case "settings-font":
         this.run(() => doSettingsFont(this, cmd.font));

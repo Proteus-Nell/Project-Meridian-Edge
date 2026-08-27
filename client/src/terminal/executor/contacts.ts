@@ -55,7 +55,9 @@ export async function doAdd(
     await saveContacts(x);
     await refreshEmblemState(x); // the held request is resolved
     x.renderer.event("success", `Added contact ${name} (${formatUid(uid)}).`);
-    x.renderer.peerMessage(name, pending.text);
+    // Held since it arrived, so it is shown with the time it arrived - the
+    // same instant recordMessage just stored it under.
+    x.renderer.peerMessage(name, pending.text, pending.receivedAt);
     if (pending.session.reducedFs) {
       x.renderer.event(
         "warning",

@@ -119,6 +119,7 @@ export type Command =
   | { readonly name: "settings-spacing"; readonly which: SpacingKind; readonly value: number }
   | { readonly name: "settings-a11y"; readonly feature: A11yFeature; readonly enabled: boolean }
   | { readonly name: "settings-emblem"; readonly emblem: EmblemName }
+  | { readonly name: "settings-timestamps"; readonly enabled: boolean }
   | { readonly name: "settings-color"; readonly slot: ColorSlot; readonly hex: string }
   | { readonly name: "settings-color-event"; readonly slot: EventColorSlot; readonly hex: string }
   | { readonly name: "settings-color-reset" }
@@ -178,7 +179,7 @@ export const COMMAND_USAGE = {
   delete: "/delete <last|N|all|purge> [/s]  (delete your own messages on both sides; purge = all contacts; /s = silent)",
   rotate: "/rotate passphrase",
   settings:
-    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree|gaia>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset  |  /settings font <name>  |  /settings font list  |  /settings fontsize <10-28>  |  /settings spacing <letter|line> <value>  |  /settings a11y <screenreader|motion> <on|off>",
+    "/settings rotation <on|off|day <weekday>>  |  /settings notify <on|off>  |  /settings mask <asterisk|hidden>  |  /settings trust <auto|manual>  |  /settings theme <emblem|scanlines|vignette|dock|all> <on|off>  |  /settings scheme <name>  |  /settings scheme new <name>  |  /settings scheme delete <name>  |  /settings scheme list  |  /settings emblem <globe|tree|gaia>  |  /settings timestamps <on|off>  |  /settings color <accent|background|panel|text|muted> <#rrggbb>  |  /settings color event <success|warning|info|failure|peer> <#rrggbb>  |  /settings color reset  |  /settings font <name>  |  /settings font list  |  /settings fontsize <10-28>  |  /settings spacing <letter|line> <value>  |  /settings a11y <screenreader|motion> <on|off>",
   duress:
     "/duress set  |  /duress off  |  /duress status  (a passphrase that silently destroys this device and the account)",
   keys: "/keys status  |  /keys refill",
@@ -725,6 +726,13 @@ function parseCommand(word: CommandWord, args: readonly string[], rawLine: strin
           return command({ name: "settings-emblem", emblem: value });
         }
         return invalid("expected globe, tree, or gaia", usage);
+      }
+      if (sub === "timestamps") {
+        const value = args[1];
+        if ((value === "on" || value === "off") && args.length === 2) {
+          return command({ name: "settings-timestamps", enabled: value === "on" });
+        }
+        return invalid("expected on or off", usage);
       }
       if (sub === "color") {
         if (args[1] === "reset" && args.length === 2) {

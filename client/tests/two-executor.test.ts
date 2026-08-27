@@ -82,6 +82,54 @@ describe("two real executors", () => {
     expect(alice.output.text()).toContain("[bob] hi alice");
   });
 
+  it("stamps a delivered message, and redraws it from its stored time on toggle", async () => {
+    const { outbox } = wireTwoPeerNetwork();
+    const alice = await createPeer("alice");
+    const bob = await createPeer("bob");
+    await addContact(alice, bob, "bob");
+    await addContact(bob, alice, "alice");
+    await run(bob, "/chat alice");
+
+    await run(alice, "/chat bob what time is it");
+    await deliver(bob, must(outbox[0]).envelope);
+
+    // The stored record is where the replay reads its time from, so it is also
+    // what the on-screen stamp has to match.
+    const key = must((await bob.store.listKeys("msg/"))[0], "stored message key");
+    const record = must(await bob.store.getJson<{ ts: number }>(key), "stored message");
+    const at = new Date(record.ts);
+    const pad = (n: number): string => n.toString().padStart(2, "0");
+    const stamp = `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
+
+    // The live line is stamped from the clock at print time, a hair after the
+    // record was written, so it is asserted as a time rather than as this
+    // exact one - the two can legitimately straddle a second boundary.
+    const live = must(
+      bob.output.lines.filter((l) => l.includes("what time is it")).at(-1),
+      "delivered line",
+    );
+    expect(live).toMatch(/\d{2}:\d{2}:\d{2}/);
+
+    // Off: the same message is reprinted by the view rebuild, unstamped.
+    let mark = bob.output.lines.length;
+    await run(bob, "/settings timestamps off");
+    const unstamped = must(
+      bob.output.lines.slice(mark).filter((l) => l.includes("what time is it")).at(-1),
+      "redrawn line",
+    );
+    expect(unstamped).not.toContain(stamp);
+
+    // On again: the stamp comes back, and it is the message's own time rather
+    // than the moment of the redraw.
+    mark = bob.output.lines.length;
+    await run(bob, "/settings timestamps on");
+    const restamped = must(
+      bob.output.lines.slice(mark).filter((l) => l.includes("what time is it")).at(-1),
+      "redrawn line",
+    );
+    expect(restamped).toContain(stamp);
+  });
+
   it("never delivers an envelope that the test does not hand to the other side", async () => {
     // The fixture does nothing automatically: this is what lets a test model
     // a message that never arrives (dropped, suppressed, peer offline).

@@ -281,6 +281,20 @@ describe("subcommands", () => {
     expect(parseLine("/settings color accent").kind).toBe("invalid");
   });
 
+  it("parses /settings timestamps and rejects anything but on/off", () => {
+    expect(parseLine("/settings timestamps on")).toEqual({
+      kind: "command",
+      command: { name: "settings-timestamps", enabled: true },
+    });
+    expect(parseLine("/settings timestamps off")).toEqual({
+      kind: "command",
+      command: { name: "settings-timestamps", enabled: false },
+    });
+    expect(parseLine("/settings timestamps").kind).toBe("invalid");
+    expect(parseLine("/settings timestamps maybe").kind).toBe("invalid");
+    expect(parseLine("/settings timestamps on off").kind).toBe("invalid");
+  });
+
   it("parses /settings color event and rejects bad markers or colors", () => {
     expect(parseLine("/settings color event success #FF00FF")).toEqual({
       kind: "command",

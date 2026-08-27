@@ -107,6 +107,9 @@ describe("/settings theme", () => {
 
   it("selects an emblem glyph and persists it", async () => {
     const { executor, chrome, store } = makeExecutor();
+    // gaia is the default, so switching away from it is what proves the
+    // command wrote anything at all.
+    expect((await store.getDisplayPrefs()).emblemGlyph).toBe("gaia");
     executor.handle(parseLine("/settings emblem globe"));
     await executor.idle();
     expect(chrome.glyphs[chrome.glyphs.length - 1]).toBe("globe");
@@ -114,6 +117,42 @@ describe("/settings theme", () => {
     executor.handle(parseLine("/settings emblem tree"));
     await executor.idle();
     expect(chrome.glyphs[chrome.glyphs.length - 1]).toBe("tree");
+    executor.handle(parseLine("/settings emblem gaia"));
+    await executor.idle();
+    expect(chrome.glyphs[chrome.glyphs.length - 1]).toBe("gaia");
+  });
+
+  it("toggles message timestamps on both surfaces and persists the choice", async () => {
+    const { executor, chrome, store } = makeExecutor();
+    // On out of the box, so the first thing a test can observe is the setting
+    // being turned off.
+    expect((await store.getDisplayPrefs()).messageTimestamps).toBe(true);
+    executor.handle(parseLine("/settings timestamps off"));
+    await executor.idle();
+    expect(chrome.messageTimestamps.at(-1)).toBe(false);
+    // Unencrypted, like every other display preference: no unlock needed.
+    expect(store.isUnlocked()).toBe(false);
+    expect((await store.getDisplayPrefs()).messageTimestamps).toBe(false);
+    executor.handle(parseLine("/settings timestamps on"));
+    await executor.idle();
+    expect(chrome.messageTimestamps.at(-1)).toBe(true);
+    expect((await store.getDisplayPrefs()).messageTimestamps).toBe(true);
+  });
+
+  it("applies the stored timestamp setting at startup", async () => {
+    const { executor, store } = makeExecutor();
+    executor.handle(parseLine("/settings timestamps off"));
+    await executor.idle();
+    const fresh = new FakeChrome();
+    const restarted = new Executor(
+      new Renderer(new CaptureSink()),
+      new FakeShell(),
+      store,
+      undefined,
+      fresh,
+    );
+    await restarted.init();
+    expect(fresh.messageTimestamps.at(-1)).toBe(false);
   });
 
   it("preserves the theme when the mask setting is changed", async () => {

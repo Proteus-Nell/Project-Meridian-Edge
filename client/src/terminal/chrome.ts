@@ -84,6 +84,11 @@ export class Chrome implements SuggestionNav {
   // handle, replaced whenever we re-register.
   private readonly ticks: TickSpec[] = [];
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the echo of a message you send is stamped with the time
+   * (/settings timestamps), matching what renderer.ownMessage prints when the
+   * same conversation is replayed. Command echoes are never stamped: they are
+   * not part of the conversation. */
+  private messageTimestamps = true;
   /** Re-fits both terminals; set by main.ts, which owns the fit addons. */
   private refitCb: (() => void) | null = null;
 
@@ -200,14 +205,22 @@ export class Chrome implements SuggestionNav {
 
   // ----- transcript echo + delivery ticks ------------------------------------
 
+  /** Follow /settings timestamps for the echo of a message you send, so the
+   * live line agrees with the same line replayed by renderer.ownMessage. */
+  setMessageTimestamps(enabled: boolean): void {
+    this.messageTimestamps = enabled;
+  }
+
   /** Echo a submitted line into the transcript and remember its row, so a
    * following confirmSent()/rejectSent() can pin a tick to it. Commands render
    * fully dim; message text renders bright after a dim `> ` so conversations
    * stand out from command chatter. The marker is registered in the write
    * callback (xterm.write is asynchronous) one row above the cursor. */
   echoInput(line: string, kind: EchoKind = "command"): void {
+    const stamp =
+      kind === "message" && this.messageTimestamps ? `${DIM}${this.timestamp()}${RESET} ` : "";
     const rendered =
-      kind === "message" ? `${DIM}> ${RESET}${line}` : `${DIM}> ${line}${RESET}`;
+      kind === "message" ? `${stamp}${DIM}> ${RESET}${line}` : `${DIM}> ${line}${RESET}`;
     this.transcript.write(`${rendered}\r\n`, () => {
       const marker = this.transcript.registerMarker(-1) ?? null;
       this.lastSentMarker = marker;

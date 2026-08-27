@@ -114,6 +114,7 @@ function unpadDuressPayload(padded: Uint8Array): Uint8Array | null {
 import {
   COLOR_SLOTS,
   DEFAULT_ACCESSIBILITY,
+  DEFAULT_EMBLEM,
   DEFAULT_FONT,
   DEFAULT_FONT_SIZE,
   DEFAULT_LETTER_SPACING,
@@ -161,6 +162,12 @@ export interface DisplayPrefs {
   readonly scheme: string;
   /** Medallion glyph (/settings emblem). */
   readonly emblemGlyph: EmblemName;
+  /** Stamp each conversation line with the time it was sent or received
+   * (/settings timestamps). On by default: a transcript that says only what
+   * was said, and never when, is the harder one to reason about after the
+   * fact. Purely local presentation - nothing here is transmitted, and the
+   * stamp is read from the message record's own `ts`. */
+  readonly messageTimestamps: boolean;
   /** Monospace stack (/settings font) and its size in px (/settings fontsize).
    * A name from the fixed allowlist, never a raw family string. */
   readonly font: FontName;
@@ -189,7 +196,8 @@ const DEFAULT_PREFS: DisplayPrefs = {
   secretMask: "hidden",
   theme: DEFAULT_THEME,
   scheme: DEFAULT_SCHEME,
-  emblemGlyph: "globe",
+  emblemGlyph: DEFAULT_EMBLEM,
+  messageTimestamps: true,
   font: DEFAULT_FONT,
   fontSize: DEFAULT_FONT_SIZE,
   letterSpacing: DEFAULT_LETTER_SPACING,
@@ -313,6 +321,7 @@ export class KeyStore {
           theme?: Partial<Record<keyof ThemePrefs, unknown>>;
           scheme?: unknown;
           emblemGlyph?: unknown;
+          messageTimestamps?: unknown;
           font?: unknown;
           fontSize?: unknown;
           letterSpacing?: unknown;
@@ -339,6 +348,12 @@ export class KeyStore {
       typeof raw.emblemGlyph === "string" && isEmblemName(raw.emblemGlyph)
         ? raw.emblemGlyph
         : DEFAULT_PREFS.emblemGlyph;
+    // Absent means a record written before this setting existed, which is the
+    // same thing as never having chosen: the default applies.
+    const messageTimestamps =
+      typeof raw.messageTimestamps === "boolean"
+        ? raw.messageTimestamps
+        : DEFAULT_PREFS.messageTimestamps;
     const storedScheme = typeof raw.scheme === "string" ? raw.scheme : DEFAULT_PREFS.scheme;
     let customSchemes = sanitizeCustomSchemes(raw.customSchemes);
     let scheme = storedScheme;
@@ -375,6 +390,7 @@ export class KeyStore {
       theme,
       scheme: schemeExists(scheme, customSchemes) ? scheme : DEFAULT_SCHEME,
       emblemGlyph,
+      messageTimestamps,
       font,
       fontSize,
       letterSpacing,

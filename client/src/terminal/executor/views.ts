@@ -45,10 +45,12 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
     x.renderer.plain("  (No messages yet. Type to send the first one, or /home to go back.)");
   }
   for (const record of records) {
+    // The record's own `ts`, not the moment of the rebuild: a /delete redraw
+    // must not restamp the whole conversation with the time it was redrawn.
     if (record.dir === "in") {
-      x.renderer.peerMessage(contact.alias, record.text);
+      x.renderer.peerMessage(contact.alias, record.text, record.ts);
     } else {
-      x.renderer.ownMessage(record.text);
+      x.renderer.ownMessage(record.text, record.ts);
     }
   }
   if (contact.keyChangeBlocked) {
@@ -81,10 +83,25 @@ export async function renderGroupConversation(
   }
   for (const record of records) {
     if (record.dir === "in") {
-      x.renderer.peerMessage(`${group.name}/${record.sender}`, record.text);
+      x.renderer.peerMessage(`${group.name}/${record.sender}`, record.text, record.ts);
     } else {
-      x.renderer.ownMessage(record.text);
+      x.renderer.ownMessage(record.text, record.ts);
     }
+  }
+}
+
+/** Redraw whichever conversation is on screen, one-to-one or group. Used where
+ * a display setting changes how a message line is drawn: the transcript is
+ * append-only, so the only way such a change reaches lines already printed is
+ * to clear and reprint them. The home dashboard carries no message lines, so
+ * sitting there is a no-op. */
+export async function redrawConversation(x: ExecutorInternals): Promise<void> {
+  if (x.activeGroup !== null) {
+    await renderGroupConversation(x, x.activeGroup);
+    return;
+  }
+  if (x.active !== null) {
+    await renderActiveConversation(x);
   }
 }
 

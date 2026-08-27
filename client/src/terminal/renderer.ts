@@ -63,12 +63,25 @@ export interface NoticeSink {
 }
 
 export class Renderer {
+  /** Whether conversation lines carry the time beside them
+   * (/settings timestamps). On unless the stored display preferences say
+   * otherwise, which executor.init() applies once they have been read. Typed
+   * events and errors are stamped unconditionally and are not affected: this
+   * governs the conversation only. */
+  private messageTimestamps = true;
+
   constructor(
     private readonly sink: LineSink,
     private readonly now: () => Date = () => new Date(),
     private readonly statusSink: StatusSink | null = null,
     private readonly noticeSink: NoticeSink | null = null,
   ) {}
+
+  /** Follow /settings timestamps. Applied at startup from the stored display
+   * preferences and again whenever the setting changes. */
+  setMessageTimestamps(enabled: boolean): void {
+    this.messageTimestamps = enabled;
+  }
 
   event(level: GlyphLevel, text: string): void {
     const clean = sanitizeText(text);
@@ -122,20 +135,36 @@ export class Renderer {
 
   /** An incoming conversation line: the peer's alias in bright cyan so chat
    * traffic reads distinctly from system output. Label and text are both
-   * untrusted (alias is user-chosen, text is peer-sent) - both sanitized. */
-  peerMessage(label: string, text: string): void {
-    this.sink.printLine(`  \x1b[96m[${sanitizeText(label)}]${RESET} ${sanitizeText(text)}`);
+   * untrusted (alias is user-chosen, text is peer-sent) - both sanitized.
+   * `at` is the message's own epoch-ms instant, passed when history is
+   * replayed so a rebuilt view shows when the message arrived rather than
+   * when it was reprinted; omit it for a message arriving now. */
+  peerMessage(label: string, text: string, at?: number): void {
+    this.sink.printLine(
+      `${this.messagePrefix(at, "  ")}\x1b[96m[${sanitizeText(label)}]${RESET} ${sanitizeText(text)}`,
+    );
   }
 
   /** One of your own sent messages, replayed when a conversation view is rebuilt
    * (e.g. after a /delete redraw). Mirrors the live command-line echo - a dim
    * `> ` marker then the message text. Sanitized like everything else. */
-  ownMessage(text: string): void {
-    this.sink.printLine(`${DIM}> ${RESET}${sanitizeText(text)}`);
+  ownMessage(text: string, at?: number): void {
+    this.sink.printLine(`${this.messagePrefix(at, "")}${DIM}> ${RESET}${sanitizeText(text)}`);
   }
 
-  private timestamp(): string {
-    const d = this.now();
+  /** What a conversation line starts with: a dim timestamp when the setting is
+   * on, and `gutter` - the line's original lead-in - when it is off, so turning
+   * the setting off leaves the transcript exactly as it looked before the
+   * setting existed. */
+  private messagePrefix(at: number | undefined, gutter: string): string {
+    return this.messageTimestamps ? `${DIM}${this.timestamp(at)}${RESET} ` : gutter;
+  }
+
+  /** `HH:MM:SS` in the viewer's local time, for `at` when given and for now
+   * otherwise. Local rather than UTC because it is read by the person sitting
+   * in front of it; it never leaves the device. */
+  private timestamp(at?: number): string {
+    const d = at === undefined ? this.now() : new Date(at);
     const pad = (n: number): string => n.toString().padStart(2, "0");
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
