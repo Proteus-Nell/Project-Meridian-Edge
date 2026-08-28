@@ -162,11 +162,12 @@ export interface DisplayPrefs {
   readonly scheme: string;
   /** Medallion glyph (/settings emblem). */
   readonly emblemGlyph: EmblemName;
-  /** Stamp each conversation line with the time it was sent or received
-   * (/settings timestamps). On by default: a transcript that says only what
-   * was said, and never when, is the harder one to reason about after the
-   * fact. Purely local presentation - nothing here is transmitted, and the
-   * stamp is read from the message record's own `ts`. */
+  /** Stamp each conversation line with the time it was sent or received, and
+   * open each new day with a dated divider (/settings timestamps). On by
+   * default: a transcript that says only what was said, and never when, is the
+   * harder one to reason about after the fact. Purely local presentation -
+   * nothing here is transmitted, and both readings come from the message
+   * record's own `ts`. */
   readonly messageTimestamps: boolean;
   /** Monospace stack (/settings font) and its size in px (/settings fontsize).
    * A name from the fixed allowlist, never a raw family string. */

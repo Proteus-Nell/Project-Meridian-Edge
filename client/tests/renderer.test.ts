@@ -24,6 +24,15 @@ class CaptureNotices implements NoticeSink {
   }
 }
 
+/** A dated divider opens each new day in the transcript (see the day-divider
+ * suite below); every other assertion in this file is about a message line, so
+ * they filter the dividers out rather than indexing around them. */
+const DAY_DIVIDER = /-- \w+day, \d{1,2} \w+ \d{4} --/;
+
+function messageLines(sink: CaptureSink): string[] {
+  return sink.lines.filter((line) => !DAY_DIVIDER.test(line));
+}
+
 describe("sanitizeText", () => {
   it("strips ANSI escape sequences from untrusted text", () => {
     expect(sanitizeText("evil\x1b[2J\x1b[Hwipe")).toBe("evil[2J[Hwipe");
@@ -84,7 +93,7 @@ describe("Renderer peer messages", () => {
     const sink = new CaptureSink();
     const renderer = new Renderer(sink);
     renderer.peerMessage("bob\x1b[31m", "hi\x1b[2Jthere");
-    const line = sink.lines[0] ?? "";
+    const line = messageLines(sink)[0] ?? "";
     expect(line).toContain("\x1b[96m"); // renderer's own label styling intact
     expect(line).toContain("[bob[31m]"); // alias ESC stripped
     expect(line).toContain("hi[2Jthere"); // message ESC stripped
@@ -100,11 +109,12 @@ describe("Renderer message timestamps", () => {
     const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
     renderer.peerMessage("alice", "hello there");
     renderer.ownMessage("hi back");
-    expect(sink.lines[0]).toContain("09:05:07");
-    expect(sink.lines[0]).toContain("[alice]");
-    expect(sink.lines[0]).toContain("hello there");
-    expect(sink.lines[1]).toContain("09:05:07");
-    expect(sink.lines[1]).toContain("hi back");
+    const [peer, own] = messageLines(sink);
+    expect(peer).toContain("09:05:07");
+    expect(peer).toContain("[alice]");
+    expect(peer).toContain("hello there");
+    expect(own).toContain("09:05:07");
+    expect(own).toContain("hi back");
   });
 
   it("uses the message's own instant when history is replayed", () => {
@@ -114,7 +124,7 @@ describe("Renderer message timestamps", () => {
     const renderer = new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7));
     renderer.peerMessage("alice", "hello there", AT);
     renderer.ownMessage("hi back", AT);
-    for (const line of sink.lines) {
+    for (const line of messageLines(sink)) {
       expect(line).toContain("21:30:15");
       expect(line).not.toContain("09:05:07");
     }
@@ -126,6 +136,8 @@ describe("Renderer message timestamps", () => {
     renderer.setMessageTimestamps(false);
     renderer.peerMessage("alice", "hello there", AT);
     renderer.ownMessage("hi back", AT);
+    // No dividers either, so the two messages are the only two lines.
+    expect(sink.lines).toHaveLength(2);
     expect(sink.lines[0]).not.toContain("21:30:15");
     expect(sink.lines[0]).not.toContain("09:05:07");
     expect(sink.lines[0]?.startsWith("  \x1b[96m[alice]")).toBe(true);
@@ -149,7 +161,82 @@ describe("Renderer message timestamps", () => {
     // bleed into content.
     const sink = new CaptureSink();
     new Renderer(sink, () => new Date(2026, 6, 4, 9, 5, 7)).peerMessage("alice", "hello");
-    expect(sink.lines[0]).toContain("\x1b[2m09:05:07\x1b[0m ");
+    expect(messageLines(sink)[0]).toContain("\x1b[2m09:05:07\x1b[0m ");
+  });
+});
+
+describe("Renderer day dividers", () => {
+  const JUL_4 = new Date(2026, 6, 4, 21, 30, 15).getTime();
+  const JUL_5 = new Date(2026, 6, 5, 9, 5, 7).getTime();
+  const JUL_5_LATER = new Date(2026, 6, 5, 23, 59, 59).getTime();
+
+  it("dates the first conversation line, whatever day it is", () => {
+    const sink = new CaptureSink();
+    new Renderer(sink).peerMessage("alice", "hello", JUL_4);
+    expect(sink.lines[0]).toContain("-- Saturday, 4 July 2026 --");
+    expect(sink.lines[1]).toContain("hello");
+  });
+
+  it("opens a new day once, and stays quiet inside it", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.peerMessage("alice", "see you next week", JUL_4);
+    renderer.peerMessage("alice", "morning", JUL_5);
+    renderer.ownMessage("morning", JUL_5_LATER);
+    const dividers = sink.lines.filter((l) => l.includes("2026 --"));
+    expect(dividers).toHaveLength(2);
+    expect(dividers[0]).toContain("-- Saturday, 4 July 2026 --");
+    expect(dividers[1]).toContain("-- Sunday, 5 July 2026 --");
+  });
+
+  it("dates a live message from the clock when no instant is given", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 7, 27, 9, 5, 7));
+    renderer.peerMessage("alice", "morning");
+    expect(sink.lines[0]).toContain("-- Thursday, 27 August 2026 --");
+  });
+
+  it("dates the next line again after the screen is cleared", () => {
+    // The dividers on screen went with the wipe, so the day the transcript is
+    // on is no longer visible and has to be restated.
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.peerMessage("alice", "hello", JUL_4);
+    renderer.resetMessageDay();
+    renderer.peerMessage("alice", "hello again", JUL_4);
+    expect(sink.lines.filter((l) => l.includes("4 July 2026"))).toHaveLength(2);
+  });
+
+  it("prints no divider while /settings timestamps is off", () => {
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.setMessageTimestamps(false);
+    renderer.peerMessage("alice", "see you next week", JUL_4);
+    renderer.peerMessage("alice", "morning", JUL_5);
+    expect(sink.lines).toHaveLength(2);
+    expect(sink.lines.some((l) => l.includes("2026"))).toBe(false);
+  });
+
+  it("marks the day for a line it does not print itself (the sent echo)", () => {
+    // chrome.echoInput writes your own message and calls this first, so the
+    // divider lands above an echo the renderer never sees.
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink, () => new Date(2026, 7, 27, 9, 5, 7));
+    renderer.markMessageDay();
+    expect(sink.lines[0]).toContain("-- Thursday, 27 August 2026 --");
+    // ... and the reply that follows on the same day does not repeat it.
+    renderer.peerMessage("alice", "morning", new Date(2026, 7, 27, 9, 6, 0).getTime());
+    expect(sink.lines.filter((l) => l.includes("27 August 2026"))).toHaveLength(1);
+  });
+
+  it("splits days by the local clock, not UTC", () => {
+    // The divider sits beside a local HH:MM:SS, so it has to agree with it: a
+    // late-evening message belongs to the day the reader saw on the clock.
+    const sink = new CaptureSink();
+    const renderer = new Renderer(sink);
+    renderer.peerMessage("alice", "late", new Date(2026, 6, 4, 23, 30, 0).getTime());
+    renderer.peerMessage("alice", "later", new Date(2026, 6, 4, 23, 59, 59).getTime());
+    expect(sink.lines.filter((l) => l.includes("2026 --"))).toHaveLength(1);
   });
 });
 
@@ -268,7 +355,7 @@ describe("event colour never reaches the message text", () => {
   it("closes the peer-name colour before the peer's text", () => {
     const sink = new CaptureSink();
     new Renderer(sink).peerMessage("alice", "hello there");
-    const line = sink.lines[0] ?? "";
+    const line = messageLines(sink)[0] ?? "";
     expect(uncoloredTail(line)).toContain("hello there");
   });
 

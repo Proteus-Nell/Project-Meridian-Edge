@@ -62,13 +62,72 @@ export interface NoticeSink {
   noteDiscarded(code: string, text: string): void;
 }
 
-export class Renderer {
+/** The transcript's day-divider state (see Renderer.markMessageDay), as the
+ * chrome sees it. The echo of a message you send is written by chrome.ts rather
+ * than the renderer - main.ts echoes before the executor is handed the line -
+ * so the one object that knows which day the transcript is on has to be
+ * reachable from there too, or your own first message after midnight would be
+ * the one line that never gets a date. Implemented by Renderer; injected into
+ * Chrome by main.ts. */
+export interface DayMarker {
+  markMessageDay(at?: number): void;
+  resetMessageDay(): void;
+}
+
+/** Weekday and month names, spelled out here rather than taken from
+ * toLocaleDateString for the same reason the clock is assembled by hand: the
+ * output is then fixed, testable, and identical on every host, instead of
+ * varying with whatever locale data the browser happens to ship. */
+const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+/** The local calendar day of an instant, as a key two instants can be compared
+ * by. Local, not UTC, because it has to agree with the local HH:MM:SS printed
+ * beside it: a message at 23:30 belongs to the day the reader saw on the
+ * clock, not to whatever day it was in UTC. */
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** `Thursday, 27 August 2026`. */
+function formatDay(d: Date): string {
+  return `${WEEKDAY_NAMES[d.getDay()] ?? ""}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()] ?? ""} ${d.getFullYear()}`;
+}
+
+export class Renderer implements DayMarker {
   /** Whether conversation lines carry the time beside them
    * (/settings timestamps). On unless the stored display preferences say
    * otherwise, which executor.init() applies once they have been read. Typed
    * events and errors are stamped unconditionally and are not affected: this
    * governs the conversation only. */
   private messageTimestamps = true;
+
+  /** The day of the last conversation line printed since the screen was last
+   * cleared, or null when none has been. Only ever compared, never displayed:
+   * what is displayed is built fresh by formatDay. */
+  private lastDay: string | null = null;
 
   constructor(
     private readonly sink: LineSink,
@@ -81,6 +140,36 @@ export class Renderer {
    * preferences and again whenever the setting changes. */
   setMessageTimestamps(enabled: boolean): void {
     this.messageTimestamps = enabled;
+  }
+
+  /** Open a new day in the transcript when `at` falls on a later calendar day
+   * than the last conversation line printed, by writing a dated divider ahead
+   * of it. A bare `HH:MM:SS` answers "when today", and nothing else: without
+   * this, a conversation resumed after a week reads as though it never paused.
+   *
+   * Called by peerMessage and ownMessage for themselves, so every rendered
+   * conversation line is covered - live, replayed, or held behind a contact
+   * request - and by chrome.echoInput for the one conversation line the
+   * renderer does not write. Silent while /settings timestamps is off: the
+   * setting governs every time the conversation shows. */
+  markMessageDay(at?: number): void {
+    if (!this.messageTimestamps) {
+      return;
+    }
+    const d = at === undefined ? this.now() : new Date(at);
+    const key = dayKey(d);
+    if (key === this.lastDay) {
+      return;
+    }
+    this.lastDay = key;
+    this.divider(`-- ${formatDay(d)} --`);
+  }
+
+  /** Forget which day the transcript is on. Every screen wipe has to call this:
+   * the dividers that were on screen are gone, so the next message must date
+   * itself again rather than assume a line the reader can no longer see. */
+  resetMessageDay(): void {
+    this.lastDay = null;
   }
 
   event(level: GlyphLevel, text: string): void {
@@ -140,6 +229,7 @@ export class Renderer {
    * replayed so a rebuilt view shows when the message arrived rather than
    * when it was reprinted; omit it for a message arriving now. */
   peerMessage(label: string, text: string, at?: number): void {
+    this.markMessageDay(at);
     this.sink.printLine(
       `${this.messagePrefix(at, "  ")}\x1b[96m[${sanitizeText(label)}]${RESET} ${sanitizeText(text)}`,
     );
@@ -149,6 +239,7 @@ export class Renderer {
    * (e.g. after a /delete redraw). Mirrors the live command-line echo - a dim
    * `> ` marker then the message text. Sanitized like everything else. */
   ownMessage(text: string, at?: number): void {
+    this.markMessageDay(at);
     this.sink.printLine(`${this.messagePrefix(at, "")}${DIM}> ${RESET}${sanitizeText(text)}`);
   }
 

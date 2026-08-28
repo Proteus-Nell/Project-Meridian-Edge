@@ -37,6 +37,7 @@ export async function renderActiveConversation(x: ExecutorInternals): Promise<vo
   }
   records.sort((a, b) => a.ts - b.ts);
   x.chrome.clearScreen(false); // silent wipe before reprinting
+  x.renderer.resetMessageDay(); // the dividers went with it; date the first line again
   const trust = contact.verified ? "verified" : "UNVERIFIED";
   const timer =
     contact.timerSeconds === null ? "" : ` · timer ${formatDuration(contact.timerSeconds)}`;
@@ -75,6 +76,7 @@ export async function renderGroupConversation(
   }
   const records = await loadGroupHistory(x, group.gid);
   x.chrome.clearScreen(false);
+  x.renderer.resetMessageDay();
   x.renderer.divider(
     `-- ${group.name} · ${group.members.length} members · fingerprint ${rosterDigest(group.members)} --`,
   );
@@ -113,6 +115,7 @@ export async function redrawConversation(x: ExecutorInternals): Promise<void> {
  * only. */
 export async function renderHome(x: ExecutorInternals): Promise<void> {
   x.chrome.clearScreen(false);
+  x.renderer.resetMessageDay();
   x.renderer.divider("-- home --");
   if (x.identity === null || !x.store.isUnlocked()) {
     x.renderer.plain("  Locked. Run /login to unlock, or /register to create an identity.");

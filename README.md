@@ -367,7 +367,9 @@ erasure.
 
 Every message carries the time it was sent or received, read from this device's
 clock and never transmitted, so two devices can honestly disagree about a
-message's time. Turn the display off with
+message's time. Where the conversation crosses into a new day, a dated line
+opens it, so a thread picked up a week later reads as a week later rather than
+as one unbroken run of times. Turn both off with
 [`/settings timestamps off`](#appearance).
 
 ### Appearance
@@ -382,7 +384,7 @@ message's time. Turn the display off with
 | `/settings color event <marker> <#rrggbb>` | Recolor a notification marker: `success`, `warning`, `info`, `failure`, `peer` |
 | `/settings color reset` | Put your scheme's colors and markers back to its base preset's |
 | `/settings emblem <globe\|tree\|gaia>` | Medallion glyph. `gaia` is the default; `globe` and `tree` are the line-art alternatives |
-| `/settings timestamps <on\|off>` | Show the time beside each message, on by default. `off` returns to bare conversation lines; system events keep their timestamp either way. Applies to the whole transcript, including history already on screen |
+| `/settings timestamps <on\|off>` | Show the time beside each message, on by default, and a dated line (`-- Thursday, 27 August 2026 --`) wherever the conversation crosses into a new day. `off` returns to bare conversation lines; system events keep their timestamp either way. Applies to the whole transcript, including history already on screen |
 | `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
 | `/settings font <name>` | Monospace stack: `default`, `system`, `classic`, `wide`, `compact` |
 | `/settings font list` | The stacks, with what each is for |

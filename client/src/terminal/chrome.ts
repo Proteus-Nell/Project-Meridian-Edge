@@ -11,7 +11,7 @@
 import type { IDecoration, IMarker, Terminal } from "@xterm/xterm";
 
 import { COMMAND_USAGE, isCommandWord } from "./parser";
-import type { EventLevel } from "./renderer";
+import type { DayMarker, EventLevel } from "./renderer";
 import type { SuggestionNav } from "./shell";
 import type { EmblemState } from "./executor";
 import {
@@ -89,6 +89,9 @@ export class Chrome implements SuggestionNav {
    * same conversation is replayed. Command echoes are never stamped: they are
    * not part of the conversation. */
   private messageTimestamps = true;
+  /** The renderer's day-divider state, set by main.ts. Null in any context that
+   * never wired one up, which only costs the divider itself. */
+  private dayMarker: DayMarker | null = null;
   /** Re-fits both terminals; set by main.ts, which owns the fit addons. */
   private refitCb: (() => void) | null = null;
 
@@ -211,12 +214,25 @@ export class Chrome implements SuggestionNav {
     this.messageTimestamps = enabled;
   }
 
+  /** Adopt the renderer's day-divider state, so a message sent after midnight
+   * opens the new day here exactly as a received one does through the
+   * renderer. Set once by main.ts, which owns both objects. */
+  setDayMarker(marker: DayMarker): void {
+    this.dayMarker = marker;
+  }
+
   /** Echo a submitted line into the transcript and remember its row, so a
    * following confirmSent()/rejectSent() can pin a tick to it. Commands render
    * fully dim; message text renders bright after a dim `> ` so conversations
    * stand out from command chatter. The marker is registered in the write
    * callback (xterm.write is asynchronous) one row above the cursor. */
   echoInput(line: string, kind: EchoKind = "command"): void {
+    if (kind === "message") {
+      // Before the echo is written, so the divider lands above it: both writes
+      // go to the same terminal, whose write queue preserves their order. A
+      // command echo is not part of the conversation and never dates it.
+      this.dayMarker?.markMessageDay();
+    }
     const stamp =
       kind === "message" && this.messageTimestamps ? `${DIM}${this.timestamp()}${RESET} ` : "";
     const rendered =
@@ -563,6 +579,9 @@ export class Chrome implements SuggestionNav {
     this.markers.length = 0;
     this.lastSentMarker = null;
     this.transcript.clear();
+    // The dividers went with it. Ctrl+L reaches here without passing through
+    // the executor, so this is the only place that catches every wipe.
+    this.dayMarker?.resetMessageDay();
     this.clearChildren(this.discardedListEl);
     this.discardedTotal = 0;
     this.discardedCountEl.textContent = "0";

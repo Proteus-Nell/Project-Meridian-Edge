@@ -120,7 +120,7 @@ const SECTIONS: readonly HelpSection[] = [
       { cmd: "/settings spacing letter <0-4>", blurb: "extra space between characters, in px" },
       { cmd: "/settings spacing line <1-2.5>", blurb: "line height as a multiple of the font size" },
       { cmd: "/settings emblem <name>", blurb: "medallion glyph: gaia (default) | globe | tree" },
-      { cmd: "/settings timestamps <on|off>", blurb: "show the time beside each message (on by default)" },
+      { cmd: "/settings timestamps <on|off>", blurb: "time beside each message, and a dated line per day (on by default)" },
       { cmd: "/settings theme <layer> <on|off>", blurb: "toggle atmosphere layers" },
     ],
   },
