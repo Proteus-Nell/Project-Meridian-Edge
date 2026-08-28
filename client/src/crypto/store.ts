@@ -186,10 +186,14 @@ export interface DisplayPrefs {
   readonly customSchemes: readonly CustomScheme[];
 }
 
-// Every atmosphere layer defaults OFF: a clean, plain terminal on first run.
-// Users opt into the emblem watermark / scanlines / vignette / dock treatment
-// via /settings theme. (The header medallion is separate and unaffected.)
-const DEFAULT_THEME: ThemePrefs = { emblem: false, scanlines: false, vignette: false, dock: false };
+// The emblem watermark is ON out of the box, so the medallion
+// (theme.ts::DEFAULT_EMBLEM) is actually seen on a first run rather than
+// waiting behind a setting nobody knows to look for. It sits behind the text at
+// low opacity and pauses while idle, so it costs the transcript nothing.
+// Scanlines, vignette and dock stay OFF: those restyle the terminal itself, and
+// a plain terminal is still the right thing to meet first. All four are
+// /settings theme.
+const DEFAULT_THEME: ThemePrefs = { emblem: true, scanlines: false, vignette: false, dock: false };
 
 const DEFAULT_PREFS: DisplayPrefs = {
   // Passphrase entry echoes nothing by default (sudo-style); /settings mask

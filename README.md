@@ -385,7 +385,7 @@ as one unbroken run of times. Turn both off with
 | `/settings color reset` | Put your scheme's colors and markers back to its base preset's |
 | `/settings emblem <globe\|tree\|gaia>` | Medallion glyph. `gaia` is the default; `globe` and `tree` are the line-art alternatives |
 | `/settings timestamps <on\|off>` | Show the time beside each message, on by default, and a dated line (`-- Thursday, 27 August 2026 --`) wherever the conversation crosses into a new day. `off` returns to bare conversation lines; system events keep their timestamp either way. Applies to the whole transcript, including history already on screen |
-| `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all` |
+| `/settings theme <layer> <on\|off>` | Atmosphere layers: `emblem`, `scanlines`, `vignette`, `dock`, or `all`. Only `emblem`, the medallion watermark behind the transcript, is on by default; the three that restyle the terminal itself start off |
 | `/settings font <name>` | Monospace stack: `default`, `system`, `classic`, `wide`, `compact` |
 | `/settings font list` | The stacks, with what each is for |
 | `/settings fontsize <10-28>` | Terminal size in px; the terminal re-fits itself |

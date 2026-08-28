@@ -53,18 +53,28 @@ describe("executor UI wiring", () => {
 describe("/settings theme", () => {
   it("toggles one layer, applies it, and persists it while locked", async () => {
     const { executor, chrome, store } = makeExecutor();
-    // Layers default off, so toggle one ON and confirm the others stay off.
-    executor.handle(parseLine("/settings theme emblem on"));
+    // The emblem watermark is the one layer on by default, so turning it OFF
+    // is what proves the command wrote anything at all.
+    executor.handle(parseLine("/settings theme emblem off"));
     await executor.idle();
     expect(chrome.themes[chrome.themes.length - 1]).toEqual({
-      emblem: true,
+      emblem: false,
       scanlines: false,
       vignette: false,
       dock: false,
     });
     // Persisted unencrypted: readable without ever unlocking the store.
     expect(store.isUnlocked()).toBe(false);
-    expect((await store.getDisplayPrefs()).theme.emblem).toBe(true);
+    expect((await store.getDisplayPrefs()).theme.emblem).toBe(false);
+    // And one of the others ON leaves the rest where they were.
+    executor.handle(parseLine("/settings theme scanlines on"));
+    await executor.idle();
+    expect((await store.getDisplayPrefs()).theme).toEqual({
+      emblem: false,
+      scanlines: true,
+      vignette: false,
+      dock: false,
+    });
   });
 
   it("'all off' flips every layer at once", async () => {
