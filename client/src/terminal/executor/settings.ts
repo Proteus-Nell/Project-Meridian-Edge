@@ -398,7 +398,9 @@ export async function doSettingsEmblem(x: ExecutorInternals, emblem: EmblemName)
 }
 
 /** `/settings timestamps <on|off>`: stamp each conversation line with the time
- * it was sent or received. On by default.
+ * it was sent or received, and open each new day with a dated divider. On by
+ * default. One setting for both, because they answer one question between them:
+ * a bare `HH:MM:SS` says when today, and the divider says which day.
  *
  * Both surfaces that draw a conversation line have to be told: the renderer
  * prints incoming messages and replayed history, and the chrome echoes the
@@ -424,7 +426,7 @@ export async function doSettingsTimestamps(
   x.renderer.event(
     "success",
     enabled
-      ? "Message timestamps on. Each message carries the time it was sent or received, taken from this device's clock."
+      ? "Message timestamps on. Each message carries the time it was sent or received, taken from this device's clock, and a dated line opens each new day."
       : "Message timestamps off. Times are still shown on system events.",
   );
 }

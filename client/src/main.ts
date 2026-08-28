@@ -165,6 +165,9 @@ const shell = new Shell(inputTerm, transcriptTerm, (line) => {
 // chrome is both the status strip (StatusSink) and the discarded-notice panel
 // (NoticeSink); the renderer routes to each without knowing about the DOM.
 const renderer = new Renderer(shell, undefined, chrome, chrome);
+// The renderer owns which day the transcript is on; the chrome writes the echo
+// of a message you send, and needs to open a new day for it (renderer.DayMarker).
+chrome.setDayMarker(renderer);
 executor = new Executor(renderer, shell, undefined, undefined, chrome);
 
 // Autosuggest: live dropdown + Tab completion from the pure suggest module,

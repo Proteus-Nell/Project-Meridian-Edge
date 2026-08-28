@@ -130,6 +130,40 @@ describe("two real executors", () => {
     expect(restamped).toContain(stamp);
   });
 
+  it("dates every day of a rebuilt conversation from the stored records", async () => {
+    wireTwoPeerNetwork();
+    const alice = await createPeer("alice");
+    const bob = await createPeer("bob");
+    await addContact(bob, alice, "alice");
+
+    // A week apart, written straight into the history the rebuild reads: what
+    // is under test is the view rebuild, not delivery.
+    const before = new Date(2026, 6, 4, 21, 30, 15).getTime();
+    const after = new Date(2026, 6, 11, 9, 5, 7).getTime();
+    await bob.store.putJson(`msg/${alice.uid}/${before}`, {
+      dir: "in",
+      text: "see you next week",
+      ts: before,
+    });
+    await bob.store.putJson(`msg/${alice.uid}/${after}`, {
+      dir: "out",
+      text: "morning",
+      ts: after,
+    });
+
+    await run(bob, "/chat alice");
+    const text = bob.output.text();
+    const firstDay = text.indexOf("-- Saturday, 4 July 2026 --");
+    const secondDay = text.indexOf("-- Saturday, 11 July 2026 --");
+    expect(firstDay, "the older day is dated").toBeGreaterThan(-1);
+    expect(secondDay, "the newer day is dated").toBeGreaterThan(-1);
+    // Each divider opens its own day: above the message it belongs to, below
+    // the one before it.
+    expect(firstDay).toBeLessThan(text.indexOf("see you next week"));
+    expect(text.indexOf("see you next week")).toBeLessThan(secondDay);
+    expect(secondDay).toBeLessThan(text.indexOf("morning"));
+  });
+
   it("never delivers an envelope that the test does not hand to the other side", async () => {
     // The fixture does nothing automatically: this is what lets a test model
     // a message that never arrives (dropped, suppressed, peer offline).

@@ -146,12 +146,13 @@ describe("KeyStore", () => {
     expect((await second.getDisplayPrefs()).secretMask).toBe("asterisk");
   });
 
-  it("round-trips the theme block and defaults it to all-off", async () => {
+  it("round-trips the theme block and defaults to the emblem watermark only", async () => {
     const factory = new IDBFactory();
     const store = new KeyStore("meridian-edge-test", factory);
-    // Nothing written yet: every layer defaults off (plain terminal).
+    // Nothing written yet: the medallion shows, and the layers that restyle the
+    // terminal itself stay off.
     expect((await store.getDisplayPrefs()).theme).toEqual({
-      emblem: false,
+      emblem: true,
       scanlines: false,
       vignette: false,
       dock: false,
@@ -169,7 +170,7 @@ describe("KeyStore", () => {
     });
   });
 
-  it("legacy prefs without a theme block degrade to all-off defaults", async () => {
+  it("legacy prefs without a theme block degrade to the defaults", async () => {
     const factory = new IDBFactory();
     const store = new KeyStore("meridian-edge-test", factory);
     // Simulate a record written by the pre-theme client: mask only.
@@ -178,7 +179,7 @@ describe("KeyStore", () => {
     >[0]);
     const prefs = await store.getDisplayPrefs();
     expect(prefs.secretMask).toBe("asterisk");
-    expect(prefs.theme).toEqual({ emblem: false, scanlines: false, vignette: false, dock: false });
+    expect(prefs.theme).toEqual({ emblem: true, scanlines: false, vignette: false, dock: false });
   });
 
   it("keeps display prefs out of vault key listings", async () => {

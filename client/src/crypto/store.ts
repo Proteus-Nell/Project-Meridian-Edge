@@ -162,11 +162,12 @@ export interface DisplayPrefs {
   readonly scheme: string;
   /** Medallion glyph (/settings emblem). */
   readonly emblemGlyph: EmblemName;
-  /** Stamp each conversation line with the time it was sent or received
-   * (/settings timestamps). On by default: a transcript that says only what
-   * was said, and never when, is the harder one to reason about after the
-   * fact. Purely local presentation - nothing here is transmitted, and the
-   * stamp is read from the message record's own `ts`. */
+  /** Stamp each conversation line with the time it was sent or received, and
+   * open each new day with a dated divider (/settings timestamps). On by
+   * default: a transcript that says only what was said, and never when, is the
+   * harder one to reason about after the fact. Purely local presentation -
+   * nothing here is transmitted, and both readings come from the message
+   * record's own `ts`. */
   readonly messageTimestamps: boolean;
   /** Monospace stack (/settings font) and its size in px (/settings fontsize).
    * A name from the fixed allowlist, never a raw family string. */
@@ -185,10 +186,14 @@ export interface DisplayPrefs {
   readonly customSchemes: readonly CustomScheme[];
 }
 
-// Every atmosphere layer defaults OFF: a clean, plain terminal on first run.
-// Users opt into the emblem watermark / scanlines / vignette / dock treatment
-// via /settings theme. (The header medallion is separate and unaffected.)
-const DEFAULT_THEME: ThemePrefs = { emblem: false, scanlines: false, vignette: false, dock: false };
+// The emblem watermark is ON out of the box, so the medallion
+// (theme.ts::DEFAULT_EMBLEM) is actually seen on a first run rather than
+// waiting behind a setting nobody knows to look for. It sits behind the text at
+// low opacity and pauses while idle, so it costs the transcript nothing.
+// Scanlines, vignette and dock stay OFF: those restyle the terminal itself, and
+// a plain terminal is still the right thing to meet first. All four are
+// /settings theme.
+const DEFAULT_THEME: ThemePrefs = { emblem: true, scanlines: false, vignette: false, dock: false };
 
 const DEFAULT_PREFS: DisplayPrefs = {
   // Passphrase entry echoes nothing by default (sudo-style); /settings mask
