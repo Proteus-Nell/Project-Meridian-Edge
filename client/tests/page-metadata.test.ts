@@ -27,6 +27,7 @@ const NOT_FOUND = read("../public/404.html");
 const ROBOTS = read("../public/robots.txt");
 const NGINX = read("../../deploy/nginx.conf");
 const CADDY = read("../../deploy/Caddyfile");
+const FAVICON = read("../public/favicon.svg");
 
 /** Strip HTML comments before scanning: this repo's markup is heavily
  * commented, and several comments discuss the very tags being asserted. */
@@ -164,5 +165,45 @@ describe("edge configs serve a real 404", () => {
     // is a semicolon-separated list, so the directive's own separators come
     // long before the one that ends the nginx line.
     expect(NGINX).toMatch(/add_header Content-Security-Policy\s+"[^"]*"\s+always;/);
+  });
+});
+
+// The tab icon is the emblem the app wears, which is only true for as long as
+// the two are the same drawing. They live in different files - the medallion is
+// markup in index.html, the favicon is a standalone image fetched by the
+// browser - so nothing but a test keeps a change to one from leaving the other
+// behind.
+describe("favicon", () => {
+  // Stripped for the same reason the head is: this file explains itself at
+  // length, and the comment discusses the very things asserted below.
+  const markup = stripComments(FAVICON);
+
+  /** The `d` of the only path in an SVG-ish string, or null. */
+  function pathData(svg: string): string | null {
+    return /<path[^>]*\sd="([^"]+)"/.exec(svg)?.[1] ?? null;
+  }
+
+  it("draws the same glyph as the medallion's default emblem", () => {
+    const medallion = /<g class="glyph glyph-gaia">([\s\S]*?)<\/g>/.exec(stripComments(INDEX))?.[1] ?? "";
+    const drawn = pathData(medallion);
+    expect(drawn, "index.html no longer has a glyph-gaia path").not.toBeNull();
+    expect(pathData(markup)).toBe(drawn);
+  });
+
+  it("keeps the even-odd rule that makes the figure a hole rather than a shape", () => {
+    expect(markup).toMatch(/fill-rule="evenodd"/);
+  });
+
+  it("names its colour literally, since a standalone image sees no CSS variables", () => {
+    expect(pathData(markup)).not.toBeNull();
+    expect(markup).toMatch(/fill="#[0-9a-f]{6}"/);
+    expect(markup).not.toContain("var(");
+  });
+
+  // Same reason the page carries no inline <style>: the production CSP's
+  // style-src is 'self', and CSS inside an SVG fetched as an image sits in a
+  // murky corner of it. Attributes moot the question.
+  it("carries no style element", () => {
+    expect(markup).not.toMatch(/<style/);
   });
 });

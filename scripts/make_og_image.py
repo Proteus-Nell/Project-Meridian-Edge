@@ -12,10 +12,12 @@ Requires Pillow (a local authoring tool only - it is deliberately not a client
 or server dependency, and CI never runs this).
 
 Design notes: 1200x630 is the size every unfurler crops from, and the layout is
-centred because the card is usually seen as a thumbnail. The figure is the same
-globe-with-meridians as favicon.svg and the medallion's glyph-globe. Everything
-is drawn at SUPERSAMPLE times final size and downsampled, because Pillow's
-draw primitives are not anti-aliased.
+centred because the card is usually seen as a thumbnail. The figure is the
+medallion's glyph-globe, the emblem /settings emblem globe selects; the favicon
+carries the gaia glyph the app now wears by default, which is a filled
+silhouette rather than something these draw primitives can trace. Everything is
+drawn at SUPERSAMPLE times final size and downsampled, because Pillow's draw
+primitives are not anti-aliased.
 """
 
 from __future__ import annotations
