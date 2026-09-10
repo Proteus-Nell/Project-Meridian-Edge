@@ -634,8 +634,14 @@ export async function processEnvelope(
       await saveContacts(x);
     }
     // The handshake happened when this device processed it, whatever the sender
-    // dated their message: this records our own event, not theirs.
-    await x.store.putJson(`session/${senderUid}`, serializeSession(result.session, receivedAt));
+    // dated their message: this records our own event, not theirs. `lastTs` is
+    // the message's time, not the handshake's - it seeds the monotonicity floor
+    // for the ratchet messages that follow, which would otherwise be free to
+    // claim a time below the very message that opened the session.
+    await x.store.putJson(`session/${senderUid}`, {
+      ...serializeSession(result.session, receivedAt),
+      lastTs: at.ts,
+    });
     // Raised before either delivery path, not after one of them. The session
     // has already been persisted with its weakened property whatever the
     // message turns out to be, so the warning belongs to the handshake rather
@@ -686,7 +692,7 @@ export async function processEnvelope(
   }
   const pending: PendingRequest = {
     text,
-    session: serializeSession(result.session, receivedAt),
+    session: { ...serializeSession(result.session, receivedAt), lastTs: at.ts },
     senderIk: senderIkB64,
     receivedAt,
     // Clamped once, here, so /add does not have to re-derive it later from a
@@ -727,6 +733,12 @@ export async function processRatchetMessage(
       continue;
     }
     const ratchet = deserializeRatchet(stored.ratchet);
+    // Where this session's receive frontier stood before the decrypt, since
+    // ratchetDecrypt advances the state in place on success. Comparing after
+    // tells us whether this message extended the frontier or was served from
+    // the skipped-key cache, which is the difference between "the newest thing
+    // this peer has said" and "one that arrived late".
+    const frontier = { chainId: ratchet.recvChainId, nr: ratchet.nr };
     const result = ratchetDecrypt(ratchet, body);
     if (!result.ok) {
       continue; // not this session (or out-of-order/duplicate): leave it untouched
@@ -736,13 +748,32 @@ export async function processRatchetMessage(
     if (x.epoch !== epoch) {
       return "skip"; // torn down while decrypting; leave queued server-side
     }
-    await x.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
     const payload = decodeAppPayload(result.plaintext);
     if (payload === null) {
+      // The advanced ratchet is still persisted: the message key is spent
+      // whether or not what it protected parsed, and dropping the advance
+      // would leave this session a step behind the peer.
+      await x.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
       x.renderer.discarded("E506");
       return "ack";
     }
-    const at = stampIncoming(payload.sentAt, receivedAt);
+    // Only a message that moved the frontier gets the monotonicity floor, and
+    // only such a message raises it. A late one is bounded by the global clamp
+    // alone, which is the honest limit here: we can say it belongs before the
+    // messages that overtook it, but not how far before.
+    const extendsFrontier =
+      ratchet.recvChainId > frontier.chainId ||
+      (ratchet.recvChainId === frontier.chainId && ratchet.nr > frontier.nr);
+    const at = stampIncoming(
+      payload.sentAt,
+      receivedAt,
+      extendsFrontier ? (stored.lastTs ?? null) : null,
+    );
+    await x.store.putJson(key, {
+      ...stored,
+      ratchet: serializeRatchet(ratchet),
+      ...(extendsFrontier ? { lastTs: at.ts } : {}),
+    });
     const contact = findContactByUid(x, uid);
     const label = contact?.alias ?? formatUid(uid);
     // Adopt a mutual-timer change carried by the peer and announce it.

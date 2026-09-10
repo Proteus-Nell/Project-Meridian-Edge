@@ -147,14 +147,31 @@ const MAX_CLOCK_SKEW_MS = 5 * 60_000;
  * travelled in bounds the damage at "somewhat wrong" instead of "rewrites the
  * order of your history".
  *
+ * `notBefore` is the per-session monotonicity floor: the time already accepted
+ * for the newest message on this ratchet, passed only when THIS message extends
+ * the receive frontier (see processRatchetMessage). It is what stops a peer
+ * shuffling their own messages inside the window above - the global clamp bounds
+ * how wrong one message can be, this bounds how wrong it can be *relative to the
+ * ones before it*. The ratchet's own counters decide what "before" means, so a
+ * legitimately late message is never dragged forward to sit after messages it
+ * really did precede; it simply arrives with no floor.
+ *
  * A null `sentAt` - a peer on a build from before the field existed - falls
  * back to arrival, which is exactly what every message did before it. */
-export function stampIncoming(sentAt: number | null, receivedAt: number): MessageInstant {
+export function stampIncoming(
+  sentAt: number | null,
+  receivedAt: number,
+  notBefore: number | null = null,
+): MessageInstant {
   if (sentAt === null || !Number.isFinite(sentAt)) {
     return { ts: receivedAt, receivedAt };
   }
-  const floor = receivedAt - MAX_QUEUE_AGE_MS;
   const ceiling = receivedAt + MAX_CLOCK_SKEW_MS;
+  const floor = Math.max(receivedAt - MAX_QUEUE_AGE_MS, notBefore ?? -Infinity);
+  // The ceiling is applied last and so wins outright. That only bites when the
+  // floor has somehow overtaken it - a local clock that jumped backwards since
+  // the previous message - and pinning to "about now" is the least surprising
+  // answer there; it is the one case where the floor does not hold.
   return { ts: Math.min(Math.max(sentAt, floor), ceiling), receivedAt };
 }
 
@@ -236,6 +253,12 @@ export interface StoredSession {
   readonly peerIk: string;
   readonly reducedFs: boolean;
   readonly establishedAt: number;
+  /** Display time accepted for the newest message received on this ratchet -
+   * newest by the ratchet's own counters, not by arrival. The floor the next
+   * frontier-extending message is clamped against (stampIncoming). Absent
+   * until the first ratchet message lands, and on sessions stored before this
+   * existed, where it simply means "no floor yet". */
+  readonly lastTs?: number;
 }
 
 export interface PendingRequest {
