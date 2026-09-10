@@ -1,9 +1,10 @@
 import { normalizeUid } from "../parser";
 
-// The encrypted ratchet payload (body). Carries the message text and
-// the sender's current mutual-timer view so a /timer change propagates and
-// both sides converge last-writer-wins; a pure timer-control message has no
-// text. It can also carry `mid` (this message's shared id) and a cooperative
+// The encrypted ratchet payload (body). Carries the message text, the moment
+// the sender sent it (so the recipient dates it from the sender's clock rather
+// than from whenever they collect it), and the sender's current mutual-timer
+// view so a /timer change propagates and both sides converge last-writer-wins;
+// a pure timer-control message has no text. It can also carry `mid` (this message's shared id) and a cooperative
 // deletion directive: `deletes` names peer-side message ids to remove and
 // `deleteSilent` suppresses the peer-side notice (a).
 
@@ -42,6 +43,12 @@ export interface GroupEnvelope {
 export interface AppPayload {
   readonly text: string | null;
   readonly timerSeconds: number | null;
+  /** The sender's clock when they sent this, epoch ms. Carried inside the
+   * ratchet AEAD rather than on the envelope, so the server - which routes an
+   * opaque blob and parses nothing - never learns it, and a relay cannot edit
+   * it. Null from a peer on a build that predates the field; the receiver then
+   * falls back to arrival (see records.ts::stampIncoming). */
+  readonly sentAt: number | null;
   readonly mid: string | null;
   readonly deletes: readonly string[] | null;
   readonly deleteSilent: boolean;
@@ -53,6 +60,7 @@ export function encodeAppPayload(payload: AppPayload): Uint8Array {
   const record: {
     m?: string;
     tmr: number;
+    t?: number;
     id?: string;
     del?: readonly string[];
     ds?: boolean;
@@ -66,6 +74,9 @@ export function encodeAppPayload(payload: AppPayload): Uint8Array {
   };
   if (payload.text !== null) {
     record.m = payload.text;
+  }
+  if (payload.sentAt !== null) {
+    record.t = payload.sentAt;
   }
   if (payload.mid !== null) {
     record.id = payload.mid;
@@ -147,6 +158,7 @@ export function decodeAppPayload(bytes: Uint8Array): AppPayload | null {
   const record = parsed as {
     m?: unknown;
     tmr?: unknown;
+    t?: unknown;
     id?: unknown;
     del?: unknown;
     ds?: unknown;
@@ -158,6 +170,9 @@ export function decodeAppPayload(bytes: Uint8Array): AppPayload | null {
   };
   const text = typeof record.m === "string" ? record.m : null;
   const tmr = typeof record.tmr === "number" && record.tmr > 0 ? record.tmr : null;
+  // Only finiteness is checked here; how far a peer's clock is allowed to
+  // disagree with ours is a receive-side policy, applied once in stampIncoming.
+  const sentAt = typeof record.t === "number" && Number.isFinite(record.t) ? record.t : null;
   const mid = typeof record.id === "string" ? record.id : null;
   const deletes =
     Array.isArray(record.del) && record.del.every((x) => typeof x === "string")
@@ -166,6 +181,7 @@ export function decodeAppPayload(bytes: Uint8Array): AppPayload | null {
   return {
     text,
     timerSeconds: tmr,
+    sentAt,
     mid,
     deletes,
     deleteSilent: record.ds === true,

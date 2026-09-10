@@ -30,7 +30,7 @@ const UID_B = "B".repeat(26);
 const UID_C = "C".repeat(26);
 
 function payloadWith(group: GroupEnvelope | null, text: string | null = "hello"): AppPayload {
-  return { text, timerSeconds: null, mid: null, deletes: null, deleteSilent: false, group };
+  return { text, timerSeconds: null, sentAt: null, mid: null, deletes: null, deleteSilent: false, group };
 }
 
 const GROUP: GroupEnvelope = {

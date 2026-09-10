@@ -43,10 +43,12 @@ import {
   deserializeRatchet,
   serializeRatchet,
   serializeSession,
+  stampIncoming,
   wireToBundle,
 } from "./records";
 import type {
   Contact,
+  MessageInstant,
   PendingRequest,
   StoredGroupMessage,
   StoredMessage,
@@ -229,18 +231,25 @@ export async function sendFirstMessage(
   }
 
   const mid = newMessageId();
+  // Read before the payload is built rather than after the send: this exact
+  // value goes out inside the envelope AND is what the message is recorded
+  // under here, so both ends date it identically instead of from two readings
+  // of one clock either side of a network round trip.
+  const timestamp = x.now();
   // The KX first message predates the AppPayload format and stays its own small
   // JSON record, but it carries the same group fields under the same key names,
   // so a group's very first message to a member does not need a second round
-  // trip to establish a session first.
+  // trip to establish a session first. `t` is the sender's clock, matching the
+  // ratchet payload's field of the same name.
   const payload = new TextEncoder().encode(
     JSON.stringify(
       group === null
-        ? { u: x.identity.uid, m: text, id: mid }
+        ? { u: x.identity.uid, m: text, id: mid, t: timestamp }
         : {
             u: x.identity.uid,
             m: text,
             id: mid,
+            t: timestamp,
             g: group.gid,
             gn: group.name,
             gm: group.members,
@@ -252,12 +261,11 @@ export async function sendFirstMessage(
   const { envelope, session } = initiateKx(x.identity.pub, x.identity.sec, bundle, payload);
   await api.sendMessage(x.token, target.uid, envelope);
 
-  const timestamp = x.now();
   await x.store.putJson(`session/${target.uid}`, serializeSession(session, timestamp));
   // A group send stores its copy once, under the group, rather than once per
   // member: the fan-out is a transport detail, not six conversations.
   if (group === null) {
-    await recordMessage(x, target.uid, "out", text, timestamp, mid);
+    await recordMessage(x, target.uid, "out", text, sentInstant(timestamp), mid);
   }
   if (target.ik === null) {
     x.contacts.set(target.alias, pinKey(x, target, bundleIk));
@@ -311,12 +319,19 @@ export async function sendRatchetMessage(
   // A real message gets a fresh shared id so the peer stores it under the
   // same handle we do and a later /delete can name it on both sides.
   const mid = text !== null ? newMessageId() : null;
-  // The payload carries the message text (if any) and our current mutual-
-  // timer view, so a /timer change propagates over the encrypted body
-  // it can also carry a cooperative deletion directive (control).
+  // Read before the payload it goes into, for the reason given in
+  // sendFirstMessage: one clock reading, shared by the wire and the local
+  // record, rather than two that straddle the send.
+  const timestamp = x.now();
+  // The payload carries the message text (if any), our current mutual-timer
+  // view, so a /timer change propagates over the encrypted body, and the moment
+  // we sent it, so the recipient dates it from our clock instead of from
+  // whenever they happen to collect it. It can also carry a cooperative
+  // deletion directive (control).
   const payload = encodeAppPayload({
     text,
     timerSeconds: target.timerSeconds,
+    sentAt: timestamp,
     mid,
     deletes: control?.deletes ?? null,
     deleteSilent: control?.deleteSilent ?? false,
@@ -331,7 +346,6 @@ export async function sendRatchetMessage(
   // Write-ahead the advanced ratchet before the send: the message
   // key is already consumed, so persisting first prevents any reuse if the
   // send fails.
-  const timestamp = x.now();
   await x.store.putJson(`session/${target.uid}`, {
     ...stored,
     ratchet: serializeRatchet(ratchet),
@@ -343,32 +357,49 @@ export async function sendRatchetMessage(
   // A group copy is stored once under the group by the caller, not once per
   // member, so the per-contact record is skipped for a fan-out leg.
   if (text !== null && control?.group === undefined) {
-    await recordMessage(x, target.uid, "out", text, timestamp, mid);
+    await recordMessage(x, target.uid, "out", text, sentInstant(timestamp), mid);
   }
   await purgeExpired(x);
   return true;
 }
 
+/** The instant for something this device did itself: sending and having it are
+ * one event, so both halves of the stamp are the one clock reading. */
+export function sentInstant(ts: number): MessageInstant {
+  return { ts, receivedAt: ts };
+}
+
 /** Store a message at rest, stamping its disappearing-message
- * deadline from the contact's mutual timer if one is set. */
+ * deadline from the contact's mutual timer if one is set.
+ *
+ * The deadline counts from `at.receivedAt`, never from `at.ts`. The two differ
+ * only for an incoming message that waited in the server's queue, and counting
+ * from the sender's clock there would mean a message with an hour on it, sent
+ * while this device was offline for a day, arrives already expired and is swept
+ * before it can be read. A disappearing timer runs from when a message gets
+ * here, not from when it was written. */
 export async function recordMessage(
   x: ExecutorInternals,
   uid: string,
   dir: "in" | "out",
   text: string,
-  ts: number,
+  at: MessageInstant,
   mid: string | null = null,
 ): Promise<void> {
   const timerSeconds = findContactByUid(x, uid)?.timerSeconds ?? null;
   const base: StoredMessage =
     timerSeconds === null
-      ? { dir, text, ts }
-      : { dir, text, ts, tmrExpiresAt: ts + timerSeconds * 1000 };
-  const record: StoredMessage = mid === null ? base : { ...base, mid };
+      ? { dir, text, ts: at.ts }
+      : { dir, text, ts: at.ts, tmrExpiresAt: at.receivedAt + timerSeconds * 1000 };
+  // Written only when it says something `ts` does not, so an ordinary send and
+  // a message delivered the moment it was sent keep the shape they always had.
+  const stamped: StoredMessage =
+    at.receivedAt === at.ts ? base : { ...base, receivedAt: at.receivedAt };
+  const record: StoredMessage = mid === null ? stamped : { ...stamped, mid };
   // Same-millisecond sends would share a `msg/<uid>/<ts>` key and silently
   // overwrite each other, so collisions get an order-preserving sub-index.
   // record.ts is untouched: timer math and display order stay correct.
-  let key = `msg/${uid}/${ts}`;
+  let key = `msg/${uid}/${at.ts}`;
   if ((await x.store.getJson<StoredMessage>(key)) !== null) {
     let n = 1;
     while ((await x.store.getJson<StoredMessage>(`${key}.${n}`)) !== null) {
@@ -390,10 +421,12 @@ export async function recordGroupMessage(
   dir: "in" | "out",
   sender: string,
   text: string,
-  ts: number,
+  at: MessageInstant,
 ): Promise<void> {
-  const record: StoredGroupMessage = { dir, sender, text, ts };
-  let key = `${GROUP_MSG_PREFIX}${gid}/${ts}`;
+  const base: StoredGroupMessage = { dir, sender, text, ts: at.ts };
+  const record: StoredGroupMessage =
+    at.receivedAt === at.ts ? base : { ...base, receivedAt: at.receivedAt };
+  let key = `${GROUP_MSG_PREFIX}${gid}/${at.ts}`;
   if ((await x.store.getJson<StoredGroupMessage>(key)) !== null) {
     let n = 1;
     while ((await x.store.getJson<StoredGroupMessage>(`${key}.${n}`)) !== null) {
@@ -411,9 +444,10 @@ export function deliverIncomingGroup(
   group: Group,
   senderLabel: string,
   text: string,
+  at: number,
 ): void {
   if (x.activeGroup?.gid === group.gid) {
-    x.renderer.peerMessage(`${group.name}/${senderLabel}`, text);
+    x.renderer.peerMessage(`${group.name}/${senderLabel}`, text, at);
     return;
   }
   x.unread.set(group.gid, (x.unread.get(group.gid) ?? 0) + 1);
@@ -439,15 +473,22 @@ function newMessageId(): string {
  * the sender's conversation is on screen, append it live. Otherwise keep the
  * current view undisturbed: bump the sender's unread mark, post a status-
  * strip notice, and (only when sitting on the home dashboard) refresh it so
- * the new count shows. Either way the message is already stored. */
+ * the new count shows. Either way the message is already stored.
+ *
+ * `at` is the message's own instant, the same one it was just stored under, and
+ * not the clock at print time. For a message arriving live the two are a
+ * moment apart; for a backlog drained after days offline they are days apart,
+ * and printing the second would date every collected message to the drain and
+ * file them all under one wrong day divider. */
 export function deliverIncoming(
   x: ExecutorInternals,
   uid: string,
   label: string,
   text: string,
+  at: number,
 ): void {
   if (isActiveConversation(x, uid)) {
-    x.renderer.peerMessage(label, text);
+    x.renderer.peerMessage(label, text, at);
     return;
   }
   x.unread.set(uid, (x.unread.get(uid) ?? 0) + 1);
@@ -530,6 +571,7 @@ export async function processEnvelope(
 
   let senderUid: string | null = null;
   let text: string | null = null;
+  let sentAt: number | null = null;
   let mid: string | null = null;
   let group: GroupEnvelope | null = null;
   try {
@@ -538,6 +580,7 @@ export async function processEnvelope(
       const record = parsed as {
         u?: unknown;
         m?: unknown;
+        t?: unknown;
         id?: unknown;
         g?: unknown;
         gn?: unknown;
@@ -547,6 +590,9 @@ export async function processEnvelope(
       };
       senderUid = typeof record.u === "string" ? normalizeUid(record.u) : null;
       text = typeof record.m === "string" ? record.m : null;
+      // Finiteness only; how far a peer's clock may disagree with ours is
+      // decided once, in stampIncoming.
+      sentAt = typeof record.t === "number" && Number.isFinite(record.t) ? record.t : null;
       mid = typeof record.id === "string" ? record.id : null;
       // The KX first message carries the same group fields under the same key
       // names as an ordinary ratchet payload does (see sendFirstMessage), so
@@ -563,7 +609,10 @@ export async function processEnvelope(
   }
 
   const senderIkB64 = toBase64(result.senderIk);
-  const timestamp = x.now();
+  const receivedAt = x.now();
+  // What the transcript shows (the sender's clock, clamped) and what deadlines
+  // count from (arrival) part company here for anything that sat in the queue.
+  const at = stampIncoming(sentAt, receivedAt);
   if (x.epoch !== epoch) {
     return "skip"; // torn down while decrypting; leave queued server-side
   }
@@ -584,7 +633,15 @@ export async function processEnvelope(
       x.contacts.set(contact.alias, pinKey(x, contact, senderIkB64));
       await saveContacts(x);
     }
-    await x.store.putJson(`session/${senderUid}`, serializeSession(result.session, timestamp));
+    // The handshake happened when this device processed it, whatever the sender
+    // dated their message: this records our own event, not theirs. `lastTs` is
+    // the message's time, not the handshake's - it seeds the monotonicity floor
+    // for the ratchet messages that follow, which would otherwise be free to
+    // claim a time below the very message that opened the session.
+    await x.store.putJson(`session/${senderUid}`, {
+      ...serializeSession(result.session, receivedAt),
+      lastTs: at.ts,
+    });
     // Raised before either delivery path, not after one of them. The session
     // has already been persisted with its weakened property whatever the
     // message turns out to be, so the warning belongs to the handshake rather
@@ -604,11 +661,11 @@ export async function processEnvelope(
     // over an already-established ratchet. Route it exactly like the ratchet
     // path does rather than flattening add/remove/invite into plain text.
     if (group !== null) {
-      await applyIncomingGroup(x, senderUid, contact.alias, group, text, timestamp);
+      await applyIncomingGroup(x, senderUid, contact.alias, group, text, at);
       return "ack";
     }
-    await recordMessage(x, senderUid, "in", text, timestamp, mid);
-    deliverIncoming(x, senderUid, contact.alias, text);
+    await recordMessage(x, senderUid, "in", text, at, mid);
+    deliverIncoming(x, senderUid, contact.alias, text, at.ts);
     return "ack";
   }
 
@@ -635,9 +692,12 @@ export async function processEnvelope(
   }
   const pending: PendingRequest = {
     text,
-    session: serializeSession(result.session, timestamp),
+    session: { ...serializeSession(result.session, receivedAt), lastTs: at.ts },
     senderIk: senderIkB64,
-    receivedAt: timestamp,
+    receivedAt,
+    // Clamped once, here, so /add does not have to re-derive it later from a
+    // claim it can no longer weigh against the moment the message landed.
+    ...(at.ts === receivedAt ? {} : { sentAt: at.ts }),
     mid,
   };
   await x.store.putJson(`pending/${senderUid}`, pending);
@@ -673,21 +733,47 @@ export async function processRatchetMessage(
       continue;
     }
     const ratchet = deserializeRatchet(stored.ratchet);
+    // Where this session's receive frontier stood before the decrypt, since
+    // ratchetDecrypt advances the state in place on success. Comparing after
+    // tells us whether this message extended the frontier or was served from
+    // the skipped-key cache, which is the difference between "the newest thing
+    // this peer has said" and "one that arrived late".
+    const frontier = { chainId: ratchet.recvChainId, nr: ratchet.nr };
     const result = ratchetDecrypt(ratchet, body);
     if (!result.ok) {
       continue; // not this session (or out-of-order/duplicate): leave it untouched
     }
     const uid = key.slice("session/".length);
-    const timestamp = x.now();
+    const receivedAt = x.now();
     if (x.epoch !== epoch) {
       return "skip"; // torn down while decrypting; leave queued server-side
     }
-    await x.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
     const payload = decodeAppPayload(result.plaintext);
     if (payload === null) {
+      // The advanced ratchet is still persisted: the message key is spent
+      // whether or not what it protected parsed, and dropping the advance
+      // would leave this session a step behind the peer.
+      await x.store.putJson(key, { ...stored, ratchet: serializeRatchet(ratchet) });
       x.renderer.discarded("E506");
       return "ack";
     }
+    // Only a message that moved the frontier gets the monotonicity floor, and
+    // only such a message raises it. A late one is bounded by the global clamp
+    // alone, which is the honest limit here: we can say it belongs before the
+    // messages that overtook it, but not how far before.
+    const extendsFrontier =
+      ratchet.recvChainId > frontier.chainId ||
+      (ratchet.recvChainId === frontier.chainId && ratchet.nr > frontier.nr);
+    const at = stampIncoming(
+      payload.sentAt,
+      receivedAt,
+      extendsFrontier ? (stored.lastTs ?? null) : null,
+    );
+    await x.store.putJson(key, {
+      ...stored,
+      ratchet: serializeRatchet(ratchet),
+      ...(extendsFrontier ? { lastTs: at.ts } : {}),
+    });
     const contact = findContactByUid(x, uid);
     const label = contact?.alias ?? formatUid(uid);
     // Adopt a mutual-timer change carried by the peer and announce it.
@@ -701,13 +787,13 @@ export async function processRatchetMessage(
       // A group message is still an ordinary pairwise message; only its
       // handling differs, and only after the pairwise ratchet has already
       // authenticated who sent it.
-      await applyIncomingGroup(x, uid, label, payload.group, payload.text, timestamp);
+      await applyIncomingGroup(x, uid, label, payload.group, payload.text, at);
       await purgeExpired(x);
       return "ack";
     }
     if (payload.text !== null) {
-      await recordMessage(x, uid, "in", payload.text, timestamp, payload.mid);
-      deliverIncoming(x, uid, label, payload.text);
+      await recordMessage(x, uid, "in", payload.text, at, payload.mid);
+      deliverIncoming(x, uid, label, payload.text, at.ts);
     }
     await purgeExpired(x);
     return "ack";
@@ -738,7 +824,7 @@ export async function applyIncomingGroup(
   senderLabel: string,
   envelope: GroupEnvelope,
   text: string | null,
-  timestamp: number,
+  at: MessageInstant,
 ): Promise<void> {
   const self = x.identity?.uid ?? null;
   if (self === null) {
@@ -800,7 +886,9 @@ export async function applyIncomingGroup(
       gid: envelope.gid,
       name,
       members: envelope.members,
-      createdAt: timestamp,
+      // When this device joined, which is a local fact: an invite that spent a
+      // week in the queue did not put us in the group a week ago.
+      createdAt: at.receivedAt,
       active: true,
     };
     await saveGroup(x, group);
@@ -816,8 +904,8 @@ export async function applyIncomingGroup(
     }
     await noteUnknownMembers(x, group);
     if (text !== null) {
-      await recordGroupMessage(x, group.gid, "in", senderLabel, text, timestamp);
-      deliverIncomingGroup(x, group, senderLabel, text);
+      await recordGroupMessage(x, group.gid, "in", senderLabel, text, at);
+      deliverIncomingGroup(x, group, senderLabel, text, at.ts);
     }
     return;
   }
@@ -884,8 +972,8 @@ export async function applyIncomingGroup(
       if (text === null) {
         return;
       }
-      await recordGroupMessage(x, existing.gid, "in", senderLabel, text, timestamp);
-      deliverIncomingGroup(x, existing, senderLabel, text);
+      await recordGroupMessage(x, existing.gid, "in", senderLabel, text, at);
+      deliverIncomingGroup(x, existing, senderLabel, text, at.ts);
       return;
     }
   }

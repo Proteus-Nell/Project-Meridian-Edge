@@ -49,15 +49,19 @@ export async function doAdd(
     // Accepting a held first-contact message: promote its session
     // and show the message that was queued behind the request line.
     await x.store.putJson(`session/${uid}`, pending.session);
-    await recordMessage(x, uid, "in", pending.text, pending.receivedAt, pending.mid ?? null);
+    // Shown under the sender's clock where they gave one (already clamped when
+    // the request was held), while the disappearing timer still counts from
+    // when this device got it.
+    const at = { ts: pending.sentAt ?? pending.receivedAt, receivedAt: pending.receivedAt };
+    await recordMessage(x, uid, "in", pending.text, at, pending.mid ?? null);
     await x.store.deleteKey(`pending/${uid}`);
     x.contacts.set(name, pinKey(x, contact, pending.senderIk));
     await saveContacts(x);
     await refreshEmblemState(x); // the held request is resolved
     x.renderer.event("success", `Added contact ${name} (${formatUid(uid)}).`);
-    // Held since it arrived, so it is shown with the time it arrived - the
-    // same instant recordMessage just stored it under.
-    x.renderer.peerMessage(name, pending.text, pending.receivedAt);
+    // The same instant recordMessage just stored it under, so the held line and
+    // the one a later view rebuild prints agree.
+    x.renderer.peerMessage(name, pending.text, at.ts);
     if (pending.session.reducedFs) {
       x.renderer.event(
         "warning",

@@ -150,8 +150,16 @@ export function wireTwoPeerNetwork(): { outbox: OutboxEntry[] } {
 /** Register one real Executor against the network `wireTwoPeerNetwork()` set
  * up. Its identity key and uploaded signed prekey are captured into the
  * shared bundle registry, so the OTHER peer's `fetchBundle` call returns
- * them exactly as a real server would. */
-export async function createPeer(label = "peer"): Promise<Peer> {
+ * them exactly as a real server would.
+ *
+ * `now` drives BOTH the executor and its renderer, which is what lets a test
+ * put two peers days apart: the two read the same clock in production (main.ts
+ * hands neither its own), so a fixture that moved only one would prove a
+ * timestamp correct against a clock the display never used. */
+export async function createPeer(
+  label = "peer",
+  now: () => number = () => Date.now(),
+): Promise<Peer> {
   if (currentBundleParts === null) {
     throw new Error("wireTwoPeerNetwork() must be called before createPeer()");
   }
@@ -166,10 +174,10 @@ export async function createPeer(label = "peer"): Promise<Peer> {
     FAST_ARGON2,
   );
   const executor = new Executor(
-    new Renderer(output, undefined, null, chrome),
+    new Renderer(output, () => new Date(now()), null, chrome),
     shell,
     store,
-    undefined,
+    now,
     chrome,
   );
 

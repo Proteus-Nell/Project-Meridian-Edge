@@ -365,12 +365,17 @@ Deletion is at-rest, local-only, and best-effort. Peer deletion is cooperative,
 nothing stops a screenshot, and browser storage deletion is not forensic
 erasure.
 
-Every message carries the time it was sent or received, read from this device's
-clock and never transmitted, so two devices can honestly disagree about a
-message's time. Where the conversation crosses into a new day, a dated line
-opens it, so a thread picked up a week later reads as a week later rather than
-as one unbroken run of times. Turn both off with
-[`/settings timestamps off`](#appearance).
+Every message is shown under the time its sender's clock read when they wrote
+it, so a message collected days later still reads as the night it was sent. That
+time rides inside the encrypted payload, which means the server never sees it
+and cannot alter it - but it is still the sender's clock, so a time from a device
+set wrongly is clamped into the window the envelope could actually have travelled
+in rather than believed outright. Deadlines are the deliberate exception and
+count from arrival: a disappearing timer starts when a message reaches you, so
+one sent while you were offline is not already expired when you open the app.
+Where the conversation crosses into a new day, a dated line opens it, so a thread
+picked up a week later reads as a week later rather than as one unbroken run of
+times. Turn both off with [`/settings timestamps off`](#appearance).
 
 ### Appearance
 

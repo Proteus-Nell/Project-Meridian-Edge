@@ -113,6 +113,68 @@ export function favouriteMark(contact: Contact): string {
   return contact.favourite ? "*" : " ";
 }
 
+/** When a message happened, as the two instants a receiver has to keep apart.
+ *
+ * `ts` is what the transcript shows and sorts by: the sender's own clock, so a
+ * message written on Thursday still reads as Thursday when it is finally
+ * collected on Saturday. `receivedAt` is when this device actually got it, and
+ * it is what every deadline counts from - a disappearing timer must not have
+ * been running while the envelope sat in the server's queue, or a message with
+ * an hour on it would arrive already expired and be purged before it is read.
+ *
+ * The two are equal for anything this device sent, and for anything received
+ * from a peer old enough not to send a time at all. */
+export interface MessageInstant {
+  readonly ts: number;
+  readonly receivedAt: number;
+}
+
+/** The queue TTL, past which an envelope cannot legitimately still have been
+ * undelivered. Mirrors MESSAGE_TTL_SECONDS in server/app/constants.py. */
+const MAX_QUEUE_AGE_MS = 14 * 86_400_000;
+
+/** Allowance for an honestly-fast peer clock, so someone a minute ahead is not
+ * dragged backwards on every message they send. */
+const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+
+/** Decide what instant a received message is shown and sorted under.
+ *
+ * `sentAt` travels inside the ratchet AEAD, so it is authenticated as the
+ * peer's - but authenticated is not honest, and it is still THEIR clock. Left
+ * unclamped, a skewed or malicious sender can park a message at the top of the
+ * transcript indefinitely, or backdate one far enough to slip past the local
+ * retention cap. Clamping to the window the envelope could actually have
+ * travelled in bounds the damage at "somewhat wrong" instead of "rewrites the
+ * order of your history".
+ *
+ * `notBefore` is the per-session monotonicity floor: the time already accepted
+ * for the newest message on this ratchet, passed only when THIS message extends
+ * the receive frontier (see processRatchetMessage). It is what stops a peer
+ * shuffling their own messages inside the window above - the global clamp bounds
+ * how wrong one message can be, this bounds how wrong it can be *relative to the
+ * ones before it*. The ratchet's own counters decide what "before" means, so a
+ * legitimately late message is never dragged forward to sit after messages it
+ * really did precede; it simply arrives with no floor.
+ *
+ * A null `sentAt` - a peer on a build from before the field existed - falls
+ * back to arrival, which is exactly what every message did before it. */
+export function stampIncoming(
+  sentAt: number | null,
+  receivedAt: number,
+  notBefore: number | null = null,
+): MessageInstant {
+  if (sentAt === null || !Number.isFinite(sentAt)) {
+    return { ts: receivedAt, receivedAt };
+  }
+  const ceiling = receivedAt + MAX_CLOCK_SKEW_MS;
+  const floor = Math.max(receivedAt - MAX_QUEUE_AGE_MS, notBefore ?? -Infinity);
+  // The ceiling is applied last and so wins outright. That only bites when the
+  // floor has somehow overtaken it - a local clock that jumped backwards since
+  // the previous message - and pinning to "about now" is the least surprising
+  // answer there; it is the one case where the floor does not hold.
+  return { ts: Math.min(Math.max(sentAt, floor), ceiling), receivedAt };
+}
+
 /** A locally stored message record. Written on send and on receive; the live
  * transcript renders as messages arrive, so this is at-rest history for view
  * rebuilds, subject to the disappearing timer and local purge (-5.3). */
@@ -120,6 +182,12 @@ export interface StoredMessage {
   readonly dir: "in" | "out";
   readonly text: string;
   readonly ts: number;
+  /** When this device received the message, when that differs from `ts` - i.e.
+   * an incoming message that spent time queued. Absent means "same as `ts`",
+   * which covers everything sent from here and every record written before the
+   * sender's clock was carried. Deadlines count from this, never from `ts`
+   * (see MessageInstant). */
+  readonly receivedAt?: number;
   /** Absolute epoch-ms deletion deadline from the mutual timer, if any. */
   readonly tmrExpiresAt?: number;
   /** Shared per-message id (random 128-bit hex), carried in the encrypted
@@ -146,6 +214,10 @@ export interface StoredGroupMessage {
   readonly sender: string;
   readonly text: string;
   readonly ts: number;
+  /** As StoredMessage.receivedAt: present only when arrival differs from `ts`.
+   * Group history has no mutual timer, but the retention cap counts from here
+   * so a backdated fan-out leg cannot be swept the moment it lands. */
+  readonly receivedAt?: number;
 }
 
 /** Local retention cap: personal, never transmitted, may be
@@ -181,6 +253,12 @@ export interface StoredSession {
   readonly peerIk: string;
   readonly reducedFs: boolean;
   readonly establishedAt: number;
+  /** Display time accepted for the newest message received on this ratchet -
+   * newest by the ratchet's own counters, not by arrival. The floor the next
+   * frontier-extending message is clamped against (stampIncoming). Absent
+   * until the first ratchet message lands, and on sessions stored before this
+   * existed, where it simply means "no floor yet". */
+  readonly lastTs?: number;
 }
 
 export interface PendingRequest {
@@ -188,6 +266,11 @@ export interface PendingRequest {
   readonly session: StoredSession;
   readonly senderIk: string;
   readonly receivedAt: number;
+  /** The already-clamped display instant (stampIncoming) for the held message,
+   * when the sender carried a clock. Absent on a held request from a peer that
+   * did not, and on ones stored before the field existed: both fall back to
+   * `receivedAt`, which is what they were shown under. */
+  readonly sentAt?: number;
   /** Shared id of the held first message, if it carried one (a). */
   readonly mid?: string | null;
 }
