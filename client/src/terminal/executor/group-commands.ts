@@ -25,7 +25,7 @@ import {
   saveGroup,
 } from "./groups";
 import type { Group } from "./groups";
-import { fanOutToGroup, recordGroupMessage } from "./messaging";
+import { fanOutToGroup, recordGroupMessage, sentInstant } from "./messaging";
 import { MAX_GROUP_MEMBERS, isGroupName } from "./payload";
 import type { StoredGroupMessage } from "./records";
 import { renderGroupConversation, renderHome } from "./views";
@@ -421,7 +421,7 @@ export async function sendGroupText(
   }
   const result = await fanOutToGroup(x, fresh, text, "msg", null);
   if (result.delivered > 0) {
-    await recordGroupMessage(x, fresh.gid, "out", "you", text, x.now());
+    await recordGroupMessage(x, fresh.gid, "out", "you", text, sentInstant(x.now()));
     x.chrome.confirmSent();
   } else {
     x.chrome.rejectSent();

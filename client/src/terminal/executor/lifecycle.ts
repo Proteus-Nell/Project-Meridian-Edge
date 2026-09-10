@@ -48,9 +48,16 @@ export async function purgeExpired(x: ExecutorInternals): Promise<void> {
   }
   const cap = (await x.store.getJson<PurgeSettings>("settings/purge"))?.seconds ?? null;
   const now = x.now();
-  const expired = (record: { ts: number; tmrExpiresAt?: number }): boolean => {
+  // Both deadlines count from when this device got the message, not from the
+  // sender's clock: a message written days before it could be collected has not
+  // been sitting in local storage for those days, and sweeping it on arrival
+  // would delete it before it was ever read. `receivedAt` is absent on anything
+  // sent from here and on records written before it existed, where `ts` is the
+  // arrival time and the fallback is exact.
+  const expired = (record: { ts: number; receivedAt?: number; tmrExpiresAt?: number }): boolean => {
     const timerExpired = record.tmrExpiresAt !== undefined && now >= record.tmrExpiresAt;
-    return timerExpired || (cap !== null && now >= record.ts + cap * 1000);
+    const heldSince = record.receivedAt ?? record.ts;
+    return timerExpired || (cap !== null && now >= heldSince + cap * 1000);
   };
   for (const msgKey of await x.store.listKeys("msg/")) {
     const record = await x.store.getJson<StoredMessage>(msgKey);

@@ -10,6 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../src/net/api";
+import type { StoredMessage } from "../src/terminal/executor/records";
 import { addContact, createPeer, deliver, run, wireTwoPeerNetwork } from "./helpers/two-executor";
 
 vi.mock("../src/net/api", async () => {
@@ -128,6 +129,151 @@ describe("two real executors", () => {
       "redrawn line",
     );
     expect(restamped).toContain(stamp);
+  });
+
+  it("dates a collected message from the sender's clock, not from the collection", async () => {
+    // The reported bug, as its own timeline: Alice writes at 01:39 on Thursday
+    // 3 September and Bob, offline, does not open the app until 17:25 on
+    // Saturday the 5th. Before the send time travelled inside the payload,
+    // every one of those queued messages was stamped with the moment the
+    // inbox drained, so a two-day-old conversation read as though all of it
+    // had happened at once, under a divider dated the wrong day.
+    const { outbox } = wireTwoPeerNetwork();
+    const SENT = new Date(2026, 8, 3, 1, 39, 12).getTime();
+    const REPLIED = new Date(2026, 8, 3, 1, 41, 3).getTime();
+    const COLLECTED = new Date(2026, 8, 5, 17, 25, 40).getTime();
+
+    const aliceClock = { at: SENT };
+    const bobClock = { at: COLLECTED };
+    const alice = await createPeer("alice", () => aliceClock.at);
+    const bob = await createPeer("bob", () => bobClock.at);
+    await addContact(alice, bob, "bob");
+    await addContact(bob, alice, "alice");
+    await run(bob, "/chat alice");
+
+    // Two messages, because they take different paths in: the first is the
+    // PQ-KX handshake, the second an ordinary ratchet MSG, and each carries
+    // and parses the send time in its own code.
+    await run(alice, "/chat bob are you awake");
+    aliceClock.at = REPLIED;
+    await run(alice, "still awake?");
+    expect(outbox).toHaveLength(2);
+
+    // Bob has been offline throughout; both envelopes drain into him now.
+    for (const entry of outbox) {
+      await deliver(bob, entry.envelope);
+    }
+
+    const stored = [];
+    for (const key of (await bob.store.listKeys("msg/")).sort()) {
+      stored.push(must(await bob.store.getJson<StoredMessage>(key), "stored message"));
+    }
+    expect(stored.map((r) => r.ts), "shown under the sender's clock").toEqual([SENT, REPLIED]);
+    expect(
+      stored.map((r) => r.receivedAt),
+      "arrival kept alongside it, for the deadlines that must count from here",
+    ).toEqual([COLLECTED, COLLECTED]);
+
+    // Asserted on the conversation lines themselves, not the whole transcript:
+    // Bob's own system events are stamped from his clock and legitimately read
+    // 17:25:40, since they are things that really did happen at the drain.
+    const line = (needle: string): string =>
+      must(bob.output.lines.filter((l) => l.includes(needle)).at(-1), needle);
+    expect(line("are you awake")).toContain("01:39:12");
+    expect(line("still awake?")).toContain("01:41:03");
+    expect(line("are you awake"), "not the moment it was collected").not.toContain("17:25:40");
+    expect(line("still awake?"), "not the moment it was collected").not.toContain("17:25:40");
+
+    const text = bob.output.text();
+    expect(text).toContain("-- Thursday, 3 September 2026 --");
+    expect(text, "no message happened on the day they were collected").not.toContain(
+      "-- Saturday, 5 September 2026 --",
+    );
+  });
+
+  it("clamps a peer's clock to the window the envelope could have travelled in", async () => {
+    // The send time is authenticated as the peer's - it rides inside the
+    // ratchet AEAD - but authenticated is not honest, and a peer whose clock
+    // is wrong (or chosen) must not be able to pin a message to the top of the
+    // transcript or backdate one past the local retention cap.
+    const { outbox } = wireTwoPeerNetwork();
+    const COLLECTED = new Date(2026, 8, 5, 17, 25, 40).getTime();
+    const DAY = 86_400_000;
+
+    const aliceClock = { at: COLLECTED };
+    const bobClock = { at: COLLECTED };
+    const alice = await createPeer("alice", () => aliceClock.at);
+    const bob = await createPeer("bob", () => bobClock.at);
+    await addContact(alice, bob, "bob");
+    await addContact(bob, alice, "alice");
+
+    // Establish the session while the two agree, so what follows is measuring
+    // the clamp rather than a handshake.
+    await run(alice, "/chat bob hello");
+    await deliver(bob, must(outbox[0]).envelope);
+
+    aliceClock.at = COLLECTED + 400 * DAY; // a clock years fast
+    await run(alice, "from the future");
+    aliceClock.at = COLLECTED - 400 * DAY; // and one years slow
+    await run(alice, "from the past");
+    await deliver(bob, must(outbox[1]).envelope);
+    await deliver(bob, must(outbox[2]).envelope);
+
+    const byText = new Map<string, StoredMessage>();
+    for (const key of await bob.store.listKeys("msg/")) {
+      const record = must(await bob.store.getJson<StoredMessage>(key), "stored message");
+      byText.set(record.text, record);
+    }
+    expect(
+      must(byText.get("from the future")).ts,
+      "a fast clock buys five minutes of skew allowance and no more",
+    ).toBe(COLLECTED + 5 * 60_000);
+    expect(
+      must(byText.get("from the past")).ts,
+      "and a slow one reaches back no further than the queue TTL",
+    ).toBe(COLLECTED - 14 * DAY);
+  });
+
+  it("runs a disappearing timer from arrival, so a queued message is not dead on arrival", async () => {
+    // The trap in dating a message from the sender: a one-hour timer on a
+    // message that spent two days in the queue would already have expired
+    // before it was ever decrypted, and the purge that runs at the end of
+    // delivery would sweep it before Bob could read it. Deadlines count from
+    // arrival for exactly this reason.
+    const { outbox } = wireTwoPeerNetwork();
+    const SENT = new Date(2026, 8, 3, 1, 39, 12).getTime();
+    const COLLECTED = new Date(2026, 8, 5, 17, 25, 40).getTime();
+
+    const aliceClock = { at: SENT };
+    const bobClock = { at: COLLECTED };
+    const alice = await createPeer("alice", () => aliceClock.at);
+    const bob = await createPeer("bob", () => bobClock.at);
+    await addContact(alice, bob, "bob");
+    await addContact(bob, alice, "alice");
+    await run(bob, "/chat alice");
+
+    // Session first (the KX message carries no timer), then the timer, then
+    // the message that has to survive the trip.
+    await run(alice, "/chat bob hello");
+    await deliver(bob, must(outbox[0]).envelope);
+    await run(alice, "/timer bob 1h");
+    await run(alice, "burn after reading");
+
+    for (const entry of outbox.slice(1)) {
+      await deliver(bob, entry.envelope);
+    }
+
+    const stored = [];
+    for (const key of await bob.store.listKeys("msg/")) {
+      stored.push(must(await bob.store.getJson<StoredMessage>(key), "stored message"));
+    }
+    const held = must(
+      stored.find((r) => r.text === "burn after reading"),
+      "the timed message survived delivery",
+    );
+    expect(held.ts, "still dated when it was written").toBe(SENT);
+    expect(held.tmrExpiresAt, "but its hour starts when it got here").toBe(COLLECTED + 3_600_000);
+    expect(bob.output.text()).toContain("burn after reading");
   });
 
   it("dates every day of a rebuilt conversation from the stored records", async () => {
