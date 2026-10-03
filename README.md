@@ -569,9 +569,13 @@ terminates TLS.
 
 ```
 cp .env.example .env   # fill in POSTGRES_PASSWORD, MERIDIAN_EDGE_WS_ORIGINS, TLS_CERT_DIR
-docker compose build
-docker compose up -d
+docker compose pull              # the images CI publishes to ghcr.io
+docker compose up -d --no-build  # or `docker compose up -d --build` to build here
 ```
+
+CI builds the server and edge images for every commit on `main` that passes
+its gates and publishes them to the GitHub Container Registry, for amd64 and
+arm64, so the host downloads them rather than building.
 
 **[DEPLOY.md](DEPLOY.md) carries the full instructions:** the three deployment
 routes, TLS certificates, shipping updates, passing PQC/TLS screenings,
@@ -580,5 +584,6 @@ operations, scaling limits, and troubleshooting.
 the dev servers and multi-user local testing. See [SECURITY.md](SECURITY.md) for
 the disclosure contact.
 
-> Nobody has build-tested this config against a live Docker daemon. Review it
-> before a real deploy.
+> CI builds all three images on every pull request, so a Dockerfile that stops
+> building fails before it merges. Running the stack is not part of CI: review
+> the compose files before a real deploy.

@@ -7,7 +7,11 @@
 # No OpenSSL note needed here (unlike proxy.Dockerfile): Caddy 2.9+ ships the
 # X25519MLKEM768 hybrid group in its own Go TLS stack.
 
-FROM node:22-slim AS client-build
+# The bundle is static HTML, CSS and JS, identical on every architecture, so it
+# is built on the build machine's own platform. A multi-arch build (the image
+# workflow publishes amd64 and arm64) then runs npm once, natively, instead of
+# once per target under emulation; only the COPY below is per-platform.
+FROM --platform=$BUILDPLATFORM node:22-slim AS client-build
 WORKDIR /build
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
