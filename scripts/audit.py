@@ -9,6 +9,8 @@ Scope:
   - server/app/**/*.py                     (Python application code)
   - deploy/nginx.conf, deploy/Caddyfile,
     client/vite.config.ts                  (the page-level CSP, cross-checked)
+  - deploy/nginx.conf, deploy/Caddyfile    (the request-body cap, checked against
+                                            the largest valid request)
 
 Out of scope by design: the top-level bench/ AND client/src/bench/. Both hold
 the classical baselines (X25519, Ed25519) that exist only as the B1/B2
@@ -19,6 +21,7 @@ client/src/bench/ so Vite/tsc/vitest see it, but it is not application code.
 from __future__ import annotations
 
 import re
+import runpy
 import sys
 from pathlib import Path
 
@@ -144,6 +147,63 @@ def check_csp() -> list[str]:
     return findings
 
 
+# The request-body cap is written in both edge configs, and it has to admit the
+# largest body an honest client sends. It once read 64k, MAX_PAYLOAD_BYTES itself,
+# which compared a cap on the HTTP body with a cap on the envelope inside it:
+# envelopes travel base64-encoded in JSON, so nginx refused the largest messages,
+# and every 50-key prekey batch at registration, before the app saw them.
+BODY_CAP_SOURCES: dict[str, str] = {
+    "deploy/nginx.conf": r"client_max_body_size\s+(\d+)([km]?);",
+    "deploy/Caddyfile": r"max_size\s+(\d+)(KiB|MiB)\b",
+}
+
+_BODY_CAP_UNITS = {"": 1, "k": 1024, "m": 1024 * 1024, "KiB": 1024, "MiB": 1024 * 1024}
+
+
+def largest_valid_body() -> int:
+    """The biggest request body an honest client sends to /v1, as compact JSON
+    on the wire: a maximum-size envelope addressed to a canonical UID, or a full
+    batch of one-time prekeys with its root signature. Derived from the server's
+    own constants, so raising either limit moves this with it."""
+    consts = runpy.run_path(str(ROOT / "server" / "app" / "constants.py"))
+
+    def b64(n: int) -> int:
+        return 4 * ((n + 2) // 3)
+
+    message = (
+        len('{"recipient_uid":"') + consts["UID_CHARS"] + len('","envelope":"')
+        + b64(consts["MAX_PAYLOAD_BYTES"]) + len('"}')
+    )
+    batch = consts["OPK_BATCH_MAX"]
+    prekeys = (
+        len('{"opks":[') + batch * (b64(consts["ML_KEM_768_PUBKEY_BYTES"]) + 2) + (batch - 1)
+        + len('],"root_sig":"') + b64(consts["ML_DSA_65_SIG_BYTES"]) + len('"}')
+    )
+    return max(message, prekeys)
+
+
+def check_body_caps() -> list[str]:
+    """Both edges must declare one body cap, the same one, admitting the
+    largest valid body."""
+    caps: dict[str, int] = {}
+    findings: list[str] = []
+    for rel, pattern in BODY_CAP_SOURCES.items():
+        found = re.search(pattern, (ROOT / rel).read_text(encoding="utf-8", errors="replace"))
+        if found is None:
+            findings.append(f"{rel}: no request-body cap found")
+            continue
+        caps[rel] = int(found.group(1)) * _BODY_CAP_UNITS[found.group(2)]
+    if len(set(caps.values())) > 1:
+        findings.append(f"request-body caps disagree: {caps}")
+    largest = largest_valid_body()
+    for rel, cap in caps.items():
+        if cap < largest:
+            findings.append(
+                f"{rel}: request-body cap {cap} bytes refuses a valid {largest}-byte request"
+            )
+    return findings
+
+
 def scan(files: list[Path], patterns: list[str]) -> list[str]:
     compiled = [re.compile(p, re.MULTILINE) for p in patterns]
     findings: list[str] = []
@@ -174,6 +234,7 @@ def main() -> int:
     findings += scan(client_files, CLIENT_FORBIDDEN)
     findings += scan(server_files, SERVER_FORBIDDEN)
     findings += check_csp()
+    findings += check_body_caps()
 
     if findings:
         print(f"AUDIT FAILED: {len(findings)} finding(s)")
@@ -183,7 +244,8 @@ def main() -> int:
     print(
         f"audit clean: {len(client_files)} client file(s), "
         f"{len(server_files)} server file(s) scanned, "
-        f"{len(CSP_SOURCES)} CSP source(s) agree"
+        f"{len(CSP_SOURCES)} CSP source(s) agree, "
+        f"edge body caps admit the largest valid request ({largest_valid_body()} bytes)"
     )
     return 0
 

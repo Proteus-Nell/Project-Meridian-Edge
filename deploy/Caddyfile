@@ -58,6 +58,14 @@
 	# /v1/ws transparently and preserves the Origin header the backend checks
 	# against MERIDIAN_EDGE_WS_ORIGINS.
 	handle /v1/* {
+		# The same body cap as nginx.conf's client_max_body_size, derived the
+		# same way: the largest request an honest client sends is a maximum-size
+		# envelope, base64 in JSON, at 87,444 bytes. Without a cap here the
+		# backend reads any body whole before it can refuse it. scripts/audit.py
+		# keeps the two equal and above that largest body.
+		request_body {
+			max_size 96KiB
+		}
 		reverse_proxy {$MERIDIAN_EDGE_BACKEND:server:8000} {
 			header_down -Strict-Transport-Security
 		}
