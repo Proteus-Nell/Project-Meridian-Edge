@@ -10,8 +10,8 @@
 #
 #   docker compose -f docker-compose.caddy.yml up -d --build
 #
-# Requires MERIDIAN_EDGE_DOMAIN (public hostname) in .env alongside the vars
-# from .env.example. Ports 80 + 443 must be reachable for the ACME challenge,
+# Requires MERIDIAN_EDGE_DOMAIN (public hostname) and ACME_EMAIL (the ACME
+# account's contact address) in .env alongside the vars from .env.example. Ports 80 + 443 must be reachable for the ACME challenge,
 # and DNS for MERIDIAN_EDGE_DOMAIN must already point at this host.
 
 services:
@@ -70,7 +70,7 @@ services:
       - server
     environment:
       MERIDIAN_EDGE_DOMAIN: ${MERIDIAN_EDGE_DOMAIN:?set MERIDIAN_EDGE_DOMAIN in .env, e.g. chat.example.com}
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env, e.g. you@example.com}
     ports:
       - "80:80"
       - "443:443"

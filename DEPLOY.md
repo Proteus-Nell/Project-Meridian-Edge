@@ -196,7 +196,7 @@ server vars above from them and **refuses to start** if one is missing.
 | `MERIDIAN_EDGE_WS_ORIGINS` | server | your exact public origin(s); gates the WebSocket upgrade and login (newer alias: `MERIDIAN_EDGE_ALLOWED_ORIGINS`) |
 | `TLS_CERT_DIR` | proxy (Route A) | host dir holding `fullchain.pem` + `privkey.pem`; unused for Caddy |
 | `MERIDIAN_EDGE_TRUSTED_PROXY_IPS` | server | optional. Narrows which peers may set `X-Forwarded-For`; defaults to the private ranges a Compose network draws from |
-| `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Route B) | public hostname + ACME contact |
+| `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Routes B and C) | public hostname + ACME contact address. **Both required**: Caddy will not start without an ACME email |
 
 Never commit `.env`, `./tls/`, or any private key: all are git-ignored.
 
@@ -403,7 +403,7 @@ cp .env.example .env
 #    POSTGRES_PASSWORD=<long random>
 #    MERIDIAN_EDGE_WS_ORIGINS=https://chat.example.com
 #    MERIDIAN_EDGE_DOMAIN=chat.example.com
-#    ACME_EMAIL=you@example.com     (TLS_CERT_DIR is unused here)
+#    ACME_EMAIL=you@example.com     (required; TLS_CERT_DIR is unused here)
 
 # 2. DNS points at this host; ports 80 + 443 reachable (80 for the ACME challenge)
 
@@ -478,7 +478,8 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-**Caddy**: reuse `deploy/Caddyfile`; override the backend to localhost:
+**Caddy**: reuse `deploy/Caddyfile`; override the backend to localhost.
+`ACME_EMAIL` is required here too, since Caddy will not start without it:
 
 ```bash
 sudo tee /etc/caddy/env >/dev/null <<'ENV'
