@@ -1,10 +1,21 @@
 # CI gates: dependency audits, the classical-crypto grep,
-# the parser fuzz test, and the full test suite - all blocking.
+# the parser fuzz test, and the full test suite - all blocking. Once they pass,
+# the production images are built, and on main and v* tags published to the
+# GitHub Container Registry so a server can pull them instead of building
+# (DEPLOY.md section 9).
 name: CI
 
 on:
   push:
   pull_request:
+  # Republish main's images (or a tag's) without a new commit, e.g. to pick up
+  # a patched base image.
+  workflow_dispatch:
+
+# Read-only unless a job asks for more; only the images job does, and only to
+# write packages.
+permissions:
+  contents: read
 
 jobs:
   audits:
@@ -57,3 +68,85 @@ jobs:
       - run: mypy --strict app
       - run: pytest -q
       - run: pip install pip-audit && pip-audit -r requirements.txt -r requirements-dev.txt
+
+  images:
+    name: image (${{ matrix.image }})
+    # Nothing is built, let alone published, from a commit that failed a gate.
+    needs: [audits, client, server]
+    # A pull request builds every image without publishing, which catches a
+    # broken Dockerfile before it merges. main and v* tags publish. A push to
+    # any other branch skips this, since its pull request builds it anyway.
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # One publish per image and ref at a time, in commit order: two quick
+    # merges could otherwise finish out of order and leave `latest` on the
+    # older one. Superseded pull request builds are simply cancelled.
+    concurrency:
+      group: images-${{ github.ref }}-${{ matrix.image }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: server
+            context: server
+            dockerfile: server/Dockerfile
+          - image: caddy
+            context: .
+            dockerfile: deploy/caddy.Dockerfile
+          - image: proxy
+            context: .
+            dockerfile: deploy/proxy.Dockerfile
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+      IMAGE_NAME: meridian-edge-${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      # Registry paths must be lowercase, and the owner's name is not.
+      - name: image path
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}" >> "$GITHUB_ENV"
+      # arm64 alongside amd64, so the same tag runs on either kind of server.
+      # The client bundle is built natively once (see caddy.Dockerfile); only
+      # the server's pip install and nginx's user setup run emulated.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: log in to ghcr.io
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # `latest` follows main; every build is also tagged sha-<commit>, which
+      # never moves, so a server can pin one and roll back to another; a vX.Y.Z
+      # tag adds X.Y.Z and X.Y.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # A record of how each image was built and what went into it, kept
+          # beside it in the registry.
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

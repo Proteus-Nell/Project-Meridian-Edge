@@ -1,11 +1,17 @@
 # Caddy variant of docker-compose.yml (DEPLOY.md Route B). Identical db +
 # server services; the nginx edge is swapped for Caddy, which provisions and
-# renews TLS automatically - no TLS_CERT_DIR / certbot needed. Run with:
+# renews TLS automatically - no TLS_CERT_DIR / certbot needed. Run the images CI
+# publishes, with nothing built on this host:
+#
+#   docker compose -f docker-compose.caddy.yml pull
+#   docker compose -f docker-compose.caddy.yml up -d --no-build
+#
+# or build them here from the checkout instead:
 #
 #   docker compose -f docker-compose.caddy.yml up -d --build
 #
-# Requires MERIDIAN_EDGE_DOMAIN (public hostname) in .env alongside the vars
-# from .env.example. Ports 80 + 443 must be reachable for the ACME challenge,
+# Requires MERIDIAN_EDGE_DOMAIN (public hostname) and ACME_EMAIL (the ACME
+# account's contact address) in .env alongside the vars from .env.example. Ports 80 + 443 must be reachable for the ACME challenge,
 # and DNS for MERIDIAN_EDGE_DOMAIN must already point at this host.
 
 services:
@@ -29,6 +35,9 @@ services:
       retries: 10
 
   server:
+    # Published by CI for every commit on main that passes its gates (DEPLOY.md
+    # section 9.1): `pull` fetches it, `up -d --build` builds it here instead.
+    image: ${MERIDIAN_EDGE_IMAGES:-ghcr.io/proteus-nell/meridian-edge}-server:${MERIDIAN_EDGE_TAG:-latest}
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -52,6 +61,7 @@ services:
       - /tmp
 
   caddy:
+    image: ${MERIDIAN_EDGE_IMAGES:-ghcr.io/proteus-nell/meridian-edge}-caddy:${MERIDIAN_EDGE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/caddy.Dockerfile
@@ -60,7 +70,7 @@ services:
       - server
     environment:
       MERIDIAN_EDGE_DOMAIN: ${MERIDIAN_EDGE_DOMAIN:?set MERIDIAN_EDGE_DOMAIN in .env, e.g. chat.example.com}
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env, e.g. you@example.com}
     ports:
       - "80:80"
       - "443:443"

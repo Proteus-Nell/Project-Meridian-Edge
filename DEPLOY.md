@@ -196,7 +196,7 @@ server vars above from them and **refuses to start** if one is missing.
 | `MERIDIAN_EDGE_WS_ORIGINS` | server | your exact public origin(s); gates the WebSocket upgrade and login (newer alias: `MERIDIAN_EDGE_ALLOWED_ORIGINS`) |
 | `TLS_CERT_DIR` | proxy (Route A) | host dir holding `fullchain.pem` + `privkey.pem`; unused for Caddy |
 | `MERIDIAN_EDGE_TRUSTED_PROXY_IPS` | server | optional. Narrows which peers may set `X-Forwarded-For`; defaults to the private ranges a Compose network draws from |
-| `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Route B) | public hostname + ACME contact |
+| `MERIDIAN_EDGE_DOMAIN`, `ACME_EMAIL` | Caddy (Routes B and C) | public hostname + ACME contact address. **Both required**: Caddy will not start without an ACME email |
 
 Never commit `.env`, `./tls/`, or any private key: all are git-ignored.
 
@@ -369,9 +369,14 @@ cp .env.example .env
 
 # 2. Obtain fullchain.pem + privkey.pem into ./tls  (section 4)
 
-# 3. Build + run
-docker compose up -d --build
+# 3. Pull the images CI published, then run
+docker compose pull
+docker compose up -d --no-build
+#    (or build them here instead: docker compose up -d --build)
 ```
+
+The first `pull` may answer `unauthorized`: see [section 9.1](#91-routes-a--b-docker)
+for making the packages public or logging this host in.
 
 `server` waits for `db` to pass its health check. nginx requests
 `ssl_ecdh_curve X25519MLKEM768:X25519:secp384r1` and **will not start** if its
@@ -398,13 +403,18 @@ cp .env.example .env
 #    POSTGRES_PASSWORD=<long random>
 #    MERIDIAN_EDGE_WS_ORIGINS=https://chat.example.com
 #    MERIDIAN_EDGE_DOMAIN=chat.example.com
-#    ACME_EMAIL=you@example.com     (TLS_CERT_DIR is unused here)
+#    ACME_EMAIL=you@example.com     (required; TLS_CERT_DIR is unused here)
 
 # 2. DNS points at this host; ports 80 + 443 reachable (80 for the ACME challenge)
 
-# 3. Build + run
-docker compose -f docker-compose.caddy.yml up -d --build
+# 3. Pull the images CI published, then run
+docker compose -f docker-compose.caddy.yml pull
+docker compose -f docker-compose.caddy.yml up -d --no-build
+#    (or build them here instead: docker compose -f docker-compose.caddy.yml up -d --build)
 ```
+
+The first `pull` may answer `unauthorized`: see [section 9.1](#91-routes-a--b-docker)
+for making the packages public or logging this host in.
 
 Caddy stores its ACME account + certs in the persistent `caddy-data` volume, so do
 not delete it, or you re-issue certs (and can hit Let's Encrypt rate limits) on
@@ -468,7 +478,8 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-**Caddy**: reuse `deploy/Caddyfile`; override the backend to localhost:
+**Caddy**: reuse `deploy/Caddyfile`; override the backend to localhost.
+`ACME_EMAIL` is required here too, since Caddy will not start without it:
 
 ```bash
 sudo tee /etc/caddy/env >/dev/null <<'ENV'
@@ -570,22 +581,65 @@ re-establish automatically. So a routine update is safe and quick.
 
 ### 9.1 Routes A / B (Docker)
 
+The host does not need to build anything. For every commit on `main` that
+passes every CI gate, the `images` job in `.github/workflows/ci.yml` builds the
+three images and publishes them to the GitHub Container Registry, for both
+`linux/amd64` and `linux/arm64`:
+
+| Image | Used by |
+|---|---|
+| `ghcr.io/proteus-nell/meridian-edge-server` | both routes |
+| `ghcr.io/proteus-nell/meridian-edge-caddy` | Route B (carries the built client bundle) |
+| `ghcr.io/proteus-nell/meridian-edge-proxy` | Route A (carries the built client bundle) |
+
+So an update is a download:
+
 ```bash
 cd /opt/meridian-edge
-git pull
-docker compose up -d --build            # Route B: docker compose -f docker-compose.caddy.yml up -d --build
+git pull                                          # compose files and .env.example can change too
+docker compose -f docker-compose.caddy.yml pull   # Route A: docker compose pull
+docker compose -f docker-compose.caddy.yml up -d --no-build  # Route A: docker compose up -d --no-build
 ```
 
-`up -d --build` rebuilds the images and **recreates only the services whose
-image or config changed**. The client bundle is rebuilt inside the proxy image,
-so a new front-end ships with the proxy. Expect a brief blip while the proxy and
-server restart; Postgres is untouched unless its image changed.
+`--no-build` makes a missed or failed `pull` an error (`No such image`) rather
+than a silent fallback to building on this host, which is the slow path this
+avoids. `up` **recreates only the services whose image or config changed**. The
+client bundle ships inside the edge image, so a new front-end arrives with it.
+Expect a brief blip while the edge and server restart; Postgres is untouched
+unless its image changed.
 
-To rebuild just one service (e.g. after a server-only change):
+**Which build you get.** Each image is tagged three ways:
+
+| Tag | Points at | Moves? |
+|---|---|---|
+| `latest` | the newest commit on `main` to pass CI | yes |
+| `sha-<first 7 hex of the commit>` | exactly that commit | never |
+| `1.2.3`, `1.2` | a `v1.2.3` git tag | `1.2` follows patch releases |
+
+Compose pulls `latest` unless `.env` sets `MERIDIAN_EDGE_TAG`. Pinning one is
+what makes a deploy repeatable, and rolling back is pinning an older one
+(9.5). To run exactly the commit you just checked out, once its CI run has
+passed, set `MERIDIAN_EDGE_TAG=sha-<this>` in `.env`:
 
 ```bash
-docker compose up -d --build server
+git rev-parse HEAD | cut -c1-7
 ```
+
+**If `pull` answers `unauthorized`,** the package is still private, which is
+GHCR's default for a new one. Either make the three packages public (on GitHub:
+your profile's Packages tab, then each package's Package settings, Change
+visibility; the code is public already), or log this host in once with a
+personal access token (classic) that has only the `read:packages` scope:
+
+```bash
+echo "<token>" | docker login ghcr.io -u <github-username> --password-stdin
+```
+
+**Building on the host instead** still works, for a local change or a fork
+without a registry: `docker compose -f docker-compose.caddy.yml up -d --build`
+builds from the checkout and tags the result with the same name, which the
+next `pull` then replaces. To rebuild just one service:
+`docker compose up -d --build server`.
 
 ### 9.2 Route C (host)
 
@@ -628,16 +682,19 @@ human in the loop when it eventually lands.
 
 ### 9.5 Rollback
 
-Images are built from the checked-out tree, so rolling back is a git operation:
+Every published image keeps its `sha-<commit>` tag (9.1), so on routes A/B a
+rollback is pinning the previous build and recreating:
 
 ```bash
-git checkout <previous-tag-or-sha>
-docker compose up -d --build        # or the Route C rebuild steps
+# in .env: MERIDIAN_EDGE_TAG=sha-<previous commit's first 7 hex>   (or a release, 1.2.3)
+docker compose -f docker-compose.caddy.yml pull
+docker compose -f docker-compose.caddy.yml up -d --no-build
 ```
 
-This is safe as long as the schema is unchanged between the two versions (see
-9.4). Tag releases so `<previous-tag>` is easy to name; optionally keep the prior
-built images (`docker image tag`) for an instant rollback without a rebuild.
+If the compose files themselves changed between the two versions, also
+`git checkout <previous-tag-or-sha>` so they match the images. Route C rolls
+back with git and its 9.2 rebuild steps. Either way this is safe as long as the
+schema is unchanged between the two versions (see 9.4).
 
 ### 9.6 Config or certificate changes on update
 
@@ -652,7 +709,7 @@ built images (`docker image tag`) for an instant rollback without a rebuild.
 
 - [ ] `git pull` on the deploy host
 - [ ] review the changelog for a schema change (section 9.4) or new required env var
-- [ ] `docker compose up -d --build` (A/B) or the section 9.2 steps (C)
+- [ ] `docker compose pull` then `docker compose up -d --no-build` (A/B; add `-f docker-compose.caddy.yml` on B), or the section 9.2 steps (C)
 - [ ] re-run the [smoke checks](#8-verify-after-deploying)
 - [ ] spot-check the [PQC/TLS screening](#10-passing-pqctls-screenings) if the edge/image changed
 

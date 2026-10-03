@@ -6,6 +6,10 @@
 #
 # Secrets (DB password, etc.) come from a local .env file - never bake them
 # into an image or commit them. Copy .env.example to .env and fill it in.
+#
+# `docker compose pull && docker compose up -d --no-build` runs the images CI
+# publishes, with nothing built on this host; `docker compose up -d --build`
+# builds them here from the checkout instead (DEPLOY.md section 9.1).
 
 services:
   db:
@@ -28,6 +32,9 @@ services:
       retries: 10
 
   server:
+    # Published by CI for every commit on main that passes its gates (DEPLOY.md
+    # section 9.1): `pull` fetches it, `up -d --build` builds it here instead.
+    image: ${MERIDIAN_EDGE_IMAGES:-ghcr.io/proteus-nell/meridian-edge}-server:${MERIDIAN_EDGE_TAG:-latest}
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -51,6 +58,7 @@ services:
       - /tmp
 
   proxy:
+    image: ${MERIDIAN_EDGE_IMAGES:-ghcr.io/proteus-nell/meridian-edge}-proxy:${MERIDIAN_EDGE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/proxy.Dockerfile

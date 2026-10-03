@@ -10,7 +10,9 @@
 # pinned nginx:1.27-alpine ships an older OpenSSL, use Caddy (deploy/Caddyfile),
 # which negotiates the group natively - see DEPLOY.md section 10.4.
 
-FROM node:22-slim AS client-build
+# Built on the build machine's own platform: the bundle is the same static
+# files on every architecture (see caddy.Dockerfile).
+FROM --platform=$BUILDPLATFORM node:22-slim AS client-build
 WORKDIR /build
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
