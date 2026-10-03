@@ -55,6 +55,17 @@ either require a valid single-use nonce or an authenticated session first, and
 none of them writes an unbounded row. A blanket edge limit on `/v1/` covers
 them.
 
+`POST /v1/messages` is bounded by storage as well as by rate: each recipient's
+queue holds at most 32 MiB of ciphertext (`MAX_QUEUED_BYTES_PER_RECIPIENT`),
+and a send past that gets `507 queue_full`. Without it, one account messaging
+another that never collects could park around 5 GiB a day for the full 14-day
+TTL. Unlike the token buckets, this bound lives in the database, so it survives
+restarts and applies across workers. It is exact under the shipped
+single-process server; with several workers, sends racing on one recipient can
+each slip one envelope past it (at most 64 KiB per extra worker). It caps each
+queue, not their sum, so keep an eye on the database volume's free space all
+the same.
+
 `POST /v1/account/delete` (what the client's duress passphrase calls, and a
 plain account-deletion endpoint besides) is worth calling out specifically:
 it has no limiter at all, and that is deliberate, not an oversight. It

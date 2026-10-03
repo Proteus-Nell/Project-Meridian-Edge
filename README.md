@@ -200,7 +200,9 @@ bundle, **verifies both prekey signatures against their identity key**
 (aborting loudly if the server tampered), runs the ML-KEM-768 PQ-KX
 handshake, and ships the message as one AEAD-sealed envelope. It works while
 the recipient is offline: the server queues the opaque ciphertext for up to
-14 days and deletes it the moment the recipient acknowledges receipt.
+14 days and deletes it the moment the recipient acknowledges receipt. Each
+recipient's queue holds at most 32 MiB; past that, a send fails with `E305`
+rather than vanishing, until they log in and collect what is waiting.
 Delivery is live over WebSocket while you are logged in, and your session token
 rotates on every connect.
 

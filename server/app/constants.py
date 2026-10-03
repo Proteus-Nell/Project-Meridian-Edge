@@ -36,6 +36,15 @@ MAX_PAYLOAD_BYTES = 65536
 MESSAGE_TTL_SECONDS = 14 * 86400.0
 ACK_MAX_IDS = 256
 
+# Per-recipient queue cap: the most ciphertext held for one account at once,
+# summed over every envelope waiting for it. Without it, a sender messaging an
+# account that never collects could park ~5 GiB a day (60 sends a minute at the
+# payload cap) for the whole TTL. Room for 512 maximum-size envelopes leaves
+# headroom for attachments small enough to travel inside an envelope, for a
+# recipient who is away for days. Server-side only; the client learns of it
+# through the 507 a send gets once the queue is full.
+MAX_QUEUED_BYTES_PER_RECIPIENT = 512 * MAX_PAYLOAD_BYTES  # 32 MiB
+
 # WebSocket delivery (checklist).
 WS_AUTH_TIMEOUT_SECONDS = 10.0
 WS_MAX_FRAME_BYTES = 65536

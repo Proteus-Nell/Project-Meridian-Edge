@@ -76,6 +76,8 @@ export const ERRORS = {
   E303: () => "Those keys are unavailable. That UID may not exist on this server.",
   E304: () =>
     "The recipient's keys are unavailable. That UID may not exist, or they may not have published any prekeys yet.",
+  E305: () =>
+    "The recipient has too many messages waiting on the server, so this one was not delivered. Try again once they have logged in and collected them.",
 
   // E4xx local encrypted store
   E401: () => "The store is locked. Please run /login to unlock it.",

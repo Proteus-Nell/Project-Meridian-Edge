@@ -157,8 +157,13 @@ export async function fanOutToGroup(
           ? await sendFirstMessage(x, contact, text ?? "", envelope)
           : await sendRatchetMessage(x, contact, stored, text, { group: envelope });
       return ok ? null : contact.alias;
-    } catch {
+    } catch (err) {
       // One member's network failure must not abandon the rest of the fan-out.
+      // A full queue is named, since it is the one reason the sender can act
+      // on by waiting, and it clears for that member alone.
+      if (err instanceof ApiError && err.queueFull) {
+        return `${contact.alias} (too many messages waiting for them on the server)`;
+      }
       return contact.alias;
     }
   };

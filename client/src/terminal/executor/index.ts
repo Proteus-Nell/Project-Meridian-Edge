@@ -499,6 +499,10 @@ export class Executor implements ExecutorInternals {
         this.renderer.error("E202");
         return;
       }
+      if (err.queueFull) {
+        this.renderer.error("E305");
+        return;
+      }
       this.renderer.error("E302");
       return;
     }

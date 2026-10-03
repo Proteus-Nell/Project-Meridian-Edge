@@ -4,6 +4,8 @@ Envelopes are opaque ciphertext blobs; the server never parses them. Acks
 delete in the same transaction and only for the authenticated recipient's
 own ids (ack forgery). Expired rows (14-day TTL) are swept on
 every touch of a recipient's queue; a periodic sweep job is a future addition.
+Each recipient's queue is capped in bytes (MAX_QUEUED_BYTES_PER_RECIPIENT), so
+an account that never collects cannot be made to hold unbounded ciphertext.
 """
 
 from __future__ import annotations
@@ -12,11 +14,11 @@ import base64
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from ..auth import AuthContext, require_auth
-from ..constants import MAX_PAYLOAD_BYTES, MESSAGE_TTL_SECONDS
+from ..constants import MAX_PAYLOAD_BYTES, MAX_QUEUED_BYTES_PER_RECIPIENT, MESSAGE_TTL_SECONDS
 from ..deps import get_session
 from ..models import QueuedMessage, User
 from ..rate_limit import TokenBucketLimiter
@@ -41,6 +43,18 @@ def _sweep_expired(session: Session, recipient_id: int, now: float) -> None:
     )
 
 
+def _queued_bytes(session: Session, recipient_id: int) -> int:
+    """Ciphertext bytes currently waiting for one recipient. length() of a
+    binary column is its size in bytes on both SQLite and Postgres, and Postgres
+    answers it from the stored value's header without reading the value."""
+    total = session.execute(
+        select(func.coalesce(func.sum(func.length(QueuedMessage.envelope)), 0)).where(
+            QueuedMessage.recipient_user_id == recipient_id
+        )
+    ).scalar_one()
+    return int(total)
+
+
 @router.post("/messages", status_code=204)
 async def send_message(
     payload: SendMessageRequest,
@@ -59,6 +73,14 @@ async def send_message(
     if len(envelope) > MAX_PAYLOAD_BYTES:
         raise HTTPException(status_code=413, detail="invalid_request")
 
+    # Deliberately no row lock (FOR UPDATE) for the cap check below. This route
+    # does its database work on the event loop, and a lock still held when the
+    # request unwinds is released only by the session teardown, which needs the
+    # very event loop that a second send, blocked on that lock, is holding. That
+    # deadlock froze the whole process under concurrent sends. Without a lock,
+    # measuring and inserting is still atomic within one server process, since
+    # nothing between them awaits; separate processes racing on one recipient can
+    # each slip one envelope past the cap, at most one payload per extra worker.
     recipient = session.execute(
         select(User).where(User.uid == payload.recipient_uid)
     ).scalar_one_or_none()
@@ -70,6 +92,21 @@ async def send_message(
 
     now: float = request.app.state.clock()
     _sweep_expired(session, recipient.id, now)
+    if _queued_bytes(session, recipient.id) + len(envelope) > MAX_QUEUED_BYTES_PER_RECIPIENT:
+        # Refused, not dropped: a dropped message would look delivered to the
+        # sender, who can only try again later if told it did not go. Only an
+        # account that exists can have a full queue, but that is no new oracle:
+        # reaching the cap takes tens of megabytes sent to a UID the sender
+        # already confirmed by fetching its bundle.
+        #
+        # Committed first, for the reason above: the sweep's deletes hold row
+        # locks until the transaction ends, and they must not still be held
+        # while the refusal unwinds through an await.
+        session.commit()
+        record_security_event(
+            "queue_full", endpoint=request.url.path, client_ip=_client_ip(request)
+        )
+        raise HTTPException(status_code=507, detail="queue_full")
     row = QueuedMessage(recipient_user_id=recipient.id, envelope=envelope, created_at=now)
     session.add(row)
     session.commit()
