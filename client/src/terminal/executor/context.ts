@@ -70,6 +70,10 @@ export interface UiChrome {
    * be laid out (/help) can fit the screen it is printed on instead of assuming
    * a desktop terminal. */
   columns(): number;
+  /** Remove every copy button from the transcript (the one beside /whoami's
+   * UID). Called whenever the store locks, so no button outlives the unlocked
+   * session that printed it. */
+  withdrawCopies(): void;
 }
 
 export const NULL_CHROME: UiChrome = {
@@ -89,6 +93,7 @@ export const NULL_CHROME: UiChrome = {
   requestNotifyPermission: () => Promise.resolve("unsupported" as const),
   notifyMessage() {},
   columns: () => DEFAULT_HELP_COLUMNS,
+  withdrawCopies() {},
 };
 
 /** Which screen the transcript is showing: the home dashboard or a specific

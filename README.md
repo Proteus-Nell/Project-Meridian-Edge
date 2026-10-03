@@ -112,7 +112,7 @@ trusting the new one.
 | Command | What it does |
 |---|---|
 | `/help [command]` | List every command grouped by purpose; with an argument, explain what that one command is for and print its usage |
-| `/whoami` | Your UID and identity-key fingerprint (needs an unlocked store) |
+| `/whoami` | Your UID and identity-key fingerprint (needs an unlocked store). A **copy** button beside the UID puts it on your clipboard exactly as printed, dashes included, which `/add` accepts as typed. Copying needs a secure connection (https, or localhost in development); anywhere else the button selects the UID for you to copy by hand. The button goes when the store locks. It is offered for the UID alone: a clipboard can be read by other apps and synced to other devices, which is fine for an address you are about to hand out but would turn a recovery code's one-time display into a lasting copy |
 | `/lock` | Locks the store immediately and wipes key material from memory; happens automatically after 10 min idle |
 | `/logout` | Revokes this session server-side, then locks |
 | `/sessions` | Lists where this account is signed in: one line per live session showing how long ago it started, when it was last active, and which one is this device. Sessions are anonymous by design, so no device name or user agent is stored |
@@ -200,7 +200,9 @@ bundle, **verifies both prekey signatures against their identity key**
 (aborting loudly if the server tampered), runs the ML-KEM-768 PQ-KX
 handshake, and ships the message as one AEAD-sealed envelope. It works while
 the recipient is offline: the server queues the opaque ciphertext for up to
-14 days and deletes it the moment the recipient acknowledges receipt.
+14 days and deletes it the moment the recipient acknowledges receipt. Each
+recipient's queue holds at most 32 MiB; past that, a send fails with `E305`
+rather than vanishing, until they log in and collect what is waiting.
 Delivery is live over WebSocket while you are logged in, and your session token
 rotates on every connect.
 

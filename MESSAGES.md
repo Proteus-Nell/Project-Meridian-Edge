@@ -69,6 +69,7 @@ Code families:
 | E302 | `Server might be temporarily down. Please contact the host or try again.` | A request failed for a reason other than 401 or 429: server down, network unreachable, or an unexpected status. | Check connectivity and that the server is up, then retry. |
 | E303 | `Those keys are unavailable. That UID may not exist on this server.` | `/verify` asked the server for a bundle and got a uniform 404. | Confirm the contact's UID. They may not exist on this server. |
 | E304 | `The recipient's keys are unavailable. That UID may not exist, or they may not have published any prekeys yet.` | Sending needed a prekey bundle and the server returned a uniform 404, for a nonexistent UID or a registered user who never uploaded prekeys. | Confirm the UID. The recipient may need to log in once so their client publishes prekeys. |
+| E305 | `The recipient has too many messages waiting on the server, so this one was not delivered. Try again once they have logged in and collected them.` | The server answered 507 `queue_full`: everything already queued for the recipient adds up to the 32 MiB per-recipient cap, usually because they have not logged in for a long while. The message was refused rather than dropped, so it is marked failed here instead of looking delivered. In a group, the member is named in the not-delivered list instead. | Wait for the recipient to log in, which collects their queue, then resend. Messages expire from the queue after 14 days, which also frees room. |
 | E401 | `The store is locked. Please run /login to unlock it.` | The operation touched the encrypted store after the 10-minute idle auto-lock or an explicit `/lock`. | `/login` to unlock, then retry. |
 | E402 | `The store is damaged and holds no identity record. Run /wipe, then /register or /recover.` | The store unlocked but holds no identity record, after an interrupted registration or a damaged database. | `/wipe` the broken store, then `/register` or `/recover`. |
 | E403 | `Contacts are kept in the encrypted store. Please run /login first.` | `/add`, `/remove`, `/rename` or `/favourite` ran while the store was locked. | `/login`, then run the command again. |
@@ -103,6 +104,7 @@ Code families:
 | `No active conversation. Use /chat <alias|uid> first.` | Message text was typed with no focused conversation. |
 | `/delete is a two-sided directive between exactly two people, and a group has no such channel. To remove '<name>' from this device, run /group purge <name>.` | `/delete` was run with a group focused. Groups have no shared message id for a cooperative delete to name; `/group purge` is the only way to clear a group's history. |
 | `Locked or not registered. Please run /login or /register.` | The command needs an unlocked store. Nothing was changed. |
+| `Your browser did not allow copying here. The UID is selected instead, so copy it from the screen.` | The copy button beside the UID `/whoami` prints could not write to the clipboard: the page is not on a secure connection (https, or localhost), or the browser refused. The UID is selected on screen so it can be copied by hand. |
 | `Another operation is in progress. Please wait for it to finish.` | Commands run one at a time. |
 | `Auto-locked after 10 minutes idle. Run /login to unlock.` | Idle auto-lock fired. Keys were zeroized best-effort. |
 | `An identity store already exists on this device. Run /login, or /wipe to destroy it first.` | `/register` refused to overwrite an existing identity. |
@@ -161,6 +163,7 @@ maps them to E3xx/E2xx messages above.
 | `invalid_request` | 400/413 | Request failed validation (shape, encoding, size). |
 | `auth_failed` | 401 | Authentication failed. Never distinguishes unknown user, bad signature, expired nonce, wrong or spent recovery code. |
 | `rate_limited` | 429 | Token-bucket limit hit for this IP/UID and endpoint. |
+| `queue_full` | 507 | The recipient's queue already holds as much as one account may (32 MiB). Only a send can get it, and it clears as the recipient collects or the 14-day TTL expires. |
 | `request_failed` | 404/405/... | Uniform catch-all, including unknown routes and IDOR-shaped probes. |
 | `internal_error` | 500 | Unhandled server error; no details are ever exposed. |
 

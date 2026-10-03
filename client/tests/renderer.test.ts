@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { Renderer, sanitizeText } from "../src/terminal/renderer";
-import type { EventLevel, LineSink, NoticeSink, StatusSink } from "../src/terminal/renderer";
+import type {
+  CopySink,
+  EventLevel,
+  LineSink,
+  NoticeSink,
+  StatusSink,
+} from "../src/terminal/renderer";
 
 class CaptureSink implements LineSink {
   lines: string[] = [];
@@ -21,6 +27,13 @@ class CaptureNotices implements NoticeSink {
   notices: { code: string; text: string }[] = [];
   noteDiscarded(code: string, text: string): void {
     this.notices.push({ code, text });
+  }
+}
+
+class CaptureCopies implements CopySink {
+  offers: { value: string; label: string; cells: number }[] = [];
+  offerCopy(value: string, label: string, cells: number): void {
+    this.offers.push({ value, label, cells });
   }
 }
 
@@ -369,5 +382,67 @@ describe("event colour never reaches the message text", () => {
     expect(text).toContain("[!]");
     expect(text).toContain("[SECURITY]");
     expect(text).toContain("[E203]");
+  });
+});
+
+describe("Renderer copyable events", () => {
+  const clock = (): Date => new Date(2026, 6, 4, 9, 5, 7);
+  const UID = "7Q3K-M2VD-9XWP-4RTB-A6HJ-EZ01-23";
+
+  it("prints exactly the line event() would", () => {
+    const plain = new CaptureSink();
+    new Renderer(plain, clock).event("info", `UID: ${UID}`);
+    const copyable = new CaptureSink();
+    new Renderer(copyable, clock, null, null, new CaptureCopies()).copyableEvent(
+      "info",
+      `UID: ${UID}`,
+      UID,
+      "UID",
+    );
+    expect(copyable.lines).toEqual(plain.lines);
+  });
+
+  it("offers the value, its label, and the width the line covers on screen", () => {
+    const sink = new CaptureSink();
+    const copies = new CaptureCopies();
+    new Renderer(sink, clock, null, null, copies).copyableEvent("info", `UID: ${UID}`, UID, "UID");
+    // eslint-disable-next-line no-control-regex
+    const visible = (sink.lines[0] ?? "").replace(/\x1b\[[0-9;]*m/g, "");
+    expect(visible).toBe(`09:05:07 [*] UID: ${UID}`);
+    expect(copies.offers).toEqual([{ value: UID, label: "UID", cells: visible.length }]);
+  });
+
+  it("never offers a control character to the clipboard", () => {
+    const copies = new CaptureCopies();
+    new Renderer(new CaptureSink(), clock, null, null, copies).copyableEvent(
+      "info",
+      "value",
+      "line one\nline two\x1b[31m",
+      "value",
+    );
+    expect(copies.offers[0]?.value).toBe("line oneline two[31m");
+  });
+
+  it("mirrors the line to the status strip like any event", () => {
+    const status = new CaptureStatus();
+    new Renderer(new CaptureSink(), clock, status, null, new CaptureCopies()).copyableEvent(
+      "info",
+      `UID: ${UID}`,
+      UID,
+      "UID",
+    );
+    expect(status.last).toEqual({ level: "info", text: `UID: ${UID}` });
+  });
+
+  it("still prints the line where no copy sink is wired", () => {
+    const sink = new CaptureSink();
+    new Renderer(sink, clock).copyableEvent("info", `UID: ${UID}`, UID, "UID");
+    expect(sink.lines).toHaveLength(1);
+  });
+
+  it("leaves ordinary events without a copy button", () => {
+    const copies = new CaptureCopies();
+    new Renderer(new CaptureSink(), clock, null, null, copies).event("info", `UID: ${UID}`);
+    expect(copies.offers).toEqual([]);
   });
 });

@@ -117,5 +117,9 @@ Stated here so nobody has to rediscover them, and so no one claims otherwise:
 - Deleting from IndexedDB is not forensic erasure, and peer-side deletion is
   cooperative: it relies on the other client honouring the request, and cannot
   reach a screenshot.
-- Rate limiting is the only denial-of-service defence, and the in-process
+- Rate limiting is the main denial-of-service defence, and the in-process
   limiter resets on restart. See [deploy/rate-limiting.md](deploy/rate-limiting.md).
+  The message queue is also capped at 32 MiB per recipient, so one account that
+  never collects cannot be made to hold unbounded ciphertext. Nothing caps the
+  queue's total across accounts: that is bounded only by how many accounts can
+  be registered, which the per-IP registration limit slows rather than stops.

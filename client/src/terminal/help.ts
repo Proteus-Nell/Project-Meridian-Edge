@@ -164,7 +164,7 @@ const EXPLANATIONS: Record<CommandWord, string> = {
     "Lists everywhere this account is signed in, marking the device you are on. Sessions are anonymous by design, so each shows only when it started and when it was last active.",
   lock: "Locks the store and wipes key material from memory. Happens automatically after 10 minutes idle.",
   whoami:
-    "Prints your UID, the address people need to add you, and your identity-key fingerprint. There is no directory, so the UID has to travel out-of-band.",
+    "Prints your UID, the address people need to add you, and your identity-key fingerprint. There is no directory, so the UID has to travel out-of-band. A copy button beside the UID puts it on your clipboard; it disappears when the store locks.",
   add: "Saves a contact by UID. The alias is local only and never transmitted. Also accepts a waiting contact request, showing the message that was held back.",
   remove:
     "Deletes a contact and tears down the shared session, so a later message from them arrives as a fresh request. Keeps message history unless you add `purge`. Purely local; the other side is never told.",

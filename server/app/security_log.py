@@ -36,6 +36,10 @@ SecurityEvent = Literal[
     # deletions is visible; carries no UID, like everything else here, which
     # also means the log cannot say whether a duress passphrase caused it.
     "account_deleted",
+    # A send was refused because its recipient's queue is at its cap. Often
+    # just someone away for a long time, but a run of these from one address is
+    # what flooding a recipient looks like. No UID, for either side.
+    "queue_full",
 ]
 
 _logger = logging.getLogger("meridian_edge.security")

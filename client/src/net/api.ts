@@ -9,6 +9,13 @@ export class ApiError extends Error {
     super("request_failed");
     this.name = "ApiError";
   }
+
+  /** A send refused because its recipient's queue on the server is already at
+   * its byte cap (507, wire code `queue_full`). Distinct from 429, which is
+   * about the sender's own pace: this clears only when the recipient collects. */
+  get queueFull(): boolean {
+    return this.status === 507;
+  }
 }
 
 async function requestJson<T>(
