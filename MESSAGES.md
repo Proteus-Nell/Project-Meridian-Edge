@@ -103,6 +103,7 @@ Code families:
 | `No active conversation. Use /chat <alias|uid> first.` | Message text was typed with no focused conversation. |
 | `/delete is a two-sided directive between exactly two people, and a group has no such channel. To remove '<name>' from this device, run /group purge <name>.` | `/delete` was run with a group focused. Groups have no shared message id for a cooperative delete to name; `/group purge` is the only way to clear a group's history. |
 | `Locked or not registered. Please run /login or /register.` | The command needs an unlocked store. Nothing was changed. |
+| `Your browser did not allow copying here. The UID is selected instead, so copy it from the screen.` | The copy button beside the UID `/whoami` prints could not write to the clipboard: the page is not on a secure connection (https, or localhost), or the browser refused. The UID is selected on screen so it can be copied by hand. |
 | `Another operation is in progress. Please wait for it to finish.` | Commands run one at a time. |
 | `Auto-locked after 10 minutes idle. Run /login to unlock.` | Idle auto-lock fired. Keys were zeroized best-effort. |
 | `An identity store already exists on this device. Run /login, or /wipe to destroy it first.` | `/register` refused to overwrite an existing identity. |

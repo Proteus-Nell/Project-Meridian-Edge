@@ -8,7 +8,7 @@
 // file: vi.mock is hoisted per-file and its factory path is resolved relative to
 // the test, so it cannot be centralised here.
 
-import type { LineSink } from "../../src/terminal/renderer";
+import type { CopySink, LineSink } from "../../src/terminal/renderer";
 import type { ShellIO } from "../../src/terminal/shell";
 import type { EmblemState, UiChrome } from "../../src/terminal/executor/context";
 import type { ThemePrefs } from "../../src/crypto/store";
@@ -64,8 +64,9 @@ export class CaptureSink implements LineSink {
 
 /** Records every UiChrome interaction so tests can assert on delivery ticks,
  * the chat-context segment, discard notices, echoes, and the theme/scheme/
- * emblem application calls. */
-export class FakeChrome implements UiChrome {
+ * emblem application calls. Also the renderer's CopySink, as the real chrome
+ * is, so a test can see which values were offered a copy button. */
+export class FakeChrome implements UiChrome, CopySink {
   confirms = 0;
   rejects = 0;
   clears = 0;
@@ -93,6 +94,11 @@ export class FakeChrome implements UiChrome {
    * payloads on purpose: notifyMessage takes no arguments, and asserting on the
    * count is what keeps it that way. */
   notifications = 0;
+  /** Every copy button offered, in order, with the width of the line it was
+   * offered beside. */
+  copyOffers: Array<{ value: string; label: string; cells: number }> = [];
+  /** How many times every copy button was withdrawn (each lock). */
+  copyWithdrawals = 0;
   echoInput(line: string, kind: "command" | "message" = "command"): void {
     this.echoes.push({ line, kind });
   }
@@ -140,5 +146,11 @@ export class FakeChrome implements UiChrome {
   }
   notifyMessage(): void {
     this.notifications += 1;
+  }
+  offerCopy(value: string, label: string, cells: number): void {
+    this.copyOffers.push({ value, label, cells });
+  }
+  withdrawCopies(): void {
+    this.copyWithdrawals += 1;
   }
 }

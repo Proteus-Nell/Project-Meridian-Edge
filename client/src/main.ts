@@ -53,7 +53,7 @@ const SHARED: ITerminalOptions = {
 // command line for keystrokes; its cursor is hidden by making it transparent.
 // All output - including untrusted peer/message text via the sanitizing
 // renderer - renders here as xterm text cells. allowProposedApi unlocks
-// registerDecoration (the right-edge delivery ticks).
+// registerDecoration (the right-edge delivery ticks and copy buttons).
 const transcriptTerm = new Terminal({
   ...SHARED,
   disableStdin: true,
@@ -112,8 +112,9 @@ const fitTerminals = (): void => {
   transcriptFit.fit();
   inputFit.fit();
   // fit() may have changed the transcript's column count; re-pin the delivery
-  // ticks to the new right edge (their decoration x was fixed at the old cols).
-  chrome.reflowTicks();
+  // ticks to the new right edge (their decoration x was fixed at the old cols)
+  // and each copy button to wherever its rewrapped line now ends.
+  chrome.reflowDecorations();
 };
 
 let settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -162,9 +163,10 @@ const shell = new Shell(inputTerm, transcriptTerm, (line) => {
   }
   executor.handle(result);
 });
-// chrome is both the status strip (StatusSink) and the discarded-notice panel
-// (NoticeSink); the renderer routes to each without knowing about the DOM.
-const renderer = new Renderer(shell, undefined, chrome, chrome);
+// chrome is the status strip (StatusSink), the discarded-notice panel
+// (NoticeSink) and the copy button beside a copyable value (CopySink); the
+// renderer routes to each without knowing about the DOM.
+const renderer = new Renderer(shell, undefined, chrome, chrome, chrome);
 // The renderer owns which day the transcript is on; the chrome writes the echo
 // of a message you send, and needs to open a new day for it (renderer.DayMarker).
 chrome.setDayMarker(renderer);

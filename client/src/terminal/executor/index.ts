@@ -540,6 +540,10 @@ export class Executor implements ExecutorInternals {
     this.activeGroup = null;
     this.chrome.setChatContext(null);
     this.chrome.setEmblemState("idle");
+    // A copy button acts on the identity /whoami printed; it goes with the
+    // session, the same as the identity itself. The line it sat beside stays,
+    // like the rest of the transcript.
+    this.chrome.withdrawCopies();
     this.store.lock();
     if (this.autoLockTimer !== null) {
       clearTimeout(this.autoLockTimer);

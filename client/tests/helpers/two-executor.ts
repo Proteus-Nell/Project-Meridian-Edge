@@ -174,7 +174,7 @@ export async function createPeer(
     FAST_ARGON2,
   );
   const executor = new Executor(
-    new Renderer(output, () => new Date(now()), null, chrome),
+    new Renderer(output, () => new Date(now()), null, chrome, chrome),
     shell,
     store,
     now,

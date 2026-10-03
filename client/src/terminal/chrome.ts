@@ -1,6 +1,7 @@
 // DOM chrome around the two terminals: the footer status strip
 // (transient event + persistent chat context), the keyboard-navigable
-// autosuggest dropdown, the right-edge "sent" tick marks, and the toggleable
+// autosuggest dropdown, the right-edge "sent" tick marks, the copy button
+// beside a copyable value (/whoami's UID), and the toggleable
 // atmosphere layers (/settings theme). This is the only DOM-building module in
 // the client. It never renders untrusted content - message and peer text stay
 // in the xterm transcript via the sanitizing renderer - and it only ever
@@ -10,8 +11,17 @@
 
 import type { IDecoration, IMarker, Terminal } from "@xterm/xterm";
 
+import {
+  COPY_CELLS,
+  COPY_TEXT,
+  firstRowOf,
+  locateValue,
+  needsOwnRow,
+  placeCopyButton,
+  writeClipboard,
+} from "./copy";
 import { COMMAND_USAGE, isCommandWord } from "./parser";
-import type { DayMarker, EventLevel } from "./renderer";
+import type { CopySink, DayMarker, EventLevel } from "./renderer";
 import type { SuggestionNav } from "./shell";
 import type { EmblemState } from "./executor";
 import {
@@ -60,6 +70,20 @@ interface TickSpec {
   decoration: IDecoration | null;
 }
 
+/** A copy button beside a value in the transcript: what it copies and what to
+ * call it, the row its line starts on, the row reserved beneath when the line
+ * was printed too wide for the button to sit beside it, and the live placement.
+ * The placement is a marker and decoration of its own, replaced on every
+ * reflow, because a resize rewraps the line and moves where it ends. */
+interface CopySpec {
+  readonly value: string;
+  readonly label: string;
+  readonly start: IMarker;
+  readonly spare: IMarker | null;
+  placement: IMarker | null;
+  decoration: IDecoration | null;
+}
+
 /**
  * Owns everything on the page that is not one of the two terminals.
  * Constructed with the transcript terminal (so it can pin tick decorations to
@@ -67,7 +91,7 @@ interface TickSpec {
  * index.html. Also implements the shell's SuggestionNav seam so arrow keys can
  * drive the dropdown highlight.
  */
-export class Chrome implements SuggestionNav {
+export class Chrome implements SuggestionNav, CopySink {
   private readonly statusEventEl: HTMLElement;
   private readonly statusContextEl: HTMLElement;
   private readonly suggestEl: HTMLElement;
@@ -80,9 +104,13 @@ export class Chrome implements SuggestionNav {
   private readonly markers: IMarker[] = [];
   // Each delivery tick keeps its anchoring marker + glyph so it can be
   // re-pinned to the new right edge on resize (a decoration's column x is
-  // fixed at creation - see reflowTicks). `decoration` is the live xterm
+  // fixed at creation - see reflowDecorations). `decoration` is the live xterm
   // handle, replaced whenever we re-register.
   private readonly ticks: TickSpec[] = [];
+  private readonly copies: CopySpec[] = [];
+  /** Bumped whenever the copy buttons are withdrawn, so an offer still waiting
+   * for its line to be written cannot pin a button after a lock or a clear. */
+  private copyEpoch = 0;
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
   /** Whether the echo of a message you send is stamped with the time
    * (/settings timestamps), matching what renderer.ownMessage prints when the
@@ -270,7 +298,7 @@ export class Chrome implements SuggestionNav {
 
   /** Register (or re-register) a tick's decoration at the CURRENT right edge.
    * A decoration's column x is read once at creation and can't be mutated, so
-   * this is also the re-pin path used by reflowTicks after a resize. */
+   * this is also the re-pin path used by reflowDecorations after a resize. */
   private pinTick(spec: TickSpec): void {
     if (spec.marker.line < 0) {
       return; // row scrolled out of scrollback since it was echoed
@@ -295,18 +323,157 @@ export class Chrome implements SuggestionNav {
     });
   }
 
-  /** Re-pin every delivery tick to the right edge after the terminal reflows.
+  /** Re-pin every delivery tick to the right edge after the terminal reflows,
+   * and every copy button to wherever its line now ends.
    * fit() on resize changes the column count, but each decoration's x was fixed
    * at the old cols-1, so the ticks would otherwise drift inward from the edge
    * (and be wrong from the very first fit if the terminal opened at a default
    * width). Disposing and re-registering against the retained markers is cheap
    * (ticks are few) and idempotent; markers scrolled out of view are skipped by
    * pinTick. Wired to the ResizeObserver/refit path in main.ts. */
-  reflowTicks(): void {
+  reflowDecorations(): void {
     for (const spec of this.ticks) {
       spec.decoration?.dispose();
       spec.decoration = null;
       this.pinTick(spec);
+    }
+    for (const spec of this.copies) {
+      this.pinCopy(spec);
+    }
+  }
+
+  // ----- copy buttons -----------------------------------------------------------
+
+  /** Pin a copy button beside the line the renderer just printed
+   * (renderer.CopySink). Whether it fits beside the line is settled now, from
+   * the line's width, while the line is still queued: a row reserved under it
+   * has to be written in sequence with it, or it would land after whatever
+   * prints next. The anchoring waits for the write, like echoInput's marker. */
+  offerCopy(value: string, label: string, cells: number): void {
+    const ownRow = needsOwnRow(cells, this.transcript.cols);
+    if (ownRow) {
+      this.transcript.write("\r\n");
+    }
+    const epoch = this.copyEpoch;
+    this.transcript.write("", () => {
+      if (epoch !== this.copyEpoch) {
+        return; // withdrawn (a lock, a screen clear) before the line was written
+      }
+      const buffer = this.transcript.buffer.active;
+      const cursor = buffer.baseY + buffer.cursorY;
+      const first = firstRowOf(buffer, cursor - (ownRow ? 2 : 1));
+      const spec: CopySpec = {
+        value,
+        label,
+        start: this.transcript.registerMarker(first - cursor),
+        spare: ownRow ? this.transcript.registerMarker(-1) : null,
+        placement: null,
+        decoration: null,
+      };
+      this.copies.push(spec);
+      this.pinCopy(spec);
+    });
+  }
+
+  /** Remove every copy button. The executor calls this whenever the store
+   * locks - /lock, the idle auto-lock, /logout, /wipe - so no button outlives
+   * the unlocked session that printed it, and a screen clear does it too. */
+  withdrawCopies(): void {
+    this.copyEpoch += 1;
+    for (const spec of this.copies) {
+      spec.decoration?.dispose();
+      spec.placement?.dispose();
+      spec.start.dispose();
+      spec.spare?.dispose();
+    }
+    this.copies.length = 0;
+  }
+
+  /** Place (or re-place) a copy button for its line as laid out now. Disposes
+   * the previous placement first, so this is also the reflow path. */
+  private pinCopy(spec: CopySpec): void {
+    spec.decoration?.dispose();
+    spec.decoration = null;
+    spec.placement?.dispose();
+    spec.placement = null;
+    if (spec.start.line < 0) {
+      return; // the line scrolled out of scrollback
+    }
+    const buffer = this.transcript.buffer.active;
+    const place = placeCopyButton(
+      buffer,
+      spec.start.line,
+      spec.spare?.line ?? null,
+      this.transcript.cols,
+      spec.value,
+    );
+    if (place === null) {
+      return; // no room beside the line and no row reserved under it
+    }
+    const marker = this.transcript.registerMarker(place.row - (buffer.baseY + buffer.cursorY));
+    const decoration = this.transcript.registerDecoration({ marker, x: place.x, width: COPY_CELLS });
+    if (decoration === undefined) {
+      marker.dispose();
+      return;
+    }
+    spec.placement = marker;
+    spec.decoration = decoration;
+    decoration.onRender((el) => {
+      // onRender fires on every refresh of the same element: build it once.
+      if (el.childElementCount === 0) {
+        el.appendChild(this.copyButton(spec));
+      }
+    });
+  }
+
+  private copyButton(spec: CopySpec): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "copy-button";
+    button.textContent = COPY_TEXT;
+    button.title = `Copy ${spec.label}`;
+    button.setAttribute("aria-label", `Copy ${spec.label}`);
+    // xterm starts a text selection on mousedown anywhere over its screen,
+    // clearing any selection already made; neither belongs under a button.
+    button.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+    });
+    button.addEventListener("click", () => {
+      void this.copy(spec);
+    });
+    return button;
+  }
+
+  /** Put a button's value on the clipboard and say what happened. Where the
+   * page may not write it - plain http is not a secure context, and a browser
+   * can refuse - the value is selected on screen instead, to copy by hand.
+   * Typing goes back to the command line either way. */
+  private async copy(spec: CopySpec): Promise<void> {
+    const host = typeof navigator === "undefined" ? undefined : navigator;
+    if (await writeClipboard(spec.value, host)) {
+      this.status("success", `${spec.label} copied to the clipboard.`);
+    } else {
+      this.selectValue(spec);
+      this.status(
+        "warning",
+        `Your browser did not allow copying here. The ${spec.label} is selected instead, so copy it from the screen.`,
+      );
+    }
+    this.input?.focus();
+  }
+
+  private selectValue(spec: CopySpec): void {
+    if (spec.start.line < 0) {
+      return;
+    }
+    const at = locateValue(
+      this.transcript.buffer.active,
+      spec.start.line,
+      this.transcript.cols,
+      spec.value,
+    );
+    if (at !== null) {
+      this.transcript.select(at.col, at.row, spec.value.length);
     }
   }
 
@@ -563,9 +730,9 @@ export class Chrome implements SuggestionNav {
 
   // ----- screen clear ---------------------------------------------------------
 
-  /** /clr and Ctrl+L: wipe the transcript, its tick decorations, the strip, and
-   * the discarded-notice panel (the only way to dismiss it, so a screen clear
-   * genuinely resets what is on screen).
+  /** /clr and Ctrl+L: wipe the transcript, its tick decorations and copy
+   * buttons, the strip, and the discarded-notice panel (the only way to dismiss
+   * it, so a screen clear genuinely resets what is on screen).
    * `announce` (default true) posts a "Screen cleared." status; the conversation
    * redraw after a /delete passes false so the wipe is silent before it reprints. */
   clearScreen(announce = true): void {
@@ -578,6 +745,7 @@ export class Chrome implements SuggestionNav {
     this.ticks.length = 0;
     this.markers.length = 0;
     this.lastSentMarker = null;
+    this.withdrawCopies();
     this.transcript.clear();
     // The dividers went with it. Ctrl+L reaches here without passing through
     // the executor, so this is the only place that catches every wipe.

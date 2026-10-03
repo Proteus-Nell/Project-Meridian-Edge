@@ -646,13 +646,18 @@ export async function doWipe(x: ExecutorInternals): Promise<void> {
   x.renderer.event("success", "Local store destroyed. Note that browser deletion is not forensic erasure.");
 }
 
-/** `/whoami`: own UID and identity-key fingerprint. */
+/** `/whoami`: own UID and identity-key fingerprint. The UID line carries a copy
+ * button, since the UID is the one thing here meant to be handed to someone;
+ * the fingerprint is for reading aloud and comparing, so it gets none. The
+ * button copies the UID exactly as printed, dashes included, which /add
+ * accepts as typed. */
 export function doWhoami(x: ExecutorInternals): void {
   if (x.identity === null) {
     x.renderer.event("warning", "Locked or not registered. Please run /login or /register.");
     return;
   }
   const fingerprint = bytesToHex(sha512(x.identity.pub).slice(0, 16));
-  x.renderer.event("info", `UID: ${formatUid(x.identity.uid)}`);
+  const uid = formatUid(x.identity.uid);
+  x.renderer.copyableEvent("info", `UID: ${uid}`, uid, "UID");
   x.renderer.event("info", `identity-key fingerprint (SHA-512/128): ${fingerprint}`);
 }

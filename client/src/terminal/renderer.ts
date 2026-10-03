@@ -40,6 +40,15 @@ export function sanitizeText(text: string): string {
   return out;
 }
 
+/** Cells a rendered line covers: its characters once the SGR color codes are
+ * stripped. One cell per character holds for the ASCII a copyable line carries,
+ * and only has to be right about whether the line needs a row to itself: the
+ * chrome measures the written row itself when it places the button. */
+function visibleWidth(line: string): number {
+  // eslint-disable-next-line no-control-regex
+  return [...line.replace(/\x1b\[[0-9;]*m/g, "")].length;
+}
+
 /** Destination for fully rendered lines (the transcript terminal). */
 export interface LineSink {
   printLine(line: string): void;
@@ -60,6 +69,18 @@ export interface StatusSink {
  * (textContent), never markup. */
 export interface NoticeSink {
   noteDiscarded(code: string, text: string): void;
+}
+
+/** Destination for a copy button beside a line the renderer has just printed
+ * (copyableEvent) - the chrome, which pins it to that row of the transcript. A
+ * seam of its own, like StatusSink and NoticeSink, so the renderer still touches
+ * no DOM. */
+export interface CopySink {
+  /** `value` is exactly what a click puts on the clipboard, and `label` names
+   * it ("UID") in what the button tells the user. `cells` is the printed line's
+   * visible width, so the chrome can tell before the line is even written
+   * whether the button fits beside it or needs a row of its own. */
+  offerCopy(value: string, label: string, cells: number): void;
 }
 
 /** The transcript's day-divider state (see Renderer.markMessageDay), as the
@@ -134,6 +155,7 @@ export class Renderer implements DayMarker {
     private readonly now: () => Date = () => new Date(),
     private readonly statusSink: StatusSink | null = null,
     private readonly noticeSink: NoticeSink | null = null,
+    private readonly copySink: CopySink | null = null,
   ) {}
 
   /** Follow /settings timestamps. Applied at startup from the stored display
@@ -174,10 +196,29 @@ export class Renderer implements DayMarker {
 
   event(level: GlyphLevel, text: string): void {
     const clean = sanitizeText(text);
-    this.sink.printLine(`${DIM}${this.timestamp()}${RESET} ${PREFIX[level]} ${clean}`);
+    this.sink.printLine(this.eventLine(level, clean));
     // Mirror the latest typed event into the footer status strip so current
     // state is visible at a glance without scanning the transcript.
     this.statusSink?.status(level, clean);
+  }
+
+  /** An event line ending in a value worth copying (the UID /whoami prints),
+   * with a copy button offered beside it. The line is exactly what event()
+   * prints; the button is the chrome's, anchored to this row, which is why text
+   * that merely looks like this line - a peer's message, say - never gets one.
+   * The value is stripped of control characters like everything else here, so
+   * nothing copied can carry a newline or an escape sequence into wherever it
+   * is pasted. */
+  copyableEvent(level: GlyphLevel, text: string, value: string, label: string): void {
+    const clean = sanitizeText(text);
+    const line = this.eventLine(level, clean);
+    this.sink.printLine(line);
+    this.copySink?.offerCopy(sanitizeText(value), label, visibleWidth(line));
+    this.statusSink?.status(level, clean);
+  }
+
+  private eventLine(level: GlyphLevel, clean: string): string {
+    return `${DIM}${this.timestamp()}${RESET} ${PREFIX[level]} ${clean}`;
   }
 
   /** A user-facing failure: the catalogued E-code replaces the glyph
