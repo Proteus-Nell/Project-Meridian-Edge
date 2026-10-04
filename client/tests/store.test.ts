@@ -3,6 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 
 import { KeyStore, StoreLockedError } from "../src/crypto/store";
 import type { Argon2Params, ThemePrefs } from "../src/crypto/store";
+import { DEFAULT_SCHEME } from "../src/terminal/theme";
 
 // Weak parameters for test speed; production params are the section-0
 // constants and are stored beside the ciphertext either way.
@@ -195,7 +196,7 @@ describe("KeyStore", () => {
     const store = new KeyStore("meridian-edge-test", factory);
     // Nothing written: defaults.
     const defaults = await store.getDisplayPrefs();
-    expect(defaults.scheme).toBe("dark");
+    expect(defaults.scheme).toBe("parchment");
     expect(defaults.emblemGlyph).toBe("gaia");
     expect(defaults.customSchemes).toEqual([]);
 
@@ -229,7 +230,7 @@ describe("KeyStore", () => {
       customSchemes: [],
     } as unknown as Parameters<typeof store.setDisplayPrefs>[0]);
     const cleaned = await store.getDisplayPrefs();
-    expect(cleaned.scheme).toBe("dark");
+    expect(cleaned.scheme).toBe(DEFAULT_SCHEME);
     expect(cleaned.emblemGlyph).toBe("gaia");
   });
 
@@ -309,7 +310,7 @@ describe("KeyStore", () => {
   it("falls back to the default scheme when the active one no longer exists", async () => {
     const { store } = freshStore();
     await store.setDisplayPrefs({ ...BASE, scheme: "deleted-one", customSchemes: [] });
-    expect((await store.getDisplayPrefs()).scheme).toBe("dark");
+    expect((await store.getDisplayPrefs()).scheme).toBe(DEFAULT_SCHEME);
   });
 
   // --- duress envelope -------------------------------------------------------

@@ -1,14 +1,15 @@
 :root {
   /* The five scheme slots (accent, background, panel, text, muted). These
-     defaults are the 'dark' scheme; chrome.applyScheme overwrites them from the
-     persisted prefs (scheme preset plus per-slot HEX overrides). Everything
-     below derives from these five, so /settings scheme and /settings color
-     restyle the whole app. */
-  --accent: #58a6ff;
-  --bg: #0d1117;
-  --panel: #161b22;
-  --text: #c9d1d9;
-  --muted: #8b949e;
+     defaults are the default scheme, 'parchment' (theme.ts::DEFAULT_SCHEME), so
+     the page's first paint matches what a fresh install wears; a test keeps the
+     two in step. chrome.applyScheme overwrites them from the persisted prefs
+     (scheme preset plus per-slot HEX overrides). Everything below derives from
+     these five, so /settings scheme and /settings color restyle the whole app. */
+  --accent: #8a6d2f;
+  --bg: #e3e7d3;
+  --panel: #f0efe0;
+  --text: #2b3320;
+  --muted: #5f6d4e;
 
   /* Derived tones. */
   --border: color-mix(in srgb, var(--text) 18%, var(--bg));
@@ -456,16 +457,16 @@ body.th-dock #divider {
    markers and `/settings color event <slot> <#rrggbb>` moves both at once. The
    literals here are only the pre-scheme fallback for the first paint. */
 .status-event.status-success {
-  color: var(--event-success, #3fb950);
+  color: var(--event-success, #43682f);
 }
 .status-event.status-warning {
-  color: var(--event-warning, #d29922);
+  color: var(--event-warning, #8a6a1f);
 }
 .status-event.status-failure {
-  color: var(--event-failure, #f85149);
+  color: var(--event-failure, #a13424);
 }
 .status-event.status-info {
-  color: var(--event-info, #58a6ff);
+  color: var(--event-info, #20606b);
 }
 
 /* Deliberately NOT configurable. Every other strip style tints text that the

@@ -383,7 +383,7 @@ times. Turn both off with [`/settings timestamps off`](#appearance).
 
 | Command | What it does |
 |---|---|
-| `/settings scheme <name>` | Switch scheme: the `dark`, `parchment` and `olive` presets, or one of your own |
+| `/settings scheme <name>` | Switch scheme: the `parchment` (default), `dark`, `olive` and `contrast` presets, or one of your own |
 | `/settings scheme list` | Everything you can switch to, marking the active one |
 | `/settings scheme new <name>` | Copy the colors currently on screen into a scheme of your own and switch to it |
 | `/settings scheme delete <name>` | Delete one of yours. Presets cannot be deleted |
@@ -448,7 +448,7 @@ any color at all. And the one place where the strip is the only surface a
 message reaches, a `[SECURITY]` event, is deliberately excluded: its
 white-on-red treatment is fixed and not configurable.
 
-**The three presets are immutable.** Running `/settings color` while one is
+**The four presets are immutable.** Running `/settings color` while one is
 active does not modify it: it forks a scheme named `<preset>-custom`, switches
 you there, and tells you so. `/settings scheme dark` therefore always means the
 palette that shipped, however far you have wandered. Names are limited to 1-24

@@ -107,7 +107,7 @@ const SECTIONS: readonly HelpSection[] = [
   {
     title: "Appearance",
     entries: [
-      { cmd: "/settings scheme <name>", blurb: "switch scheme: dark | parchment | olive | contrast | one of yours" },
+      { cmd: "/settings scheme <name>", blurb: "switch scheme: parchment (default) | dark | olive | contrast | one of yours" },
       { cmd: "/settings scheme list", blurb: "every scheme you can switch to" },
       { cmd: "/settings scheme new <name>", blurb: "copy the current colors into a scheme of your own" },
       { cmd: "/settings scheme delete <name>", blurb: "delete one of your schemes (presets cannot be)" },

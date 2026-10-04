@@ -13,7 +13,14 @@ import { Executor } from "./terminal/executor";
 import { Chrome } from "./terminal/chrome";
 import { commandSuggestions, longestCommonPrefix } from "./terminal/suggest";
 import { mirrorTerminalStyles } from "./terminal/stylemirror";
-import { DEFAULT_FONT, DEFAULT_FONT_SIZE, FONT_STACKS } from "./terminal/theme";
+import {
+  DEFAULT_FONT,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_SCHEME,
+  FONT_STACKS,
+  resolveScheme,
+  terminalTheme,
+} from "./terminal/theme";
 
 // FIRST statement of the app: start reading the saved colour scheme before
 // anything else, so the IndexedDB round-trip overlaps xterm's construction and
@@ -32,8 +39,15 @@ function mount(id: string): HTMLElement {
 // Both terminals run with a TRANSPARENT background (allowTransparency) so the
 // page supplies the backdrop - that is what lets the emblem watermark and the
 // dock's footer panel show through behind the text (style.css atmosphere
-// layers). The page background remains the same #0d1117.
-const TRANSPARENT = "#0d111700";
+// layers).
+//
+// Their first theme is the default scheme's, the same one style.css paints the
+// page in before the prefs are read. #app is revealed as soon as the preload
+// applies the page colors, a moment before executor.init() re-themes the
+// terminals from the stored prefs, so a hardcoded palette here would flash in
+// that gap: on a light default, light text on a light page.
+const FIRST_SCHEME = resolveScheme(DEFAULT_SCHEME, []);
+const FIRST_THEME = terminalTheme(FIRST_SCHEME);
 
 // The face and size here are only the pre-preferences default: executor.init()
 // re-applies the stored /settings font and /settings fontsize once the display
@@ -42,11 +56,7 @@ const SHARED: ITerminalOptions = {
   fontFamily: FONT_STACKS[DEFAULT_FONT],
   fontSize: DEFAULT_FONT_SIZE,
   allowTransparency: true,
-  theme: {
-    background: TRANSPARENT,
-    foreground: "#c9d1d9",
-    cursor: "#58a6ff",
-  },
+  theme: FIRST_THEME,
 };
 
 // Transcript terminal: read-only (disableStdin) so it never competes with the
@@ -60,7 +70,7 @@ const transcriptTerm = new Terminal({
   cursorBlink: false,
   scrollback: 5000,
   allowProposedApi: true,
-  theme: { ...SHARED.theme, cursor: TRANSPARENT },
+  theme: { ...FIRST_THEME, cursor: `${FIRST_SCHEME.background}00` },
 });
 const transcriptFit = new FitAddon();
 transcriptTerm.loadAddon(transcriptFit);

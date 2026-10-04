@@ -9,6 +9,7 @@ import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
 import { KeyStore } from "../src/crypto/store";
+import { DEFAULT_SCHEME } from "../src/terminal/theme";
 import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
 
 function makeExecutor(): {
@@ -112,7 +113,7 @@ describe("/settings theme", () => {
     executor.handle(parseLine("/settings scheme neon"));
     await executor.idle();
     expect(output.text()).toContain("[E106]");
-    expect((await store.getDisplayPrefs()).scheme).toBe("dark");
+    expect((await store.getDisplayPrefs()).scheme).toBe(DEFAULT_SCHEME);
   });
 
   it("selects an emblem glyph and persists it", async () => {
