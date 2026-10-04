@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_EMBLEM,
+  DEFAULT_SCHEME,
   EMBLEM_NAMES,
   EVENT_COLOR_SLOTS,
   MAX_CUSTOM_SCHEMES,
@@ -16,6 +17,7 @@ import {
   sanitizeCustomSchemes,
   schemeColorsOf,
   schemeExists,
+  terminalTheme,
 } from "../src/terminal/theme";
 import type { CustomScheme } from "../src/terminal/theme";
 
@@ -76,7 +78,7 @@ describe("resolveScheme", () => {
 
   it("falls back to the default preset for a name that does not exist", () => {
     const resolved = resolveScheme("deleted-yesterday", []);
-    expect(resolved.accent).toBe(SCHEMES.dark.colors.accent);
+    expect(resolved.accent).toBe(SCHEMES[DEFAULT_SCHEME].colors.accent);
   });
 
   it("never lets a custom scheme shadow a preset", () => {
@@ -175,7 +177,7 @@ describe("sanitizeCustomSchemes", () => {
 
   it("defaults an unknown base rather than dropping an otherwise good scheme", () => {
     const cleaned = sanitizeCustomSchemes([{ ...custom("mine"), base: "neon" }]);
-    expect(cleaned[0]?.base).toBe("dark");
+    expect(cleaned[0]?.base).toBe(DEFAULT_SCHEME);
   });
 
   it("keeps the first of a duplicated name", () => {
@@ -265,5 +267,62 @@ describe("default emblem", () => {
   it("is the glyph style.css falls back to before the prefs load", () => {
     const fallback = /body(?::not\(\.em-[a-z]+\))+ \.glyph-([a-z]+)/.exec(CSS);
     expect(fallback?.[1]).toBe(DEFAULT_EMBLEM);
+  });
+});
+
+describe("terminalTheme", () => {
+  it("lets the page show through and carries a light scheme's ANSI map", () => {
+    const parchment = resolveScheme("parchment", []);
+    const theme = terminalTheme(parchment);
+    expect(theme.background).toBe(`${parchment.background}00`);
+    expect(theme.foreground).toBe(parchment.text);
+    expect(theme.cursor).toBe(parchment.accent);
+    expect(theme.green).toBe(SCHEMES.parchment.ansi?.green);
+  });
+
+  it("leaves xterm's own ANSI palette alone for a scheme without overrides", () => {
+    expect(terminalTheme(resolveScheme("dark", [])).green).toBeUndefined();
+  });
+});
+
+describe("default scheme", () => {
+  // The page paints before the prefs read resolves, and the standalone 404 page
+  // never reads them at all, so both carry the default scheme as CSS literals.
+  // They have to be the colors the stored default resolves to, or a fresh
+  // visitor sees one palette swap for another a few milliseconds into the
+  // first paint. The terminals' first theme needs no such check: main.ts
+  // builds it from DEFAULT_SCHEME directly.
+  const read = (rel: string): string =>
+    readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf-8");
+  const STYLE = read("../src/style.css");
+  const NOT_FOUND = read("../public/404.css");
+  const resolved = resolveScheme(DEFAULT_SCHEME, []);
+
+  /** A `--name: #rrggbb;` declaration from the file's first :root block. */
+  function rootVar(css: string, name: string): string | undefined {
+    const root = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    return new RegExp(`--${name}:\\s*(#[0-9a-f]{6})\\s*;`).exec(root)?.[1];
+  }
+
+  it("is what style.css paints before the prefs load", () => {
+    expect(rootVar(STYLE, "accent")).toBe(resolved.accent);
+    expect(rootVar(STYLE, "bg")).toBe(resolved.background);
+    expect(rootVar(STYLE, "panel")).toBe(resolved.panel);
+    expect(rootVar(STYLE, "text")).toBe(resolved.text);
+    expect(rootVar(STYLE, "muted")).toBe(resolved.muted);
+  });
+
+  it("tints the status strip before the prefs load", () => {
+    for (const slot of ["success", "warning", "failure", "info"] as const) {
+      const fallback = new RegExp(`var\\(--event-${slot},\\s*(#[0-9a-f]{6})\\)`).exec(STYLE)?.[1];
+      expect(fallback, slot).toBe(resolved.events[slot]);
+    }
+  });
+
+  it("is what the standalone 404 page wears", () => {
+    expect(rootVar(NOT_FOUND, "accent")).toBe(resolved.accent);
+    expect(rootVar(NOT_FOUND, "bg")).toBe(resolved.background);
+    expect(rootVar(NOT_FOUND, "text")).toBe(resolved.text);
+    expect(rootVar(NOT_FOUND, "muted")).toBe(resolved.muted);
   });
 });

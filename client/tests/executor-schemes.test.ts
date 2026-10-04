@@ -1,4 +1,4 @@
-// Custom color schemes and the immutability of the three presets.
+// Custom color schemes and the immutability of the presets.
 //
 // The behaviour this file exists to pin down: editing a color must never write
 // to a preset, so `/settings scheme dark` is always a way back to the palette
@@ -13,8 +13,12 @@ import { Executor } from "../src/terminal/executor";
 import { parseLine } from "../src/terminal/parser";
 import { Renderer } from "../src/terminal/renderer";
 import { KeyStore } from "../src/crypto/store";
-import { MAX_CUSTOM_SCHEMES, SCHEMES, resolveScheme } from "../src/terminal/theme";
+import { DEFAULT_SCHEME, MAX_CUSTOM_SCHEMES, SCHEMES, resolveScheme } from "../src/terminal/theme";
 import { CaptureSink, FakeChrome, FakeShell } from "./helpers/executor-harness";
+
+/** Every executor here starts on the default scheme, which is what the first
+ * color edit forks. */
+const FORK = `${DEFAULT_SCHEME}-custom`;
 
 function makeExecutor(): {
   executor: Executor;
@@ -46,30 +50,30 @@ describe("presets are immutable", () => {
 
     expect(lastScheme(chrome).background).toBe("#101820");
     const prefs = await store.getDisplayPrefs();
-    expect(prefs.scheme).toBe("dark-custom");
+    expect(prefs.scheme).toBe(FORK);
     expect(prefs.customSchemes).toHaveLength(1);
-    expect(prefs.customSchemes[0]?.base).toBe("dark");
+    expect(prefs.customSchemes[0]?.base).toBe(DEFAULT_SCHEME);
     // The untouched slots come from the preset it forked.
-    expect(prefs.customSchemes[0]?.colors.accent).toBe(SCHEMES.dark.colors.accent);
-    expect(output.text()).toContain("The 'dark' preset is unchanged");
+    expect(prefs.customSchemes[0]?.colors.accent).toBe(SCHEMES[DEFAULT_SCHEME].colors.accent);
+    expect(output.text()).toContain(`The '${DEFAULT_SCHEME}' preset is unchanged`);
   });
 
   it("gives the pristine preset back when you switch to it", async () => {
     const { executor, chrome, store } = makeExecutor();
     await run(executor, "/settings color background #101820");
     await run(executor, "/settings color accent #ff0000");
-    await run(executor, "/settings scheme dark");
+    await run(executor, `/settings scheme ${DEFAULT_SCHEME}`);
 
-    expect(lastScheme(chrome).background).toBe(SCHEMES.dark.colors.background);
-    expect(lastScheme(chrome).accent).toBe(SCHEMES.dark.colors.accent);
-    expect((await store.getDisplayPrefs()).scheme).toBe("dark");
+    expect(lastScheme(chrome).background).toBe(SCHEMES[DEFAULT_SCHEME].colors.background);
+    expect(lastScheme(chrome).accent).toBe(SCHEMES[DEFAULT_SCHEME].colors.accent);
+    expect((await store.getDisplayPrefs()).scheme).toBe(DEFAULT_SCHEME);
   });
 
   it("keeps the fork intact after a round trip through the preset", async () => {
     const { executor, chrome, store } = makeExecutor();
     await run(executor, "/settings color background #101820");
-    await run(executor, "/settings scheme dark");
-    await run(executor, "/settings scheme dark-custom");
+    await run(executor, `/settings scheme ${DEFAULT_SCHEME}`);
+    await run(executor, `/settings scheme ${FORK}`);
 
     expect(lastScheme(chrome).background).toBe("#101820");
     expect((await store.getDisplayPrefs()).customSchemes).toHaveLength(1);
@@ -98,8 +102,8 @@ describe("presets are immutable", () => {
 
     const prefs = await store.getDisplayPrefs();
     expect(prefs.scheme).toBe("olive-custom");
-    expect(prefs.customSchemes.map((s) => s.name).sort()).toEqual(["dark-custom", "olive-custom"]);
-    // The olive fork starts from olive, not from the dark fork.
+    expect(prefs.customSchemes.map((s) => s.name).sort()).toEqual([FORK, "olive-custom"].sort());
+    // The olive fork starts from olive, not from the first fork.
     const oliveFork = prefs.customSchemes.find((s) => s.name === "olive-custom");
     expect(oliveFork?.colors.background).toBe(SCHEMES.olive.colors.background);
   });
@@ -108,7 +112,7 @@ describe("presets are immutable", () => {
     const { executor, output, store } = makeExecutor();
     await run(executor, "/settings scheme delete dark");
     expect(output.text()).toContain("[E107]");
-    expect((await store.getDisplayPrefs()).scheme).toBe("dark");
+    expect((await store.getDisplayPrefs()).scheme).toBe(DEFAULT_SCHEME);
   });
 
   it("reports that a preset has nothing to reset", async () => {
@@ -139,7 +143,7 @@ describe("/settings scheme new", () => {
 
     const copy = (await store.getDisplayPrefs()).customSchemes.find((s) => s.name === "copy");
     expect(copy?.colors.accent).toBe("#ff0000");
-    expect(copy?.base).toBe("dark");
+    expect(copy?.base).toBe(DEFAULT_SCHEME);
   });
 
   it("rejects a name that is reserved, a preset, or malformed", async () => {
@@ -280,6 +284,8 @@ describe("/settings color event", () => {
 
   it("drives the ANSI slots the renderer actually emits", async () => {
     const { executor, chrome } = makeExecutor();
+    // dark ships no ANSI map, so every slot set below is the override alone.
+    await run(executor, "/settings scheme dark");
     await run(executor, "/settings color event success #ff00ff");
     await run(executor, "/settings color event failure #101010");
     await run(executor, "/settings color event peer #00ffff");
@@ -327,7 +333,7 @@ describe("/settings color event", () => {
 
     const scheme = (await store.getDisplayPrefs()).customSchemes[0];
     expect(scheme?.events).toBeUndefined();
-    expect(scheme?.colors).toEqual(SCHEMES.dark.colors);
+    expect(scheme?.colors).toEqual(SCHEMES[DEFAULT_SCHEME].colors);
   });
 
   it("rejects a non-color and an unknown marker", async () => {

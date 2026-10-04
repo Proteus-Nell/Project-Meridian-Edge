@@ -31,7 +31,7 @@ import {
   applyTextVars,
   applyThemeClasses,
 } from "./paint";
-import { FONT_STACKS, clampFontSize, clampLetterSpacing, clampLineHeight } from "./theme";
+import { FONT_STACKS, clampFontSize, clampLetterSpacing, clampLineHeight, terminalTheme } from "./theme";
 import type { AccessibilityPrefs, EmblemName, ResolvedScheme, TextStyle } from "./theme";
 import type { ThemePrefs } from "../crypto/store";
 
@@ -612,13 +612,7 @@ export class Chrome implements SuggestionNav, CopySink {
   applyScheme(scheme: ResolvedScheme): void {
     applySchemeVars(scheme);
 
-    const shared = {
-      background: `${scheme.background}00`, // fully transparent, page paints it
-      foreground: scheme.text,
-      cursor: scheme.accent,
-      selectionBackground: `${scheme.muted}66`,
-      ...(scheme.ansi ?? {}),
-    };
+    const shared = terminalTheme(scheme);
     this.transcript.options.theme = { ...shared, cursor: `${scheme.background}00` };
     if (this.input !== null) {
       this.input.options.theme = shared;

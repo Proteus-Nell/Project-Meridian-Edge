@@ -1,11 +1,12 @@
 // Color schemes and emblem catalog. Pure data + helpers, no
-// DOM: chrome.ts turns a resolved scheme into CSS custom properties and xterm
-// theme objects; the executor persists the user's choice in the unencrypted
-// display prefs. Each scheme is exactly five slots (accent / background /
-// panel / text / muted) - matching the design references - plus an optional
-// ANSI override map so terminal output stays legible on light backgrounds.
+// DOM: chrome.ts applies a resolved scheme as CSS custom properties and as the
+// xterm themes terminalTheme builds here; the executor persists the user's
+// choice in the unencrypted display prefs. Each scheme is exactly five slots
+// (accent / background / panel / text / muted) - matching the design
+// references - plus an optional ANSI override map so terminal output stays
+// legible on light backgrounds.
 //
-// The three presets are IMMUTABLE. Editing a color never writes to one: it
+// The presets are IMMUTABLE. Editing a color never writes to one: it
 // forks a custom scheme (see executor/settings.ts::doSettingsColor), so
 // /settings scheme dark always returns the palette shipped here, whatever the
 // user has done to their own schemes.
@@ -18,6 +19,8 @@
 // that can ever reach the DOM is a literal #rrggbb. They are also stored as an
 // ARRAY rather than a name-keyed object: a keyed record read back from storage
 // would let a hand-written "__proto__" entry poison Object.prototype.
+
+import type { ITheme } from "@xterm/xterm";
 
 export const COLOR_SLOTS = ["accent", "background", "panel", "text", "muted"] as const;
 export type ColorSlot = (typeof COLOR_SLOTS)[number];
@@ -45,14 +48,18 @@ export interface Scheme {
 export const SCHEME_NAMES = ["dark", "parchment", "olive", "contrast"] as const;
 export type SchemeName = (typeof SCHEME_NAMES)[number];
 
-export const DEFAULT_SCHEME: SchemeName = "dark";
+/** The scheme a fresh install wears, and what an unreadable stored value falls
+ * back to. The first paint follows it too, before the stored prefs have been
+ * read: style.css's :root slots and the terminals' first theme (main.ts) both
+ * come from this preset, and so does the standalone 404 page. */
+export const DEFAULT_SCHEME: SchemeName = "parchment";
 
 export function isSchemeName(word: string): word is SchemeName {
   return (SCHEME_NAMES as readonly string[]).includes(word);
 }
 
-/** dark = the original GitHub-dark palette; parchment + olive come from the
- * design reference swatches (light paper and dark olive-green). */
+/** dark = the original GitHub-dark palette; parchment (the default) + olive
+ * come from the design reference swatches (light paper and dark olive-green). */
 export const SCHEMES: Record<SchemeName, Scheme> = {
   dark: {
     colors: {
@@ -439,6 +446,22 @@ export function resolveScheme(name: string, customs: readonly CustomScheme[]): R
     ...custom.colors,
     ansi: mergeEventColors(baseAnsi, custom.events),
     events: resolveEventColors(baseAnsi, custom.events),
+  };
+}
+
+/** The xterm theme a resolved scheme paints the terminals with: a fully
+ * transparent background, since the page paints it and the atmosphere layers
+ * show through; the scheme's text, accent and selection; and the ANSI overrides
+ * a light scheme needs to keep event colors readable. Shared by the first paint
+ * (main.ts, from the default scheme) and every later change (chrome.applyScheme),
+ * so the two can never disagree. */
+export function terminalTheme(scheme: ResolvedScheme): ITheme {
+  return {
+    background: `${scheme.background}00`,
+    foreground: scheme.text,
+    cursor: scheme.accent,
+    selectionBackground: `${scheme.muted}66`,
+    ...(scheme.ansi ?? {}),
   };
 }
 

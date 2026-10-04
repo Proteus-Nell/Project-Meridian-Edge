@@ -4,19 +4,21 @@
  * name that this static page cannot predict, and the five scheme slots it feeds
  * (accent/background/panel/text/muted) live in IndexedDB behind the app's JS.
  * An error page that had to boot the bundle to render itself would be a worse
- * error page, so the values below are the `dark` scheme's defaults, copied from
- * :root in src/style.css. A visitor on the parchment or olive scheme sees the
- * dark one here; that is the accepted cost of a zero-JS error page.
+ * error page, so the values below are the default scheme's (`parchment`,
+ * terminal/theme.ts::DEFAULT_SCHEME), the same ones :root in src/style.css
+ * starts from; a test keeps the three in step. A visitor on another scheme
+ * sees the default one here; that is the accepted cost of a zero-JS error
+ * page.
  *
  * Kept in an external file rather than a <style> block because the page is
  * served with the same page-level CSP as the app, and `style-src 'self'` blocks
  * inline CSS. */
 
 :root {
-  --accent: #58a6ff;
-  --bg: #0d1117;
-  --text: #c9d1d9;
-  --muted: #8b949e;
+  --accent: #8a6d2f;
+  --bg: #e3e7d3;
+  --text: #2b3320;
+  --muted: #5f6d4e;
   --font-mono: "Cascadia Mono", "Fira Mono", Menlo, Consolas, monospace;
 }
 

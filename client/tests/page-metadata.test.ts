@@ -18,6 +18,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_SCHEME, SCHEMES } from "../src/terminal/theme";
+
 function read(relative: string): string {
   return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf-8");
 }
@@ -198,6 +200,14 @@ describe("favicon", () => {
     expect(pathData(markup)).not.toBeNull();
     expect(markup).toMatch(/fill="#[0-9a-f]{6}"/);
     expect(markup).not.toContain("var(");
+  });
+
+  // The medallion's colour is the scheme's accent, so a fresh install's tab
+  // icon and watermark match only if this literal follows the default scheme.
+  it("wears the default scheme's emblem colour", () => {
+    expect(/<path[^>]*\sfill="(#[0-9a-f]{6})"/.exec(markup)?.[1]).toBe(
+      SCHEMES[DEFAULT_SCHEME].colors.accent,
+    );
   });
 
   // Same reason the page carries no inline <style>: the production CSP's

@@ -33,7 +33,7 @@ OUT = ROOT / "client" / "public" / "og.png"
 WIDTH, HEIGHT = 1200, 630
 SUPERSAMPLE = 4
 
-# The `dark` scheme's slots, copied from :root in client/src/style.css.
+# The card is drawn in the `dark` preset's slots (client/src/terminal/theme.ts).
 BG = "#0d1117"
 ACCENT = "#58a6ff"
 TEXT = "#c9d1d9"
